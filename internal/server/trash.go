@@ -165,5 +165,9 @@ func (s *Server) purgeExpiredTrash(age time.Duration) (int, error) {
 			return 0, err
 		}
 	}
+	// deleted records stay restorable through undo only briefly; their log goes with the trash
+	if err := purgeDeletedRecordHistory(tx, cutoff); err != nil {
+		return 0, err
+	}
 	return len(items), tx.Commit()
 }

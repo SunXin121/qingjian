@@ -248,7 +248,7 @@ type opError struct{ msg string }
 
 func (e opError) Error() string { return e.msg }
 
-func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64) error {
+func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWriter) error {
 	if !reBTID.MatchString(op.ID) {
 		return opError{"无效的 ID"}
 	}
@@ -265,6 +265,9 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64) error {
 		return *op.Sort
 	}
 	var err error
+	if strings.HasPrefix(op.Op, "field.") {
+		h.invalidateFields()
+	}
 	switch op.Op {
 	case "field.create":
 		if op.Type == nil || !fieldTypes[*op.Type] {
@@ -359,21 +362,41 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64) error {
 		}
 		_, err = tx.Exec(`INSERT INTO bt_records(id, table_node_id, seq, data, sort, created_at, updated_at) VALUES(?,?,?,?,?,?,?)`,
 			op.ID, tableID, seq, data, sort(), created, t)
+		if err == nil {
+			err = h.logCreate(op.ID, data)
+		}
 	case "record.update":
-		sets, args := []string{"updated_at = ?"}, []any{t}
+		// a patch that changes nothing, or a move (sort only), is not a modification
+		sets, args := []string{}, []any{}
+		var changes []historyChange
 		if len(op.Data) > 0 {
 			if !isJSONObject(op.Data) {
 				return opError{"记录格式错误"}
 			}
-			// RFC 7396 merge patch; values are scalars or arrays, so it is a per-field set/unset
-			sets, args = append(sets, "data = json_patch(data, ?)"), append(args, string(op.Data))
+			if changes, _, err = h.updateChanges(op.ID, op.Data); err != nil {
+				return err
+			}
+			if len(changes) > 0 {
+				// RFC 7396 merge patch; values are scalars or arrays, so it is a per-field set/unset
+				sets, args = append(sets, "data = json_patch(data, ?)", "updated_at = ?"), append(args, string(op.Data), t)
+			}
 		}
 		if op.Sort != nil {
 			sets, args = append(sets, "sort = ?"), append(args, *op.Sort)
 		}
-		_, err = tx.Exec(`UPDATE bt_records SET `+strings.Join(sets, ", ")+` WHERE id = ? AND table_node_id = ?`, append(args, op.ID, tableID)...)
+		if len(sets) > 0 {
+			_, err = tx.Exec(`UPDATE bt_records SET `+strings.Join(sets, ", ")+` WHERE id = ? AND table_node_id = ?`, append(args, op.ID, tableID)...)
+		}
+		if err == nil {
+			err = h.logUpdate(op.ID, changes)
+		}
 	case "record.delete":
-		_, err = tx.Exec(`DELETE FROM bt_records WHERE id = ? AND table_node_id = ?`, op.ID, tableID)
+		var res sql.Result
+		if res, err = tx.Exec(`DELETE FROM bt_records WHERE id = ? AND table_node_id = ?`, op.ID, tableID); err == nil {
+			if n, _ := res.RowsAffected(); n > 0 {
+				err = h.logDelete(op.ID)
+			}
+		}
 	default:
 		return opError{"未知操作：" + op.Op}
 	}
@@ -408,8 +431,9 @@ func (s *Server) tableOps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := now()
+	h := &historyWriter{tx: tx, tableID: id, t: t}
 	for i, op := range in.Ops {
-		if err := applyTableOp(tx, id, op, t); err != nil {
+		if err := applyTableOp(tx, id, op, t, h); err != nil {
 			var oe opError
 			if errors.As(err, &oe) {
 				httpError(w, 400, oe.msg)

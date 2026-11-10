@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { confirmDialog } from '../components/dialog'
 import { IconClose, IconDown, IconTrash, IconUp } from '../components/icons'
 import { FieldInput } from './editors'
+import RecordHistory from './RecordHistory'
 import { cellValue, displayText, fmtDateTime, orderedFields } from './engine'
 import { useTable, type TableModel } from './model'
 import { fieldTypeLabel } from './types'
@@ -115,6 +116,7 @@ export default function RecordCard({ model, viewId, recordId, list, readOnly, on
           <div className="bt-sheet-meta">
             创建于 {fmtDateTime(rec.created_at)} · 修改于 {fmtDateTime(rec.updated_at)}
           </div>
+          {!readOnly && !model.readOnly && <RecordHistory key={rec.id} model={model} recordId={rec.id} />}
         </div>
       </aside>
     </div>

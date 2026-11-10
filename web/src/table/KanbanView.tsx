@@ -1,8 +1,8 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { openMenu, promptText } from '../components/dialog'
 import { IconEdit, IconMore, IconPlus, IconTrash } from '../components/icons'
 import { ValueView, Tag } from './editors'
-import { cellValue, displayText, isEmptyValue, primaryField, viewRecords, visibleFields } from './engine'
+import { cellMatches, cellValue, displayText, isEmptyValue, primaryField, searchNeedle, viewRecords, visibleFields } from './engine'
 import { openFieldEditor } from './FieldEditor'
 import type { TableModel } from './model'
 import { newId, TAG_COLORS, type Choice, type Field, type Rec, type TableData, type View } from './types'
@@ -13,15 +13,25 @@ interface Props {
   view: View
   readOnly: boolean
   onOpenRecord: (id: string, list: string[]) => void
+  /** table search: only cards with a matching visible field are shown */
+  search?: string
+  onSearchCount?: (n: number) => void
 }
 
 const EMPTY = '__empty'
 
-export default function KanbanView({ model, table, view, readOnly, onOpenRecord }: Props) {
+export default function KanbanView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {
   const cfg = view.config
   const selectFields = table.fields.filter((f) => f.type === 'select')
   const groupField = selectFields.find((f) => f.id === cfg.kanbanField) ?? selectFields[0]
-  const records = useMemo(() => viewRecords(table, view, model.sticky), [table, view, model])
+  const needle = searchNeedle(search)
+  const records = useMemo(() => {
+    const list = viewRecords(table, view, model.sticky)
+    if (!needle) return list
+    const fields = visibleFields(table, view)
+    return list.filter((r) => fields.some((f) => cellMatches(f, r, needle)))
+  }, [table, view, model, needle])
+  useEffect(() => onSearchCount?.(records.length), [records.length, onSearchCount])
   const primary = primaryField(table)
   const cardFields = useMemo(() => visibleFields(table, view).filter((f) => f.id !== primary?.id && f.id !== groupField?.id), [table, view, primary, groupField])
   const [drag, setDrag] = useState<{ id: string; over?: string; before?: string } | null>(null)

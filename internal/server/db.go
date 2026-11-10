@@ -117,6 +117,19 @@ CREATE TABLE bt_records (
 );
 CREATE INDEX bt_records_table ON bt_records(table_node_id, sort);
 `,
+	// record change history; rows outlive their record so an undone delete keeps its log
+	`
+CREATE TABLE bt_record_history (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  table_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  record_id     TEXT NOT NULL,
+  action        TEXT NOT NULL,
+  changes       TEXT NOT NULL DEFAULT '[]',
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX bt_record_history_rec ON bt_record_history(record_id, id);
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

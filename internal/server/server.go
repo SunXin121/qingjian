@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/tables", a(s.listTables))
 	mux.Handle("GET /api/tables/{id}", a(s.getTable))
 	mux.Handle("POST /api/tables/{id}/ops", a(s.tableOps))
+	mux.Handle("GET /api/tables/{id}/records/{rid}/history", a(s.recordHistory))
 
 	mux.Handle("GET /api/recent", a(s.recentDocs))
 	mux.Handle("GET /api/search", a(s.search))

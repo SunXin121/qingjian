@@ -84,7 +84,8 @@ export function applyOps(t: TableData, ops: Op[]): TableData {
           else data[k] = v
         }
         if (records === t.records) records = [...records]
-        records[i] = { ...r, data, updated_at: now, ...(op.sort !== undefined && { sort: op.sort }) }
+        // a move (sort only) is not a modification
+        records[i] = { ...r, data, updated_at: op.data ? now : r.updated_at, ...(op.sort !== undefined && { sort: op.sort }) }
         if (op.sort !== undefined) recordsDirty = true
         break
       }
@@ -336,6 +337,58 @@ export class TableModel {
       [{ op: 'record.update', id, ...(data && { data }), ...(sort !== undefined && { sort }) }],
       [{ op: 'record.update', id, ...(data && { data: prev }), ...(sort !== undefined && { sort: r.sort }) }],
     )
+  }
+
+  /**
+   * Moves a record right before / after another one in the table order (grid row drag),
+   * optionally changing values (the group it was dropped into). False if nothing changed.
+   */
+  reorderRecord(id: string, anchorId: string, place: 'before' | 'after', data: Record<string, any> = {}): boolean {
+    const recs = this.state.records
+    const k = recs.findIndex((r) => r.id === id)
+    const r = recs[k]
+    if (!r || id === anchorId) return false
+    const rest = recs.filter((x) => x.id !== id)
+    const a = rest.findIndex((x) => x.id === anchorId)
+    if (a < 0) return false
+    const at = place === 'after' ? a + 1 : a
+    const forward: Op[] = []
+    const inverse: Op[] = []
+    let sort: number | undefined
+    if (at !== k) {
+      const lo = rest[at - 1]
+      const hi = rest[at]
+      const mid = lo && hi ? (lo.sort + hi.sort) / 2 : NaN
+      if (lo && hi && mid > lo.sort && mid < hi.sort) sort = mid
+      else if (lo && !hi) sort = lo.sort + 1
+      else if (hi && !lo) sort = hi.sort - 1
+      else {
+        // no room left between the neighbours (equal keys or float precision): renumber
+        const order = [...rest]
+        order.splice(at, 0, r)
+        order.forEach((x, i) => {
+          if (x.id === id || x.sort === i + 1) return
+          forward.push({ op: 'record.update', id: x.id, sort: i + 1 })
+          inverse.push({ op: 'record.update', id: x.id, sort: x.sort })
+        })
+        sort = at + 1
+      }
+    }
+    const next: Record<string, any> = {}
+    const prev: Record<string, any> = {}
+    for (const [key, v] of Object.entries(data)) {
+      const cur = r.data[key] ?? null
+      if (JSON.stringify(cur) === JSON.stringify(isEmptyValue(v) ? null : v)) continue
+      next[key] = isEmptyValue(v) ? null : v
+      prev[key] = cur
+    }
+    const hasData = Object.keys(next).length > 0
+    if (sort === undefined && !hasData) return false
+    forward.push({ op: 'record.update', id, ...(hasData && { data: next }), ...(sort !== undefined && { sort }) })
+    inverse.push({ op: 'record.update', id, ...(hasData && { data: prev }), ...(sort !== undefined && { sort: r.sort }) })
+    this.sticky.add(id)
+    this.apply(forward, inverse)
+    return true
   }
 
   // ---------- fields ----------

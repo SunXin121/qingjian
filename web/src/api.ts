@@ -1,4 +1,4 @@
-import type { Op, TableData } from './table/types'
+import type { HistoryEntry, Op, TableData } from './table/types'
 
 export interface Repo {
   id: string
@@ -222,6 +222,8 @@ export const api = {
   tables: () => request<TableSummary[]>('GET', '/api/tables'),
   table: (id: string) => request<TableData>('GET', `/api/tables/${id}`),
   tableOps: (id: string, ops: Op[]) => request<{ updated_at: number }>('POST', `/api/tables/${id}/ops`, { ops }),
+  recordHistory: (id: string, rec: string, before?: number) =>
+    request<{ entries: HistoryEntry[]; more: boolean }>('GET', `/api/tables/${id}/records/${rec}/history${before ? `?before=${before}` : ''}`),
 
   recent: () => request<RecentDoc[]>('GET', '/api/recent'),
   search: (q: string) => request<SearchHit[]>('GET', `/api/search?q=${encodeURIComponent(q)}`),

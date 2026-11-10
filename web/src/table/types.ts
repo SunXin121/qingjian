@@ -134,6 +134,24 @@ export type Op =
   | { op: 'record.update'; id: string; data?: Record<string, any>; sort?: number }
   | { op: 'record.delete'; id: string }
 
+/** One entry of a record's change log (internal/server/tables_history.go). */
+export interface HistoryChange {
+  field: string
+  /** field name and type when the change was made */
+  name: string
+  type: FieldType
+  old?: any
+  new?: any
+}
+
+export interface HistoryEntry {
+  id: number
+  action: 'create' | 'update' | 'delete' | 'restore'
+  changes: HistoryChange[]
+  created_at: number
+  updated_at: number
+}
+
 export const FIELD_TYPES: { type: FieldType; label: string }[] = [
   { type: 'text', label: '文本' },
   { type: 'longtext', label: '多行文本' },

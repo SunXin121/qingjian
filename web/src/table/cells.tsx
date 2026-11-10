@@ -20,7 +20,12 @@ export type ValueCell = CustomCell<ValueData>
 export interface IndexData {
   kind: 'qj-index'
   n: number
+  /** show the drag handle (left part of the cell) on hover */
+  grip?: boolean
 }
+
+/** Width of the drag handle area at the left of the index cell. */
+export const GRIP_W = 22
 export type IndexCell = CustomCell<IndexData>
 
 export interface GroupData {
@@ -227,20 +232,33 @@ export const indexRenderer: CustomRenderer<IndexCell> = {
     ctx.textAlign = 'center'
     ctx.font = theme.markerFontFull
     if (hoverAmount > 0.1) {
+      let ex = cx
+      if (cell.data.grip) {
+        // drag handle: 2 × 3 dots
+        ctx.fillStyle = theme.textLight
+        const gx = rect.x + GRIP_W / 2 + 1
+        for (const dx of [-2.5, 2.5])
+          for (const dy of [-5, 0, 5]) {
+            ctx.beginPath()
+            ctx.arc(gx + dx, cy + dy, 1.3, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        ex = rect.x + GRIP_W + (rect.width - GRIP_W) / 2 - 2
+      }
       // "expand" glyph: two outward arrows
       ctx.strokeStyle = theme.textMedium
       ctx.lineWidth = 1.5
       ctx.lineCap = 'round'
       const s = 5
       ctx.beginPath()
-      ctx.moveTo(cx - s, cy + s)
-      ctx.lineTo(cx + s, cy - s)
-      ctx.moveTo(cx + 1, cy - s)
-      ctx.lineTo(cx + s, cy - s)
-      ctx.lineTo(cx + s, cy - 1)
-      ctx.moveTo(cx - s, cy + 1)
-      ctx.lineTo(cx - s, cy + s)
-      ctx.lineTo(cx - 1, cy + s)
+      ctx.moveTo(ex - s, cy + s)
+      ctx.lineTo(ex + s, cy - s)
+      ctx.moveTo(ex + 1, cy - s)
+      ctx.lineTo(ex + s, cy - s)
+      ctx.lineTo(ex + s, cy - 1)
+      ctx.moveTo(ex - s, cy + 1)
+      ctx.lineTo(ex - s, cy + s)
+      ctx.lineTo(ex - 1, cy + s)
       ctx.stroke()
     } else {
       ctx.fillStyle = theme.textLight

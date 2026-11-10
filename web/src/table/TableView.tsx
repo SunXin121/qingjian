@@ -1,6 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { confirmDialog, openMenu, openPopover, promptText, toast } from '../components/dialog'
-import { IconCopy, IconEdit, IconPlus, IconTrash } from '../components/icons'
+import { IconClose, IconCopy, IconDown, IconEdit, IconPlus, IconSearch, IconTrash, IconUp } from '../components/icons'
 import { activeConds, viewRecords } from './engine'
 import { IconBoard, IconEyeOff, IconFilter, IconGroup, IconGrid, IconRedo, IconSort, IconUndo } from './icons'
 import KanbanView from './KanbanView'
@@ -26,7 +26,44 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
   const active: View = table.views.find((v) => v.id === (viewId ?? localView)) ?? table.views[0]
   const [card, setCard] = useState<{ id: string; list: string[] } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(400)
+  // table search: grid highlights matching cells and steps through them, kanban filters cards
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const search = useDeferredValue(query)
+  const [cursor, setCursor] = useState(0)
+  const [hits, setHits] = useState(0)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const activeId = active?.id
+  useEffect(() => setCursor(0), [search, activeId])
+
+  const openSearch = () => {
+    setSearchOpen(true)
+    requestAnimationFrame(() => {
+      searchRef.current?.focus()
+      searchRef.current?.select()
+    })
+  }
+  const closeSearch = () => {
+    setSearchOpen(false)
+    setQuery('')
+  }
+  const step = (d: number) => hits && setCursor((c) => (((c + d) % hits) + hits) % hits)
+
+  // Ctrl+F searches the table while focus is in it (or nowhere in particular)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f') return
+      const t = e.target as HTMLElement
+      if (!(t === document.body || rootRef.current?.contains(t))) return
+      if (document.querySelector('.bt-sheet, .modal-backdrop')) return
+      e.preventDefault()
+      openSearch()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const selectView = (id: string) => {
     setLocalView(id)
@@ -119,7 +156,7 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
   }
 
   return (
-    <div className="bt">
+    <div className="bt" ref={rootRef}>
       <div className="bt-tabs">
         {table.views.map((v) => (
           <button
@@ -186,6 +223,48 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
           <IconSort width={15} height={15} /> <span className="bt-tool-label">{nSort ? `${nSort} 个排序` : '排序'}</span>
         </button>
         <span className="spacer" />
+        {searchOpen ? (
+          <div className="bt-search">
+            <IconSearch width={14} height={14} />
+            <input
+              ref={searchRef}
+              value={query}
+              placeholder={active.type === 'grid' ? '搜索单元格' : '搜索记录'}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  step(e.shiftKey ? -1 : 1)
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  closeSearch()
+                }
+              }}
+            />
+            {search.trim() && (
+              <span className="bt-search-count">{!hits ? '无结果' : active.type === 'grid' ? `${Math.min(cursor, hits - 1) + 1}/${hits}` : `${hits} 条`}</span>
+            )}
+            {active.type === 'grid' && (
+              <>
+                <button className="icon-btn sm" title="上一个 (Shift+Enter)" disabled={!hits} onClick={() => step(-1)}>
+                  <IconUp width={14} height={14} />
+                </button>
+                <button className="icon-btn sm" title="下一个 (Enter)" disabled={!hits} onClick={() => step(1)}>
+                  <IconDown width={14} height={14} />
+                </button>
+              </>
+            )}
+            <button className="icon-btn sm" title="关闭搜索 (Esc)" onClick={closeSearch}>
+              <IconClose width={14} height={14} />
+            </button>
+          </div>
+        ) : (
+          <button className="bt-tool" title="搜索 (Ctrl+F)" onClick={openSearch}>
+            <IconSearch width={15} height={15} />
+          </button>
+        )}
         {!readOnly && (
           <>
             <button className="icon-btn hide-mobile" title="撤销 (Ctrl+Z)" disabled={!model.canUndo} onClick={() => model.undo()}>
@@ -201,10 +280,21 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
       <div className={'bt-body ' + active.type} ref={bodyRef}>
         {active.type === 'grid' ? (
           <Suspense fallback={<div className="ink-loading">加载中…</div>}>
-            <GridView key={active.id} model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} height={height} />
+            <GridView
+              key={active.id}
+              model={model}
+              table={table}
+              view={active}
+              readOnly={readOnly}
+              onOpenRecord={openRecord}
+              height={height}
+              search={search}
+              searchCursor={cursor}
+              onSearchCount={setHits}
+            />
           </Suspense>
         ) : (
-          <KanbanView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} />
+          <KanbanView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
         )}
       </div>
 

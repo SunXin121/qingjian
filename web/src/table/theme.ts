@@ -15,6 +15,8 @@ export interface Palette {
   chipBg: string
   chipFg: string
   link: string
+  searchHit: string
+  searchCurrent: string
 }
 
 export let palette: Palette = {
@@ -27,6 +29,8 @@ export let palette: Palette = {
   chipBg: '#ededeb',
   chipFg: '#55565a',
   link: '#2f6bd9',
+  searchHit: '#fdf3c4',
+  searchCurrent: '#fbd27a',
 }
 
 function read(): { theme: Partial<Theme>; palette: Palette } {
@@ -43,6 +47,8 @@ function read(): { theme: Partial<Theme>; palette: Palette } {
     chipBg: v('--c-surface-low'),
     chipFg: v('--c-text-2'),
     link: v('--c-info'),
+    searchHit: v('--bt-search-hit'),
+    searchCurrent: v('--bt-search-current'),
   }
   const theme: Partial<Theme> = {
     accentColor: v('--c-info'),

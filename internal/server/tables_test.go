@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 type tableResp struct {
@@ -153,5 +154,74 @@ func TestTableExport(t *testing.T) {
 	csv := readZip(t, data)["清单.csv"]
 	if !strings.HasPrefix(csv, "\uFEFF名称,状态,日期\r\na|b,进行中,2026-11-10\r\n") {
 		t.Fatalf("csv: %q", csv)
+	}
+}
+
+func TestRecordHistory(t *testing.T) {
+	e := newEnv(t)
+	_, id := e.newTable("T")
+	_, tb := e.table("/api/tables/" + id)
+	name, status := tb.Fields[0].ID, tb.Fields[1].ID
+	rec := tb.Records[0]
+	history := func() []historyEntry {
+		t.Helper()
+		code, raw := e.raw(e.admin, "GET", "/api/tables/"+id+"/records/"+rec.ID+"/history", nil)
+		var out struct{ Entries []historyEntry }
+		json.Unmarshal(raw, &out)
+		if code != 200 {
+			t.Fatalf("history: %d %s", code, raw)
+		}
+		return out.Entries
+	}
+
+	// successive edits of one field merge into a single entry
+	e.ops(id, map[string]any{"op": "record.update", "id": rec.ID, "data": map[string]any{name: "a"}})
+	e.ops(id, map[string]any{"op": "record.update", "id": rec.ID, "data": map[string]any{name: "ab"}})
+	h := history()
+	if len(h) != 1 || h[0].Action != "update" || len(h[0].Changes) != 1 || string(h[0].Changes[0].New) != `"ab"` || h[0].Changes[0].Old != nil || h[0].Changes[0].Name != "名称" {
+		t.Fatalf("merged edit: %+v", h)
+	}
+	// another field gets its own entry; undoing it removes the entry again
+	e.ops(id, map[string]any{"op": "record.update", "id": rec.ID, "data": map[string]any{status: "x1"}})
+	if h = history(); len(h) != 2 || h[0].Changes[0].Field != status {
+		t.Fatalf("second field: %+v", h)
+	}
+	e.ops(id, map[string]any{"op": "record.update", "id": rec.ID, "data": map[string]any{status: nil}})
+	if h = history(); len(h) != 1 {
+		t.Fatalf("undone edit kept: %+v", h)
+	}
+	// unchanged values and moves are not logged, and moves keep the modified time
+	_, tb = e.table("/api/tables/" + id)
+	before := tb.Records[0].UpdatedAt
+	e.ops(id, map[string]any{"op": "record.update", "id": rec.ID, "data": map[string]any{name: "ab"}, "sort": 99})
+	_, tb = e.table("/api/tables/" + id)
+	moved := tb.Records[len(tb.Records)-1]
+	if moved.ID != rec.ID || moved.UpdatedAt != before || len(history()) != 1 {
+		t.Fatalf("move: %+v %+v", moved, history())
+	}
+
+	// delete, then restore (undo) the record
+	e.ops(id, map[string]any{"op": "record.delete", "id": rec.ID})
+	e.ops(id, map[string]any{"op": "record.create", "id": rec.ID, "data": map[string]any{name: "ab"}, "sort": 1, "seq": rec.Seq})
+	if h = history(); len(h) != 3 || h[0].Action != "restore" || h[1].Action != "delete" {
+		t.Fatalf("delete / restore: %+v", h)
+	}
+	// a new record logs its initial values
+	e.ops(id, map[string]any{"op": "record.create", "id": "newrec0001", "data": map[string]any{name: "n"}, "sort": 50})
+	code, raw := e.raw(e.admin, "GET", "/api/tables/"+id+"/records/newrec0001/history", nil)
+	if code != 200 || !strings.Contains(string(raw), `"action":"create"`) || !strings.Contains(string(raw), `"new":"n"`) {
+		t.Fatalf("create: %d %s", code, raw)
+	}
+
+	// history of records deleted long ago goes with the trash cleanup
+	e.ops(id, map[string]any{"op": "record.delete", "id": "newrec0001"})
+	e.srv.db.Exec(`UPDATE bt_record_history SET created_at = 1, updated_at = 1 WHERE record_id = 'newrec0001'`)
+	if _, err := e.srv.purgeExpiredTrash(time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	e.srv.db.QueryRow(`SELECT COUNT(*) FROM bt_record_history WHERE record_id = 'newrec0001'`).Scan(&n)
+	if n != 0 || len(history()) != 3 {
+		t.Fatalf("purge: %d left, %d for live record", n, len(history()))
 	}
 }

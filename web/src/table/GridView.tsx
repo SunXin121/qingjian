@@ -15,12 +15,28 @@ import {
   type Rectangle,
 } from '@glideapps/glide-data-grid'
 import '@glideapps/glide-data-grid/dist/index.css'
-import { confirmDialog, openMenu, type MenuItem } from '../components/dialog'
+import { confirmDialog, openMenu, toast, type MenuItem } from '../components/dialog'
 import { IconCopy, IconDown, IconEdit, IconEye, IconLink, IconLock, IconPlus, IconTrash, IconUp } from '../components/icons'
 import { IconEyeOff, IconGroup } from './icons'
-import { customRenderers, type AddCell, type GroupCell, type IndexCell, type ValueCell } from './cells'
+import { customRenderers, GRIP_W, type AddCell, type GroupCell, type IndexCell, type ValueCell } from './cells'
 import { safeHref } from './editors'
-import { cellValue, choiceCollector, displayText, groupLabel, groupRows, parseText, summarize, summaryKinds, viewRecords, visibleFields, type GridRow } from './engine'
+import {
+  cellMatches,
+  cellValue,
+  choiceCollector,
+  displayText,
+  groupKey,
+  groupLabel,
+  groupPaths,
+  groupRows,
+  parseText,
+  searchNeedle,
+  summarize,
+  summaryKinds,
+  viewRecords,
+  visibleFields,
+  type GridRow,
+} from './engine'
 import { openFieldEditor } from './FieldEditor'
 import { choiceOps, orderIds, type CellChange, type TableModel } from './model'
 import { palette, useGridTheme } from './theme'
@@ -54,6 +70,8 @@ const narrow = () => typeof window !== 'undefined' && window.innerWidth < 600
 const defaultWidth = (f: Field, primary: boolean) => (primary ? (narrow() ? 150 : 220) : f.type === 'checkbox' ? 90 : f.type === 'longtext' ? 240 : f.type === 'number' || f.type === 'autonumber' ? 120 : 160)
 
 const INDEX_W = 52
+const ROW_H = 34
+const HEADER_H = 36
 
 // fields our own type-to-edit box can handle (text parsed into the field's value)
 const TYPEABLE = new Set<FieldType>(['text', 'longtext', 'number', 'url', 'date', 'select', 'multiselect'])
@@ -72,9 +90,23 @@ interface Props {
   onOpenRecord: (id: string, list: string[]) => void
   /** height of the grid area in px */
   height: number
+  /** table search text and the index of the current match */
+  search: string
+  searchCursor: number
+  onSearchCount: (n: number) => void
 }
 
-export default function GridView({ model, table, view, readOnly, onOpenRecord, height }: Props) {
+interface DropTarget {
+  anchor: Rec
+  place: 'before' | 'after'
+  /** group values the record takes on in its new place */
+  data: Record<string, any>
+  /** gap index in the grid rows and its client y */
+  gap: number
+  y: number
+}
+
+export default function GridView({ model, table, view, readOnly, onOpenRecord, height, search, searchCursor, onSearchCount }: Props) {
   const theme = useGridTheme()
   const ref = useRef<DataEditorRef>(null)
   const cfg = view.config
@@ -87,6 +119,19 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({})
   const [selection, setSelection] = useState<GridSelection>({ columns: CompactSelection.empty(), rows: CompactSelection.empty() })
   const total = rows.length + 1 // trailing summary row
+  const [dragId, setDragId] = useState<string | null>(null)
+
+  // ---------- search ----------
+  const needle = searchNeedle(search)
+  const matches = useMemo(() => {
+    const out: { rec: Rec; field: Field }[] = []
+    if (needle) for (const r of records) for (const f of fields) if (cellMatches(f, r, needle)) out.push({ rec: r, field: f })
+    return out
+  }, [needle, records, fields])
+  const matchKeys = useMemo(() => new Set(matches.map((m) => m.rec.id + ':' + m.field.id)), [matches])
+  const current = matches.length ? matches[((searchCursor % matches.length) + matches.length) % matches.length] : undefined
+  const currentKey = current ? current.rec.id + ':' + current.field.id : ''
+  useEffect(() => onSearchCount(matches.length), [matches.length, onSearchCount])
 
   useEffect(() => setLiveWidths({}), [cfg.widths])
 
@@ -142,21 +187,27 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         return empty
       }
       const rec = item.rec
-      if (col === 0) return { kind: GridCellKind.Custom, data: { kind: 'qj-index', n: ordinal.get(rec.id) ?? 0 }, copyData: '', allowOverlay: false, readonly: true, cursor: 'pointer' } as IndexCell
+      if (col === 0)
+        return { kind: GridCellKind.Custom, data: { kind: 'qj-index', n: ordinal.get(rec.id) ?? 0, grip: !readOnly }, copyData: '', allowOverlay: false, readonly: true, cursor: 'pointer' } as IndexCell
       const f = fieldAt(col)
       if (!f) return empty
-      return makeCell(model, f, rec, readOnly)
+      const cell = makeCell(model, f, rec, readOnly)
+      const key = rec.id + ':' + f.id
+      if (!matchKeys.has(key)) return cell
+      return { ...cell, themeOverride: { ...cell.themeOverride, bgCell: key === currentKey ? palette.searchCurrent : palette.searchHit } } as GridCell
     },
-    [rows, records, fields, ordinal, cfg.summary, readOnly, model, theme.textLight],
+    [rows, records, fields, ordinal, cfg.summary, readOnly, model, theme.textLight, matchKeys, currentKey],
   )
 
   const getRowThemeOverride = useCallback(
     (row: number) => {
       // the summary row is styled per cell: glide also uses this index for blank space
-      if (rows[row]?.kind === 'group') return { bgCell: palette.groupBg }
+      const item = rows[row]
+      if (item?.kind === 'group') return { bgCell: palette.groupBg }
+      if (item?.kind === 'record' && item.rec.id === dragId) return { bgCell: palette.groupBg, textDark: palette.muted }
       return undefined
     },
-    [rows],
+    [rows, dragId],
   )
 
   // ---------- editing ----------
@@ -306,6 +357,29 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const rowsRef = useRef(rows)
   rowsRef.current = rows
 
+  // jump to the current search match, expanding the groups it is collapsed in
+  const jumpRef = useRef('')
+  useEffect(() => {
+    jumpRef.current = currentKey
+  }, [currentKey])
+  useEffect(() => {
+    if (!current || jumpRef.current !== currentKey) return
+    const row = rows.findIndex((r) => r.kind === 'record' && r.rec.id === current.rec.id)
+    const col = fields.findIndex((f) => f.id === current.field.id) + 1
+    if (col < 1) return
+    if (row < 0) {
+      const paths = new Set(groupPaths(table, current.rec, cfg.groups ?? []))
+      const still = (cfg.collapsed ?? []).filter((p) => !paths.has(p))
+      if (still.length !== (cfg.collapsed ?? []).length) model.updateView(view.id, { collapsed: still })
+      else jumpRef.current = ''
+      return
+    }
+    jumpRef.current = ''
+    ref.current?.scrollTo(col, row, 'both', 0, 0, { vAlign: 'center' })
+    setSelection(cellSelection(col, row))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey, rows])
+
   const toggleGroup = (path: string) => {
     const s = new Set(collapsed)
     s.has(path) ? s.delete(path) : s.add(path)
@@ -390,6 +464,151 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, fields, selection, readOnly, recordIds],
   )
+
+  // ---------- row drag ----------
+  // Rows are dragged by the handle at the left of the index cell. Glide's own row moving
+  // needs its row-marker column, so the drag is tracked here: the pointer y maps to a row
+  // (fixed row height), a line marks the drop gap and the grid auto-scrolls near its edges.
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const lineRef = useRef<HTMLDivElement>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
+
+  /** Client y range of the scrolling record rows (between header and summary row). */
+  const bodyRange = () => {
+    const g = ref.current
+    const head = g?.getBounds(0, -1)
+    const foot = g?.getBounds(0, rowsRef.current.length)
+    const top = head ? head.y + head.height : (wrapRef.current?.getBoundingClientRect().top ?? 0) + HEADER_H
+    return { top, bottom: foot ? foot.y : top + height }
+  }
+
+  const dropTarget = (clientY: number, rec: Rec): DropTarget | null => {
+    const b0 = ref.current?.getBounds(0, 0)
+    if (!b0) return null
+    const rs = rowsRef.current
+    const { top, bottom } = bodyRange()
+    const pos = (Math.max(top, Math.min(bottom - 1, clientY)) - b0.y) / ROW_H
+    const r = Math.floor(pos)
+    const gap = r >= rs.length ? rs.length : Math.max(0, pos - r < 0.5 ? r : r + 1)
+    const above = rs[gap - 1]
+    const below = rs[gap]
+    const [anchor, place]: [Rec, 'before' | 'after'] | [undefined, undefined] =
+      above?.kind === 'record' ? [above.rec, 'after'] : below?.kind === 'record' ? [below.rec, 'before'] : [undefined, undefined]
+    if (!anchor) return null
+    const data: Record<string, any> = {}
+    for (const g of cfg.groups ?? []) {
+      const f = model.field(g.field)
+      if (!f) continue
+      const v = cellValue(anchor, f)
+      if (groupKey(f, v) === groupKey(f, cellValue(rec, f))) continue
+      // computed values (created time…) cannot follow the record into another group
+      if (isComputed(f.type)) return null
+      data[f.id] = v ?? null
+    }
+    const from = rs.findIndex((x) => x.kind === 'record' && x.rec.id === rec.id)
+    if (anchor.id === rec.id || (!Object.keys(data).length && (gap === from || gap === from + 1))) return null
+    return { anchor, place, data, gap, y: b0.y + gap * ROW_H }
+  }
+
+  const startRowDrag = (rec: Rec, x0: number, y0: number) => {
+    const scroller = wrapRef.current?.querySelector<HTMLElement>('.dvn-scroller')
+    const primary = fields[0]
+    let active = false
+    let lastX = x0
+    let lastY = y0
+    let target: DropTarget | null = null
+    let raf = 0
+    const paint = () => {
+      const wrap = wrapRef.current
+      const line = lineRef.current
+      const ghost = ghostRef.current
+      if (!wrap || !line || !ghost) return
+      target = dropTarget(lastY, rec)
+      const wr = wrap.getBoundingClientRect()
+      line.style.display = target ? 'block' : 'none'
+      if (target) line.style.top = `${target.y - wr.top - 1}px`
+      ghost.style.transform = `translate(${lastX - wr.left + 14}px, ${lastY - wr.top - 14}px)`
+    }
+    const tick = () => {
+      // auto-scroll while the pointer is near the top / bottom edge
+      const { top, bottom } = bodyRange()
+      const edge = 36
+      const dy = lastY < top + edge ? -(top + edge - lastY) : lastY > bottom - edge ? lastY - bottom + edge : 0
+      if (dy && scroller) {
+        scroller.scrollTop += Math.max(-24, Math.min(24, Math.round(dy / 3)))
+        paint()
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    const move = (e: PointerEvent) => {
+      lastX = e.clientX
+      lastY = e.clientY
+      if (!active) {
+        if (Math.abs(lastX - x0) < 4 && Math.abs(lastY - y0) < 4) return
+        active = true
+        setDragId(rec.id)
+        if (ghostRef.current) {
+          ghostRef.current.textContent = (primary && displayText(primary, cellValue(rec, primary))) || '未命名记录'
+          ghostRef.current.style.display = 'block'
+        }
+        document.body.classList.add('bt-row-dragging')
+        raf = requestAnimationFrame(tick)
+      }
+      paint()
+    }
+    const end = (commit: boolean) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', key, true)
+      cancelAnimationFrame(raf)
+      document.body.classList.remove('bt-row-dragging')
+      if (lineRef.current) lineRef.current.style.display = 'none'
+      if (ghostRef.current) ghostRef.current.style.display = 'none'
+      // the grid never saw the pointerdown; keep the click that follows from reaching it
+      const stop = (ev: Event) => {
+        ev.stopPropagation()
+        ev.preventDefault()
+      }
+      window.addEventListener('click', stop, { capture: true, once: true })
+      setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 0)
+      if (!active) {
+        onOpenRecord(rec.id, recordIds)
+        return
+      }
+      setDragId(null)
+      if (commit && target) model.reorderRecord(rec.id, target.anchor.id, target.place, target.data)
+    }
+    const up = () => end(true)
+    const cancel = () => end(false)
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      end(false)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('keydown', key, true)
+  }
+
+  const onPointerDownCapture = (e: React.PointerEvent) => {
+    if (readOnly || e.button !== 0 || typing.current) return
+    const b0 = ref.current?.getBounds(0, 0)
+    if (!b0 || e.clientX < b0.x || e.clientX > b0.x + GRIP_W) return
+    const { top, bottom } = bodyRange()
+    if (e.clientY < top || e.clientY >= bottom) return
+    const item = rowsRef.current[Math.floor((e.clientY - b0.y) / ROW_H)]
+    if (item?.kind !== 'record') return
+    e.preventDefault()
+    e.stopPropagation()
+    if (cfg.sorts?.length) {
+      toast('视图已设置排序，无法拖动调整顺序')
+      return
+    }
+    startRowDrag(item.rec, e.clientX, e.clientY)
+  }
 
   // ---------- columns ----------
 
@@ -541,7 +760,9 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   )
 
   return (
-    <div className="bt-grid" onContextMenu={(e) => e.preventDefault()}>
+    <div className="bt-grid" ref={wrapRef} onContextMenu={(e) => e.preventDefault()} onPointerDownCapture={onPointerDownCapture}>
+      <div ref={lineRef} className="bt-drop-line" style={{ left: INDEX_W }} />
+      <div ref={ghostRef} className="bt-drag-ghost ellipsis" />
       <textarea
         ref={typeRef}
         className="bt-type-editor"
@@ -570,8 +791,8 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         rows={total}
         width="100%"
         height={height}
-        rowHeight={34}
-        headerHeight={36}
+        rowHeight={ROW_H}
+        headerHeight={HEADER_H}
         freezeColumns={freeze}
         freezeTrailingRows={1}
         getCellContent={getCellContent}

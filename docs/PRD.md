@@ -144,9 +144,10 @@
 | 通用能力 | 优先级 |
 |---|---|
 | 每视图独立的筛选 / 排序 / 分组 | P0 |
-| 记录详情卡片、键盘导航、Excel 复制粘贴、填充柄 | P0 |
+| 记录详情卡片、键盘导航、Excel 复制粘贴、填充柄、拖拽整行调整顺序 | P0 |
 | 撤销 / 重做、CSV 导入导出 | P0 |
-| Excel 导入导出、表内搜索、记录修改历史 | P1 |
+| 表内搜索、记录修改历史 | P1 ✅ |
+| Excel 导入导出 | P1 |
 | 自动化、仪表盘 | P2 |
 
 **实现要点**：Canvas 表格（Glide Data Grid / VisActor VTable）；`fields / views / records(JSON)` 通用存储；整表加载至浏览器，筛选排序公式在前端计算，后端仅存原始值、增量保存。
@@ -198,6 +199,7 @@ shares        token, target_type(node|repo), target_id, view_id, password_hash, 
 bt_fields     id, table_node_id, name, type, options(json), sort                                                                    (M3)
 bt_views      id, table_node_id, name, type, config(json), sort                                                                     (M3)
 bt_records    id, table_node_id, seq(自动编号), data(json), sort, created_at, updated_at                                            (M3)
+bt_record_history  id, table_node_id, record_id, action(create|update|delete|restore), changes(json: 字段旧值 / 新值), created_at, updated_at   (M3)
 ```
 
 ## 7. 里程碑

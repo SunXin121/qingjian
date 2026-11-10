@@ -394,6 +394,32 @@ export function groupRows(t: TableData, records: Rec[], rules: SortRule[], colla
   return out
 }
 
+/** Group header paths a record sits under (to expand its collapsed groups). */
+export function groupPaths(t: TableData, rec: Rec, rules: SortRule[]): string[] {
+  const byId = new Map(t.fields.map((f) => [f.id, f]))
+  const out: string[] = []
+  let prefix = ''
+  for (const r of rules) {
+    const f = byId.get(r.field)
+    if (!f) continue
+    prefix += '/' + f.id + ':' + groupKey(f, cellValue(rec, f))
+    out.push(prefix)
+  }
+  return out
+}
+
+// ---------- search ----------
+
+/** Normalised search text; empty means no search. */
+export const searchNeedle = (q: string) => q.trim().toLowerCase()
+
+/** Whether a cell's displayed text contains the (normalised) needle. */
+export function cellMatches(f: Field, r: Rec, needle: string): boolean {
+  if (!needle) return false
+  if (f.type === 'checkbox') return false
+  return displayText(f, cellValue(r, f)).toLowerCase().includes(needle)
+}
+
 // ---------- summaries ----------
 
 export function summaryKinds(type: FieldType): { kind: SummaryKind; label: string }[] {
