@@ -118,6 +118,10 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 404, "节点不存在")
 		return
 	}
+	if err := renameLinks(tx, id, n.Type, n.Title, title); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
 	n.Title, n.UpdatedAt = title, now()
 	tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, n.Title, n.UpdatedAt, id)
 	tx.Exec(`UPDATE docs_fts SET title = ? WHERE node_id = ?`, n.Title, id)

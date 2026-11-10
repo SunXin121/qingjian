@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api, ApiError, formatTime } from '../api'
-import { confirmDialog, openMenu, toast } from '../components/dialog'
-import { IconChevron, IconDownload, IconMore, IconShare, IconTrash, IconUpload, RepoMark } from '../components/icons'
+import { BacklinkList, useBacklinks } from '../components/Backlinks'
+import { confirmDialog, openMenu, openPopover, toast } from '../components/dialog'
+import { IconChevron, IconDownload, IconLink, IconMore, IconShare, IconTrash, IconUpload, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { openShareDialog } from '../components/ShareDialog'
 import { useStore } from '../store'
@@ -66,6 +67,7 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
   const [title, setTitle] = useState(table.title)
   const titleRef = useRef(table.title)
   const repo = repos.find((r) => r.id === repoId)
+  const backlinks = useBacklinks(table.id)
 
   const viewParam = params.get('view') ?? undefined
   const [viewId, setViewId] = useState<string | undefined>(() => {
@@ -111,7 +113,7 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
     const t = title.trim()
     if (t === titleRef.current) return
     try {
-      const n = await api.renameNode(table.id, t)
+      const n = await api.renameNode(table.id, t, { type: 'table', title: titleRef.current })
       titleRef.current = n.title
       model.setTitle(n.title)
       patchNode(table.id, { title: n.title })
@@ -184,6 +186,30 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
         </nav>
         <span className={'save-status ' + (sync === 'saving' ? 'saving' : sync === 'error' ? 'error' : '')}>{status}</span>
         <span className="spacer" />
+        {backlinks.length > 0 && (
+          <button
+            className="btn ghost sm backlinks-btn"
+            title="链接到这个表格的文档"
+            onClick={(e) =>
+              openPopover(
+                e.currentTarget,
+                (close) => (
+                  <div className="backlinks-pop">
+                    <div className="backlinks-head">
+                      <IconLink width={15} height={15} />
+                      <span>反向链接</span>
+                      <span className="backlinks-count">{backlinks.length}</span>
+                    </div>
+                    <BacklinkList list={backlinks} repoId={repoId} onOpen={close} />
+                  </div>
+                ),
+                { width: 380, align: 'right' },
+              )
+            }
+          >
+            <IconLink width={15} height={15} /> {backlinks.length}
+          </button>
+        )}
         <button className="icon-btn hide-mobile" title="分享" onClick={share}>
           <IconShare />
         </button>

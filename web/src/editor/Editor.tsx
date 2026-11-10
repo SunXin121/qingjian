@@ -9,10 +9,10 @@ import { clearTextInCurrentBlockCommand, codeBlockSchema } from '@milkdown/kit/p
 import type { Node as PMNode } from '@milkdown/kit/prose/model'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { uploadFile } from '../api'
+import { uploadFile, type NodeRenamed } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
-import { docLinkTrigger, nodeLinkPath, openDocLinkPicker } from './docLinks'
+import { docLinkTrigger, followRename, nodeLinkPath, openDocLinkPicker } from './docLinks'
 import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
 import { previewBlockKeys } from './previewBlocks'
 import { textDiagramView } from './textDiagram'
@@ -400,10 +400,18 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     }
     root.addEventListener('click', onClick)
 
+    // a linked document / table was renamed: links still showing its old title follow
+    const onRenamed = (e: Event) => {
+      if (crepe.readonly || destroyed) return
+      created.then(() => crepe.editor.action((ctx) => followRename(ctx.get(editorViewCtx), (e as CustomEvent<NodeRenamed>).detail)))
+    }
+    window.addEventListener('qj-node-renamed', onRenamed)
+
     return () => {
       destroyed = true
       offFocus()
       root.removeEventListener('click', onClick)
+      window.removeEventListener('qj-node-renamed', onRenamed)
       crepeRef.current = null
       created.finally(() => crepe.destroy())
     }

@@ -35,7 +35,7 @@ function preloadHeavyPages() {
 }
 
 function Shell() {
-  const { sidebarOpen, setSidebarOpen } = useStore()
+  const { sidebarOpen, setSidebarOpen, loadTree, treeRepoId } = useStore()
   const location = useLocation()
   const navigate = useNavigate()
   useEffect(() => setSidebarOpen(false), [location.pathname, setSidebarOpen])
@@ -47,6 +47,15 @@ function Shell() {
     window.addEventListener('qj-nav', onNav)
     return () => window.removeEventListener('qj-nav', onNav)
   }, [navigate])
+  // nodes created outside the sidebar (a new document from the [[ picker)
+  useEffect(() => {
+    const onTree = (e: Event) => {
+      const repo = (e as CustomEvent<string>).detail
+      if (repo === treeRepoId) loadTree(repo)
+    }
+    window.addEventListener('qj-tree-changed', onTree)
+    return () => window.removeEventListener('qj-tree-changed', onTree)
+  }, [loadTree, treeRepoId])
   return (
     <div className={'shell' + (sidebarOpen ? ' sidebar-open' : '')}>
       <Sidebar />

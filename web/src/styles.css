@@ -1154,6 +1154,12 @@ a.toc-row:hover > .ellipsis {
   font-size: 12px;
   color: var(--c-text-3);
 }
+.doc-link-item.create {
+  color: var(--c-info);
+}
+.doc-link-item.create > svg {
+  color: var(--c-info);
+}
 .doc-link-empty {
   padding: 12px 8px;
   font-size: 13px;
@@ -1224,6 +1230,19 @@ a.toc-row:hover > .ellipsis {
   font-size: 12px;
   font-weight: 400;
   color: var(--c-text-3);
+}
+.backlinks-pop {
+  padding: 12px 14px 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.backlinks-pop .backlink {
+  margin: 0 -8px;
+  padding: 8px;
+}
+.backlinks-btn {
+  gap: 4px;
+  color: var(--c-text-2);
 }
 .backlink-snippet {
   padding-left: 20px;

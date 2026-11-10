@@ -89,11 +89,16 @@ func (s *Server) saveDoc(w http.ResponseWriter, r *http.Request) {
 	if t <= contentUpdated {
 		t = contentUpdated + 1 // keep updated_at strictly increasing for conflict detection
 	}
+	oldTitle := n.Title
 	if in.Title != nil {
 		n.Title = strings.TrimSpace(*in.Title)
 	}
 	if in.Markdown != nil {
 		md = *in.Markdown
+	}
+	if err := renameLinks(tx, id, n.Type, oldTitle, n.Title); err != nil {
+		httpError(w, 500, err.Error())
+		return
 	}
 	n.UpdatedAt = t
 	if _, err := tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, n.Title, t, id); err != nil {
@@ -205,6 +210,9 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 	err = addVersion(tx, d.ID, d.Title, d.Markdown, t-1)
 	if err == nil {
 		_, err = tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, v.Title, t, d.ID)
+	}
+	if err == nil {
+		err = renameLinks(tx, d.ID, "doc", d.Title, v.Title)
 	}
 	if err == nil {
 		_, err = tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, v.Markdown, t, d.ID)

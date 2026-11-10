@@ -93,3 +93,40 @@ func TestExportRelativeLinks(t *testing.T) {
 	}
 	t.Fatal("source doc not exported")
 }
+
+func TestRenameUpdatesLinkText(t *testing.T) {
+	e := newEnv(t)
+	repoID, target := e.repoWithDoc("# 目标") // titled "D"
+	link := "(/r/" + repoID + "/d/" + target + ")"
+	md := "见 [D]" + link + "，或 [自定义文字]" + link + "，以及 [D](https://x.example/r/" + repoID + "/d/" + target + "#h)"
+	_, n := e.do(e.admin, "POST", "/api/nodes", map[string]any{"repo_id": repoID, "type": "doc", "title": "来源", "markdown": md})
+	src := n["id"].(string)
+	_, before := e.do(e.admin, "GET", "/api/docs/"+src, nil)
+
+	content := func() string {
+		_, d := e.do(e.admin, "GET", "/api/docs/"+src, nil)
+		return d["markdown"].(string)
+	}
+	// renamed from the sidebar
+	e.do(e.admin, "PATCH", "/api/nodes/"+target, map[string]string{"title": "新[名]_字"})
+	want := "见 [新\\[名\\]\\_字]" + link + "，或 [自定义文字]" + link + "，以及 [新\\[名\\]\\_字](https://x.example/r/" + repoID + "/d/" + target + "#h)"
+	if got := content(); got != want {
+		t.Fatalf("after rename:\n%s\nwant\n%s", got, want)
+	}
+	// renamed while editing the document; an empty title shows the placeholder
+	e.do(e.admin, "PUT", "/api/docs/"+target, map[string]any{"title": ""})
+	if got := content(); !strings.HasPrefix(got, "见 [无标题文档]"+link) {
+		t.Fatalf("after save: %s", got)
+	}
+	// the linking document keeps its timestamp (no conflict for an open editor)
+	_, after := e.do(e.admin, "GET", "/api/docs/"+src, nil)
+	if after["content_updated_at"] != before["content_updated_at"] {
+		t.Fatalf("content timestamp changed: %v → %v", before["content_updated_at"], after["content_updated_at"])
+	}
+	// and search finds the new text
+	e.do(e.admin, "PATCH", "/api/nodes/"+target, map[string]string{"title": "独特标题"})
+	_, raw := e.raw(e.admin, "GET", "/api/search?q=独特标题", nil)
+	if !strings.Contains(string(raw), src) {
+		t.Fatalf("search: %s", raw)
+	}
+}

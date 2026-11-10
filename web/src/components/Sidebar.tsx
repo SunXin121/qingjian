@@ -232,7 +232,7 @@ function RepoTree({ repoId }: { repoId: string }) {
         onClick: async () => {
           const t = await promptText('重命名', n.title)
           if (t === null) return
-          await api.renameNode(n.id, t)
+          await api.renameNode(n.id, t, { type: n.type, title: n.title })
           await loadTree(repoId)
         },
       },

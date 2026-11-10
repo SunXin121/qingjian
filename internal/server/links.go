@@ -205,3 +205,70 @@ ORDER BY (lower(n.title) LIKE ? ESCAPE '\') DESC, n.updated_at DESC LIMIT 30`, "
 	}
 	writeJSON(w, 200, out)
 }
+
+// linkLabel is the text a link to a node shows by default (see docLinks.tsx).
+func linkLabel(title, typ string) string {
+	if t := strings.TrimSpace(title); t != "" {
+		return t
+	}
+	if typ == "table" {
+		return "未命名表格"
+	}
+	return "无标题文档"
+}
+
+var (
+	reMdUnescape = regexp.MustCompile(`\\([!-/:-@\[-` + "`" + `{-~])`)
+	mdLinkEscape = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, `*`, `\*`, `_`, `\_`, "`", "\\`")
+)
+
+// renameLinks follows a node's rename in the documents linking to it: links whose text
+// still is the old title get the new one; links with text of their own are kept.
+// The documents' content timestamps stay as they are, so an editor that has one of them
+// open does not run into a conflict (it updates its own copy, see Editor.tsx).
+func renameLinks(tx *sql.Tx, id, typ, oldTitle, newTitle string) error {
+	oldText, newText := linkLabel(oldTitle, typ), linkLabel(newTitle, typ)
+	if oldText == newText {
+		return nil
+	}
+	re, err := regexp.Compile(`\[((?:\\.|[^\]\\\n])*)\](\(\s*<?(?:https?://[^/\s)<>]+)?/r/[0-9a-z]+/[dt]/` + regexp.QuoteMeta(id) + `(?:[?#][^)\s]*)?>?\))`)
+	if err != nil {
+		return err
+	}
+	rows, err := tx.Query(`SELECT n.id, n.title, c.markdown FROM doc_links l
+JOIN nodes n ON n.id = l.src JOIN doc_contents c ON c.node_id = n.id WHERE l.dst = ?`, id)
+	if err != nil {
+		return err
+	}
+	type doc struct{ id, title, md string }
+	var changed []doc
+	for rows.Next() {
+		var d doc
+		if err := rows.Scan(&d.id, &d.title, &d.md); err != nil {
+			rows.Close()
+			return err
+		}
+		md := re.ReplaceAllStringFunc(d.md, func(link string) string {
+			m := re.FindStringSubmatch(link)
+			if reMdUnescape.ReplaceAllString(m[1], "$1") != oldText {
+				return link
+			}
+			return "[" + mdLinkEscape.Replace(newText) + "]" + m[2]
+		})
+		if md != d.md {
+			d.md = md
+			changed = append(changed, d)
+		}
+	}
+	rows.Close()
+	t := now()
+	for _, d := range changed {
+		if _, err := tx.Exec(`UPDATE doc_contents SET markdown = ? WHERE node_id = ?`, d.md, d.id); err != nil {
+			return err
+		}
+		if err := indexDoc(tx, d.id, d.title, d.md, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}

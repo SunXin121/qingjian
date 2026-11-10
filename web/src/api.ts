@@ -159,6 +159,14 @@ export interface NodeRef {
   updated_at: number
 }
 
+/** Detail of the `qj-node-renamed` window event. */
+export interface NodeRenamed {
+  id: string
+  type: NodeType
+  from: string
+  to: string
+}
+
 /** A document linking to a node, with the text around the link. */
 export interface Backlink {
   id: string
@@ -227,7 +235,13 @@ export const api = {
 
   createNode: (repo_id: string, parent_id: string | null, type: NodeType, title = '') =>
     request<TreeNode>('POST', '/api/nodes', { repo_id, parent_id, type, title }),
-  renameNode: (id: string, title: string) => request<TreeNode>('PATCH', `/api/nodes/${id}`, { title }),
+  /** Renames a node; with `prev`, editors showing links to it follow (see Editor.tsx). */
+  renameNode: async (id: string, title: string, prev?: { type: NodeType; title: string }) => {
+    const n = await request<TreeNode>('PATCH', `/api/nodes/${id}`, { title })
+    if (prev && prev.title !== n.title)
+      window.dispatchEvent(new CustomEvent<NodeRenamed>('qj-node-renamed', { detail: { id, type: prev.type, from: prev.title, to: n.title } }))
+    return n
+  },
   moveNode: (id: string, parent_id: string | null, sort: number) =>
     request('POST', `/api/nodes/${id}/move`, { parent_id, sort }),
   deleteNode: (id: string) => request('DELETE', `/api/nodes/${id}`),
