@@ -19,6 +19,10 @@ var (
 	reDrawing = regexp.MustCompile("(?s)```[ \\t]*(excalidraw|drawio|mindmap)[ \\t]*\\r?\\n(.*?)\\r?\\n[ \\t]*```")
 	// Attachment links, relative (/files/id/name) or absolute (https://host/files/id/name).
 	reFileRef = regexp.MustCompile(`(?:https?://[^/\s)"'<>]+)?/files/([0-9a-z]{20})(?:/[^)\s"'<>]*)?`)
+	// Milkdown serializes preserved empty paragraphs as standalone HTML breaks.
+	reEmptyParagraph = regexp.MustCompile(`(?i)^ {0,3}<br[ \t]*/?>[ \t]*$`)
+	reQuotePrefix    = regexp.MustCompile(`^(?: {0,3}>[ \t]?)+`)
+	reCodeFence      = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})(.*)$")
 )
 
 var drawingAlt = map[string]string{"excalidraw": "画板", "drawio": "流程图", "mindmap": "思维导图"}
@@ -35,6 +39,7 @@ type drawingRef struct {
 // Blocks without a rendered image (never-drawn drawings) are dropped: their JSON body
 // means nothing outside the editor.
 func (s *Server) portableMarkdown(md string) string {
+	md = stripEmptyParagraphs(md)
 	return reDrawing.ReplaceAllStringFunc(md, func(block string) string {
 		m := reDrawing.FindStringSubmatch(block)
 		var ref drawingRef
@@ -50,6 +55,33 @@ func (s *Server) portableMarkdown(md string) string {
 		}
 		return "![" + drawingAlt[m[1]] + "](" + a.URL + ")"
 	})
+}
+
+// stripEmptyParagraphs turns editor spacing placeholders into blank lines while
+// preserving line endings, quote containers, inline breaks and code examples.
+func stripEmptyParagraphs(md string) string {
+	lines := strings.SplitAfter(md, "\n")
+	var fence string
+	for i, line := range lines {
+		body := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		prefix := reQuotePrefix.FindString(body)
+		content := strings.TrimPrefix(body, prefix)
+		if m := reCodeFence.FindStringSubmatch(content); m != nil {
+			if fence == "" {
+				// Backtick fence info strings cannot contain backticks.
+				if m[1][0] != '`' || !strings.Contains(m[2], "`") {
+					fence = m[1]
+				}
+			} else if m[1][0] == fence[0] && len(m[1]) >= len(fence) && strings.TrimSpace(m[2]) == "" {
+				fence = ""
+			}
+			continue
+		}
+		if fence == "" && reEmptyParagraph.MatchString(content) {
+			lines[i] = prefix + line[len(body):]
+		}
+	}
+	return strings.Join(lines, "")
 }
 
 // exportBundle collects attachments referenced by exported documents so they can be

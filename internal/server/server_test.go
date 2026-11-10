@@ -360,6 +360,48 @@ func TestPortableMarkdown(t *testing.T) {
 	}
 }
 
+func TestPortableMarkdownEmptyParagraphs(t *testing.T) {
+	s := &Server{}
+	for _, tc := range []struct {
+		name, markdown, want string
+	}{
+		{"empty paragraphs", "before\n\n<br />\n\n<br />\n\nafter\n", "before\n\n\n\n\n\nafter\n"},
+		{"variants and CRLF", "<br>\r\n<BR/>\r\n  <br />  \r\n", "\r\n\r\n\r\n"},
+		{"only placeholder", "<br />", ""},
+		{"blockquote", "> before\n>\n> <br />\n>\n> after", "> before\n>\n> \n>\n> after"},
+		{"inline HTML", "before<br />after", "before<br />after"},
+		{"inline code", "`<br />`", "`<br />`"},
+		{"indented code", "    <br />\n\t<br />", "    <br />\n\t<br />"},
+		{"backtick fence", "```html\n<br />\n```\n\n<br />", "```html\n<br />\n```\n\n"},
+		{"long fence", "````markdown\n```html\n<br />\n```\n````\n<br />", "````markdown\n```html\n<br />\n```\n````\n"},
+		{"tilde fence", "~~~html\n<br />\n~~~\n<br />", "~~~html\n<br />\n~~~\n"},
+		{"quoted fence", "> ```html\n> <br />\n> ```\n> <br />", "> ```html\n> <br />\n> ```\n> "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := s.portableMarkdown(tc.markdown); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExportEmptyParagraphs(t *testing.T) {
+	e := newEnv(t)
+	repoID, docID := e.repoWithDoc("before\n\n<br />\n\nafter\n")
+	for _, endpoint := range []string{"/api/docs/" + docID + "/export", "/api/repos/" + repoID + "/export"} {
+		code, data := e.raw(e.admin, "GET", endpoint, nil)
+		if code != 200 {
+			t.Fatalf("export %s: %d", endpoint, code)
+		}
+		if got := readZip(t, data)["D.md"]; got != "before\n\n\n\nafter\n" {
+			t.Fatalf("export %s: %q", endpoint, got)
+		}
+	}
+	if d, err := e.srv.loadDoc(docID); err != nil || d.Markdown != "before\n\n<br />\n\nafter\n" {
+		t.Fatalf("export changed stored document: %+v, %v", d, err)
+	}
+}
+
 func readZip(t *testing.T, data []byte) map[string]string {
 	t.Helper()
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
