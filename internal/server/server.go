@@ -96,6 +96,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/versions/{vid}", a(s.getVersion))
 	mux.Handle("POST /api/versions/{vid}/restore", a(s.restoreVersion))
 
+	mux.Handle("GET /api/tables", a(s.listTables))
+	mux.Handle("GET /api/tables/{id}", a(s.getTable))
+	mux.Handle("POST /api/tables/{id}/ops", a(s.tableOps))
+
 	mux.Handle("GET /api/recent", a(s.recentDocs))
 	mux.Handle("GET /api/search", a(s.search))
 
@@ -119,6 +123,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/s/{token}/auth", s.shareAuth)
 	mux.HandleFunc("GET /api/s/{token}/tree", s.shareTree)
 	mux.HandleFunc("GET /api/s/{token}/docs/{id}", s.shareDoc)
+	mux.HandleFunc("GET /api/s/{token}/tables/{id}", s.shareTable)
 
 	mux.Handle("GET /api/backup", a(s.backupStatus))
 	mux.Handle("POST /api/backup/run", a(s.backupRun))

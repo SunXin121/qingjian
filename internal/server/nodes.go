@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var nodeTypes = map[string]bool{"doc": true, "group": true}
+var nodeTypes = map[string]bool{"doc": true, "group": true, "table": true}
 
 func (s *Server) loadNode(q interface {
 	QueryRow(string, ...any) *sql.Row
@@ -74,6 +74,17 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := tx.Exec(`INSERT INTO docs_fts(node_id, title, body) VALUES(?,?,?)`, n.ID, n.Title, in.Markdown); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+	}
+	if n.Type == "table" {
+		if err := initTable(tx, n.ID, n.CreatedAt); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+		// tables are found by title in search
+		if _, err := tx.Exec(`INSERT INTO docs_fts(node_id, title, body) VALUES(?,?,'')`, n.ID, n.Title); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}

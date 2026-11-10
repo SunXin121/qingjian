@@ -6,6 +6,8 @@ export interface ShareTarget {
   target_type: 'node' | 'repo'
   target_id: string
   title: string
+  /** tables: the views a link may be restricted to */
+  views?: { id: string; name: string }[]
 }
 
 type Preset = 'never' | '1' | '7' | '30' | 'custom' | ''
@@ -69,6 +71,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
   const [editingPw, setEditingPw] = useState(false)
   const [editPreset, setEditPreset] = useState<Preset>('')
   const [lastPw, setLastPw] = useState('') // plain password known only right after setting it
+  const [viewId, setViewId] = useState('')
 
   useEffect(() => {
     api
@@ -96,13 +99,29 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
   const create = () =>
     run(async () => {
       if (preset === 'custom' && !custom) throw new Error('请选择到期日期')
-      const sh = await api.createShare({ ...target, password: password || undefined, expires_at: presetExpiry(preset, custom) })
+      const sh = await api.createShare({
+        target_type: target.target_type,
+        target_id: target.target_id,
+        password: password || undefined,
+        expires_at: presetExpiry(preset, custom),
+        view_id: viewId || null,
+      })
       setLastPw(password)
       setPassword('')
       return sh
     })
 
-  const kind = target.target_type === 'repo' ? '知识库' : '文档'
+  const kind = target.target_type === 'repo' ? '知识库' : target.views ? '表格' : '文档'
+  const viewPicker = (value: string, onChange: (v: string) => void) => (
+    <select className="share-view-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">全部视图</option>
+      {target.views!.map((v) => (
+        <option key={v.id} value={v.id}>
+          仅「{v.name}」
+        </option>
+      ))}
+    </select>
+  )
 
   let body
   if (share === undefined) {
@@ -115,6 +134,12 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
             创建链接后，任何拿到链接的人都可以<strong>只读</strong>访问这个{kind}
             {target.target_type === 'repo' ? '（含目录中的全部文档）' : ''}。
           </p>
+          {target.views && (
+            <label className="field">
+              <span>可见范围</span>
+              {viewPicker(viewId, setViewId)}
+            </label>
+          )}
           <label className="field">
             <span>访问密码（可选）</span>
             <input value={password} placeholder="留空则无需密码" autoComplete="off" onChange={(e) => setPassword(e.target.value)} />
@@ -172,6 +197,16 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
               <span />
             </label>
           </div>
+
+          {target.views && (
+            <div className="share-row">
+              <div>
+                <div className="share-row-title">可见范围</div>
+                <div className="share-row-desc">访客可以切换的视图</div>
+              </div>
+              {viewPicker(share.view_id ?? '', (v) => run(() => api.updateShare(share.token, { view_id: v || null })))}
+            </div>
+          )}
 
           <div className="share-row">
             <div>

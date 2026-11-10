@@ -22,6 +22,7 @@ type Share struct {
 	Token       string `json:"token"`
 	TargetType  string `json:"target_type"` // node | repo
 	TargetID    string `json:"target_id"`
+	ViewID      *string `json:"view_id"`
 	HasPassword bool   `json:"has_password"`
 	ExpiresAt   *int64 `json:"expires_at"`
 	Enabled     bool   `json:"enabled"`
@@ -31,6 +32,7 @@ type Share struct {
 
 	// resolved from the target
 	Title       string `json:"title"`
+	NodeType    string `json:"node_type"`
 	RepoID      string `json:"repo_id"`
 	RepoName    string `json:"repo_name"`
 	TargetAlive bool   `json:"target_alive"`
@@ -42,7 +44,7 @@ func (sh *Share) expired() bool {
 	return sh.ExpiresAt != nil && *sh.ExpiresAt <= now()
 }
 
-const shareSelect = `SELECT s.token, s.target_type, s.target_id, s.password_hash, s.expires_at, s.enabled, s.view_count, s.created_at, s.updated_at,
+const shareSelect = `SELECT s.token, s.target_type, s.target_id, s.view_id, COALESCE(n.type, ''), s.password_hash, s.expires_at, s.enabled, s.view_count, s.created_at, s.updated_at,
   COALESCE(n.title, r.name, ''), COALESCE(n.repo_id, r.id, ''), COALESCE(nr.name, r.name, ''),
   CASE WHEN s.target_type = 'node'
     THEN n.id IS NOT NULL AND n.deleted_at IS NULL AND nr.deleted_at IS NULL
@@ -57,7 +59,7 @@ type rowScanner interface{ Scan(...any) error }
 func scanShare(row rowScanner) (*Share, error) {
 	var sh Share
 	var enabled, alive int
-	err := row.Scan(&sh.Token, &sh.TargetType, &sh.TargetID, &sh.passwordHash, &sh.ExpiresAt, &enabled, &sh.ViewCount,
+	err := row.Scan(&sh.Token, &sh.TargetType, &sh.TargetID, &sh.ViewID, &sh.NodeType, &sh.passwordHash, &sh.ExpiresAt, &enabled, &sh.ViewCount,
 		&sh.CreatedAt, &sh.UpdatedAt, &sh.Title, &sh.RepoID, &sh.RepoName, &alive)
 	if err != nil {
 		return nil, err
@@ -101,8 +103,9 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		TargetType string `json:"target_type"`
 		TargetID   string `json:"target_id"`
-		Password   string `json:"password"`
-		ExpiresAt  *int64 `json:"expires_at"`
+		Password   string  `json:"password"`
+		ExpiresAt  *int64  `json:"expires_at"`
+		ViewID     *string `json:"view_id"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		httpError(w, 400, "请求格式错误")
@@ -115,9 +118,12 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 			httpError(w, 404, "文档不存在")
 			return
 		}
-		if n.Type != "doc" {
-			httpError(w, 400, "只能分享文档或知识库")
+		if n.Type != "doc" && n.Type != "table" {
+			httpError(w, 400, "只能分享文档、多维表格或知识库")
 			return
+		}
+		if in.ViewID != nil && (*in.ViewID == "" || n.Type != "table") {
+			in.ViewID = nil
 		}
 	case "repo":
 		if _, err := s.loadRepo(in.TargetID); err != nil {
@@ -139,8 +145,11 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	}
 	t := now()
 	token := randString(22)
-	if _, err := s.db.Exec(`INSERT INTO shares(token, target_type, target_id, password_hash, expires_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?)`,
-		token, in.TargetType, in.TargetID, hash, in.ExpiresAt, t, t); err != nil {
+	if in.TargetType != "node" {
+		in.ViewID = nil
+	}
+	if _, err := s.db.Exec(`INSERT INTO shares(token, target_type, target_id, view_id, password_hash, expires_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+		token, in.TargetType, in.TargetID, in.ViewID, hash, in.ExpiresAt, t, t); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}
@@ -152,7 +161,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, sh)
 }
 
-// updateShare accepts any subset of {password, expires_at, enabled}.
+// updateShare accepts any subset of {password, expires_at, enabled, view_id}.
 // password "" removes the password; expires_at null makes the link permanent.
 func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
@@ -191,6 +200,17 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sets, args = append(sets, "expires_at = ?"), append(args, exp)
+	}
+	if raw, ok := in["view_id"]; ok {
+		var v *string
+		if json.Unmarshal(raw, &v) != nil {
+			httpError(w, 400, "请求格式错误")
+			return
+		}
+		if v != nil && *v == "" {
+			v = nil
+		}
+		sets, args = append(sets, "view_id = ?"), append(args, v)
 	}
 	if raw, ok := in["enabled"]; ok {
 		var en bool
@@ -356,6 +376,7 @@ func (s *Server) shareInfo(w http.ResponseWriter, r *http.Request) {
 		out["repo"] = map[string]any{"name": repo.Name, "description": repo.Description, "updated_at": repo.UpdatedAt}
 	} else {
 		out["doc_id"] = sh.TargetID
+		out["node_type"] = sh.NodeType
 	}
 	writeJSON(w, 200, out)
 }
@@ -404,4 +425,69 @@ func shareCovers(sh *Share, d *Doc) bool {
 		return d.ID == sh.TargetID
 	}
 	return d.RepoID == sh.TargetID
+}
+
+// shareTable serves a table visible through the share: the shared table itself, any
+// table of a shared repo, or a table embedded in a shared document.
+func (s *Server) shareTable(w http.ResponseWriter, r *http.Request) {
+	sh := s.activeShare(w, r, true)
+	if sh == nil {
+		return
+	}
+	id := r.PathValue("id")
+	t, err := s.loadTableData(s.db, id)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !s.shareCoversTable(sh, &t.Node)) {
+		httpError(w, 404, "表格不存在")
+		return
+	} else if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	// a link to one view of the table exposes only that view
+	if sh.TargetType == "node" && sh.TargetID == id && sh.ViewID != nil {
+		for _, v := range t.Views {
+			if v.ID == *sh.ViewID {
+				t.Views = []View{v}
+				break
+			}
+		}
+		if len(t.Views) > 1 {
+			t.Views = t.Views[:1]
+		}
+	}
+	writeJSON(w, 200, map[string]any{"id": t.ID, "title": t.Title, "updated_at": t.UpdatedAt,
+		"fields": t.Fields, "views": t.Views, "records": t.Records})
+}
+
+func (s *Server) shareCoversTable(sh *Share, n *Node) bool {
+	if sh.TargetType == "node" && sh.TargetID == n.ID {
+		return true
+	}
+	if sh.TargetType == "repo" && sh.TargetID == n.RepoID {
+		return true
+	}
+	// embedded in a document the share exposes
+	var rows *sql.Rows
+	var err error
+	pattern := "%" + n.ID + "%"
+	if sh.TargetType == "node" {
+		rows, err = s.db.Query(`SELECT markdown FROM doc_contents WHERE node_id = ? AND markdown LIKE ?`, sh.TargetID, pattern)
+	} else {
+		rows, err = s.db.Query(`SELECT d.markdown FROM doc_contents d JOIN nodes x ON x.id = d.node_id
+WHERE x.repo_id = ? AND x.deleted_at IS NULL AND d.markdown LIKE ?`, sh.TargetID, pattern)
+	}
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var md string
+		rows.Scan(&md)
+		for _, ref := range embeddedTables(md) {
+			if ref.Table == n.ID {
+				return true
+			}
+		}
+	}
+	return false
 }

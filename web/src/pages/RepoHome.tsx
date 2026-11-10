@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { api, formatTime, type Repo, type TreeNode } from '../api'
-import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, RepoMark } from '../components/icons'
+import { api, formatTime, nodePath, type Repo, type TreeNode } from '../api'
+import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, IconTable, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
-import { childrenMap, untitled, useStore } from '../store'
+import { childrenMap, nodeTitle, useStore } from '../store'
 import { repoMenu } from './Home'
 
 export default function RepoHome() {
@@ -44,11 +44,11 @@ export default function RepoHome() {
             <span className="ellipsis">{n.title || '未命名分组'}</span>
           </div>
         ) : (
-          <Link to={`/r/${repoId}/d/${n.id}`} className="toc-row" style={{ paddingLeft: 12 + depth * 20 }}>
-            <span className="doc-row-icon">
-              <IconDoc width={16} height={16} />
+          <Link to={nodePath(n)} className="toc-row" style={{ paddingLeft: 12 + depth * 20 }}>
+            <span className={'doc-row-icon' + (n.type === 'table' ? ' table' : '')}>
+              {n.type === 'table' ? <IconTable width={16} height={16} /> : <IconDoc width={16} height={16} />}
             </span>
-            <span className="ellipsis">{untitled(n.title)}</span>
+            <span className="ellipsis">{nodeTitle(n)}</span>
             <span className="spacer" />
             <span className="doc-row-time">{formatTime(n.updated_at)}</span>
           </Link>
@@ -92,7 +92,8 @@ export default function RepoHome() {
                 <h1 className="page-title">{repo.name}</h1>
                 <p className={'repo-desc' + (repo.description ? '' : ' muted')}>{repo.description || '暂无简介'}</p>
                 <div className="repo-hero-meta">
-                  {nodes.filter((n) => n.type === 'doc').length} 篇文档 · {formatTime(repo.updated_at)}更新
+                  {nodes.filter((n) => n.type === 'doc').length} 篇文档
+                  {nodes.some((n) => n.type === 'table') && ` · ${nodes.filter((n) => n.type === 'table').length} 个表格`} · {formatTime(repo.updated_at)}更新
                 </div>
               </div>
             </section>

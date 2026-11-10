@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, formatTime, type TrashItem } from '../api'
 import { confirmDialog, toast } from '../components/dialog'
-import { IconBook, IconDoc, IconFolder, IconRestore, IconTrash } from '../components/icons'
+import { IconBook, IconDoc, IconFolder, IconRestore, IconTable, IconTrash } from '../components/icons'
 import PageHeader from '../components/PageHeader'
-import { useStore } from '../store'
+import { nodeTitle, useStore } from '../store'
 
 export default function Trash() {
   const [items, setItems] = useState<TrashItem[] | null>(null)
@@ -37,9 +37,17 @@ export default function Trash() {
           {items?.map((it) => (
             <div key={it.kind + it.id} className="doc-row">
               <span className={'doc-row-icon' + (it.kind === 'repo' ? ' repo' : it.type === 'group' ? ' folder' : '')}>
-                {it.kind === 'repo' ? <IconBook width={16} height={16} /> : it.type === 'group' ? <IconFolder width={16} height={16} /> : <IconDoc width={16} height={16} />}
+                {it.kind === 'repo' ? (
+                  <IconBook width={16} height={16} />
+                ) : it.type === 'group' ? (
+                  <IconFolder width={16} height={16} />
+                ) : it.type === 'table' ? (
+                  <IconTable width={16} height={16} />
+                ) : (
+                  <IconDoc width={16} height={16} />
+                )}
               </span>
-              <span className="doc-row-title ellipsis">{it.title || (it.type === 'group' ? '未命名分组' : '无标题文档')}</span>
+              <span className="doc-row-title ellipsis">{it.kind === 'repo' ? it.title : nodeTitle(it)}</span>
               <span className="doc-row-repo ellipsis">{it.kind === 'repo' ? '知识库' : it.repo_name}</span>
               <span className="doc-row-time">{formatTime(it.deleted_at)}</span>
               <span className="row-actions">

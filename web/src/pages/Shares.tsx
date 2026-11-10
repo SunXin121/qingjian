@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { api, formatTime, shareURL, type Share } from '../api'
+import { api, formatTime, nodePath, shareURL, type Share } from '../api'
 import { confirmDialog, copyText, openMenu, toast } from '../components/dialog'
-import { IconBook, IconCopy, IconDoc, IconEye, IconLink, IconLock, IconMore, IconSettings, IconTrash, IconUnlink } from '../components/icons'
+import { IconBook, IconCopy, IconDoc, IconEye, IconLink, IconLock, IconMore, IconSettings, IconTable, IconTrash, IconUnlink } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { formatExpiry, openShareDialog, shareState } from '../components/ShareDialog'
-import { untitled } from '../store'
+import { nodeTitle } from '../store'
 
 export default function Shares() {
   const [list, setList] = useState<Share[] | null>(null)
@@ -21,7 +21,10 @@ export default function Shares() {
         label: '管理',
         icon: <IconSettings />,
         hidden: !sh.target_alive,
-        onClick: () => openShareDialog({ target_type: sh.target_type, target_id: sh.target_id, title: shareTitle(sh) }, load),
+        onClick: async () => {
+          const views = sh.node_type === 'table' ? (await api.table(sh.target_id).catch(() => null))?.views.map((v) => ({ id: v.id, name: v.name })) : undefined
+          openShareDialog({ target_type: sh.target_type, target_id: sh.target_id, title: shareTitle(sh), views }, load)
+        },
       },
       {
         label: sh.enabled ? '关闭链接' : '开启链接',
@@ -57,11 +60,11 @@ export default function Shares() {
         <div className="doc-list share-list">
           {list?.map((sh) => {
             const st = shareState(sh)
-            const target = sh.target_type === 'repo' ? `/r/${sh.target_id}` : `/r/${sh.repo_id}/d/${sh.target_id}`
+            const target = sh.target_type === 'repo' ? `/r/${sh.target_id}` : nodePath({ id: sh.target_id, repo_id: sh.repo_id, type: sh.node_type })
             return (
               <div key={sh.token} className="share-item">
                 <span className={'doc-row-icon' + (sh.target_type === 'repo' ? ' repo' : '')}>
-                  {sh.target_type === 'repo' ? <IconBook width={16} height={16} /> : <IconDoc width={16} height={16} />}
+                  {sh.target_type === 'repo' ? <IconBook width={16} height={16} /> : sh.node_type === 'table' ? <IconTable width={16} height={16} /> : <IconDoc width={16} height={16} />}
                 </span>
                 <div className="share-item-main">
                   <div className="share-item-title">
@@ -105,5 +108,5 @@ export default function Shares() {
 }
 
 function shareTitle(sh: Share) {
-  return sh.target_type === 'repo' ? sh.title || '未命名知识库' : untitled(sh.title)
+  return sh.target_type === 'repo' ? sh.title || '未命名知识库' : nodeTitle({ type: sh.node_type, title: sh.title })
 }

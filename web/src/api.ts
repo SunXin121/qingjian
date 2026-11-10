@@ -1,3 +1,5 @@
+import type { Op, TableData } from './table/types'
+
 export interface Repo {
   id: string
   name: string
@@ -9,7 +11,7 @@ export interface Repo {
   updated_at: number
 }
 
-export type NodeType = 'doc' | 'group'
+export type NodeType = 'doc' | 'group' | 'table'
 
 export interface TreeNode {
   id: string
@@ -41,7 +43,16 @@ export interface RecentDoc {
   repo_id: string
   repo_name: string
   title: string
+  type: NodeType
   updated_at: number
+}
+
+export interface TableSummary {
+  id: string
+  title: string
+  repo_id: string
+  repo_name: string
+  views: { id: string; name: string; type: string }[]
 }
 
 export interface SearchHit extends RecentDoc {
@@ -70,6 +81,8 @@ export interface Share {
   token: string
   target_type: 'node' | 'repo'
   target_id: string
+  view_id: string | null
+  node_type: string
   has_password: boolean
   expires_at: number | null
   enabled: boolean
@@ -88,6 +101,7 @@ export interface ShareInfo {
   title: string
   expires_at: number | null
   doc_id?: string
+  node_type?: string
   repo?: { name: string; description: string; updated_at: number }
 }
 
@@ -205,6 +219,10 @@ export const api = {
   version: (vid: number) => request<Version>('GET', `/api/versions/${vid}`),
   restoreVersion: (vid: number) => request<{ updated_at: number }>('POST', `/api/versions/${vid}/restore`),
 
+  tables: () => request<TableSummary[]>('GET', '/api/tables'),
+  table: (id: string) => request<TableData>('GET', `/api/tables/${id}`),
+  tableOps: (id: string, ops: Op[]) => request<{ updated_at: number }>('POST', `/api/tables/${id}/ops`, { ops }),
+
   recent: () => request<RecentDoc[]>('GET', '/api/recent'),
   search: (q: string) => request<SearchHit[]>('GET', `/api/search?q=${encodeURIComponent(q)}`),
 
@@ -214,9 +232,9 @@ export const api = {
 
   shares: (target?: { target_type: string; target_id: string }) =>
     request<Share[]>('GET', '/api/shares' + (target ? `?target_type=${target.target_type}&target_id=${target.target_id}` : '')),
-  createShare: (body: { target_type: 'node' | 'repo'; target_id: string; password?: string; expires_at?: number | null }) =>
+  createShare: (body: { target_type: 'node' | 'repo'; target_id: string; password?: string; expires_at?: number | null; view_id?: string | null }) =>
     request<Share>('POST', '/api/shares', body),
-  updateShare: (token: string, patch: { password?: string; expires_at?: number | null; enabled?: boolean }) =>
+  updateShare: (token: string, patch: { password?: string; expires_at?: number | null; enabled?: boolean; view_id?: string | null }) =>
     request<Share>('PATCH', `/api/shares/${token}`, patch),
   regenerateShare: (token: string) => request<Share>('POST', `/api/shares/${token}/regenerate`),
   deleteShare: (token: string) => request('DELETE', `/api/shares/${token}`),
@@ -234,7 +252,11 @@ export const shareApi = {
   auth: (token: string, password: string) => request('POST', `/api/s/${token}/auth`, { password }),
   tree: (token: string) => request<PublicNode[]>('GET', `/api/s/${token}/tree`),
   doc: (token: string, id: string) => request<PublicDoc>('GET', `/api/s/${token}/docs/${id}`),
+  table: (token: string, id: string) => request<TableData>('GET', `/api/s/${token}/tables/${id}`),
 }
+
+/** Path of a node's page in the admin UI. */
+export const nodePath = (n: { id: string; repo_id: string; type?: string }) => `/r/${n.repo_id}/${n.type === 'table' ? 't' : 'd'}/${n.id}`
 
 let configP: Promise<ClientConfig> | null = null
 export function getConfig() {

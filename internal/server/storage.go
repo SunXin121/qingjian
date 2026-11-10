@@ -31,7 +31,7 @@ func collectRefs(md string, refs map[string]bool) {
 // versions, so restoring a knowledge base or version never yields a broken image.
 func (s *Server) referencedAttachments() (map[string]bool, error) {
 	refs := map[string]bool{}
-	for _, q := range []string{`SELECT icon FROM repos`, `SELECT markdown FROM doc_contents`, `SELECT markdown FROM doc_versions`} {
+	for _, q := range []string{`SELECT icon FROM repos`, `SELECT markdown FROM doc_contents`, `SELECT markdown FROM doc_versions`, `SELECT data FROM bt_records`} {
 		rows, err := s.db.Query(q)
 		if err != nil {
 			return nil, err

@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	reDrawingBlock = regexp.MustCompile("(?s)```(?:excalidraw|drawio|mindmap)\\n.*?\\n```")
+	reDrawingBlock = regexp.MustCompile("(?s)```(?:excalidraw|drawio|mindmap|table)\\n.*?\\n```")
 	reMdURL        = regexp.MustCompile(`\]\([^)]*\)`)
 )
 
@@ -24,6 +24,7 @@ type SearchHit struct {
 	RepoID    string `json:"repo_id"`
 	RepoName  string `json:"repo_name"`
 	Title     string `json:"title"`
+	Type      string `json:"type"`
 	Snippet   string `json:"snippet"`
 	UpdatedAt int64  `json:"updated_at"`
 }
@@ -74,7 +75,7 @@ func (s *Server) searchFTS(q string) ([]SearchHit, error) {
 	for _, t := range strings.Fields(q) {
 		terms = append(terms, `"`+strings.ReplaceAll(t, `"`, `""`)+`"`)
 	}
-	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title,
+	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, n.type,
   snippet(docs_fts, 2, char(1), char(2), '…', 24), n.updated_at
 FROM docs_fts f`+searchJoin+` AND docs_fts MATCH ? ORDER BY bm25(docs_fts, 0, 8, 1) LIMIT 50`, strings.Join(terms, " "))
 	if err != nil {
@@ -84,7 +85,7 @@ FROM docs_fts f`+searchJoin+` AND docs_fts MATCH ? ORDER BY bm25(docs_fts, 0, 8,
 	var out []SearchHit
 	for rows.Next() {
 		var h SearchHit
-		rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Snippet, &h.UpdatedAt)
+		rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Type, &h.Snippet, &h.UpdatedAt)
 		out = append(out, h)
 	}
 	return out, rows.Err()
@@ -99,7 +100,7 @@ func (s *Server) searchLike(q string) ([]SearchHit, error) {
 		where += ` AND (f.title LIKE ? ESCAPE '\' OR f.body LIKE ? ESCAPE '\')`
 		args = append(args, "%"+esc+"%", "%"+esc+"%")
 	}
-	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, f.body, n.updated_at FROM docs_fts f`+searchJoin+where+
+	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, n.type, f.body, n.updated_at FROM docs_fts f`+searchJoin+where+
 		` ORDER BY (f.title LIKE ? ESCAPE '\') DESC, n.updated_at DESC LIMIT 50`, append(args, args[0])...)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func (s *Server) searchLike(q string) ([]SearchHit, error) {
 	for rows.Next() {
 		var h SearchHit
 		var body string
-		rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &body, &h.UpdatedAt)
+		rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Type, &body, &h.UpdatedAt)
 		h.Snippet = makeSnippet(body, terms[0])
 		out = append(out, h)
 	}

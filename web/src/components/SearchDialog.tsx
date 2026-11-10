@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { api, formatTime, type SearchHit } from '../api'
-import { untitled, useStore } from '../store'
-import { IconDoc, IconSearch } from './icons'
+import { api, formatTime, nodePath, type SearchHit } from '../api'
+import { nodeTitle, useStore } from '../store'
+import { IconDoc, IconSearch, IconTable } from './icons'
 
 function Snippet({ text }: { text: string }) {
   // \x01 … \x02 mark highlighted ranges (from FTS5 snippet())
@@ -68,7 +68,7 @@ export default function SearchDialog() {
   const list = q.trim() ? hits : recent
   const go = (h: SearchHit) => {
     setSearchOpen(false)
-    navigate(`/r/${h.repo_id}/d/${h.id}`)
+    navigate(nodePath(h))
   }
 
   return (
@@ -101,9 +101,9 @@ export default function SearchDialog() {
           {!q.trim() && recent.length > 0 && <div className="search-group">最近编辑</div>}
           {list.map((h, i) => (
             <button key={h.id} className={'search-hit' + (i === sel ? ' sel' : '')} onMouseEnter={() => setSel(i)} onClick={() => go(h)}>
-              <IconDoc className="hit-icon" />
+              {h.type === 'table' ? <IconTable className="hit-icon" /> : <IconDoc className="hit-icon" />}
               <div className="hit-main">
-                <div className="hit-title">{untitled(h.title)}</div>
+                <div className="hit-title">{nodeTitle(h)}</div>
                 {h.snippet && (
                   <div className="hit-snippet">
                     <Snippet text={h.snippet} />

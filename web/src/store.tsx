@@ -54,3 +54,9 @@ export function childrenMap<T extends { parent_id: string | null; sort: number; 
 }
 
 export const untitled = (t: string) => t.trim() || '无标题文档'
+
+export function nodeTitle(n: { type: string; title: string }) {
+  if (n.type === 'group') return n.title.trim() || '未命名分组'
+  if (n.type === 'table') return n.title.trim() || '未命名表格'
+  return untitled(n.title)
+}

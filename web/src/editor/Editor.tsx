@@ -34,6 +34,7 @@ const ICONS = {
   warn: icon('<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'),
   success: icon('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
   error: icon('<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>'),
+  table: icon('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
   fold: icon('<path d="M4 6h16M4 12h10M4 18h10"/><path d="M17 14l2 2 2-2"/>'),
 }
 
@@ -67,7 +68,7 @@ function insertCodeBlock(ctx: Ctx, language: string, content: string) {
   tr.setSelection(TextSelection.create(tr.doc, paraPos))
   view.dispatch(tr.scrollIntoView())
   view.focus()
-  if (isDrawingKind(language)) return
+  if (isDrawingKind(language) || language === 'table') return
   // Freshly inserted diagram/math blocks open in "code + live preview" mode.
   // Retry for a moment: async previews (mermaid/graphviz) render the toggle button late.
   let tries = 0
@@ -226,6 +227,16 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
                 icon: ICONS.mindmap,
                 onRun: (ctx: Ctx) => newDrawing(ctx, 'mindmap'),
               })
+            builder.addGroup('data', '数据').addItem('table-embed', {
+              label: '多维表格 Table view',
+              icon: ICONS.table,
+              onRun: (ctx: Ctx) => {
+                ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)
+                import('../table/TablePicker')
+                  .then((m) => m.pickTableView())
+                  .then((sel) => sel && insertCodeBlock(ctx, 'table', JSON.stringify(sel)))
+              },
+            })
             builder
               .addGroup('callout', '提示块')
               .addItem('callout-info', { label: '信息 Info', icon: ICONS.info, onRun: (ctx: Ctx) => insertCallout(ctx, 'INFO') })
@@ -327,6 +338,13 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
 
     // click on a drawing preview opens the board editor
     const onClick = (e: MouseEvent) => {
+      // in-app links rendered inside previews (table embeds)
+      const nav = (e.target as Element).closest?.('a[data-qj-nav]')
+      if (nav) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('qj-nav', { detail: nav.getAttribute('href') }))
+        return
+      }
       if (crepe.readonly) return
       const el = (e.target as Element).closest?.('[data-ink-drawing]')
       const kind = el?.getAttribute('data-ink-kind') ?? 'excalidraw'

@@ -208,12 +208,13 @@ type RecentDoc struct {
 	RepoID    string `json:"repo_id"`
 	RepoName  string `json:"repo_name"`
 	Title     string `json:"title"`
+	Type      string `json:"type"`
 	UpdatedAt int64  `json:"updated_at"`
 }
 
 func (s *Server) recentDocs(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, n.updated_at FROM nodes n JOIN repos r ON r.id = n.repo_id
-WHERE n.type = 'doc' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY n.updated_at DESC LIMIT 30`)
+	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, n.type, n.updated_at FROM nodes n JOIN repos r ON r.id = n.repo_id
+WHERE n.type IN ('doc', 'table') AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY n.updated_at DESC LIMIT 30`)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -222,7 +223,7 @@ WHERE n.type = 'doc' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY 
 	out := []RecentDoc{}
 	for rows.Next() {
 		var d RecentDoc
-		rows.Scan(&d.ID, &d.RepoID, &d.RepoName, &d.Title, &d.UpdatedAt)
+		rows.Scan(&d.ID, &d.RepoID, &d.RepoName, &d.Title, &d.Type, &d.UpdatedAt)
 		out = append(out, d)
 	}
 	writeJSON(w, 200, out)

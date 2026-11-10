@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { api, formatTime, type RecentDoc, type Repo } from '../api'
+import { api, formatTime, nodePath, type RecentDoc, type Repo } from '../api'
 import { confirmDialog, openMenu, toast } from '../components/dialog'
 import { editRepoDialog } from '../components/RepoDialog'
-import { IconClock, IconDoc, IconDownload, IconEdit, IconLibrary, IconMore, IconPlus, IconSearch, IconShare, IconSparkles, IconTrash, RepoMark } from '../components/icons'
+import { IconClock, IconDoc, IconDownload, IconEdit, IconLibrary, IconMore, IconPlus, IconSearch, IconShare, IconSparkles, IconTable, IconTrash, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { openShareDialog } from '../components/ShareDialog'
-import { untitled, useStore } from '../store'
+import { nodeTitle, useStore } from '../store'
 
 export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?: () => void) {
   openMenu(el, [
@@ -144,11 +144,11 @@ export default function Home() {
             </div>
             <div className="doc-list">
               {recent.map((d) => (
-                <Link key={d.id} to={`/r/${d.repo_id}/d/${d.id}`} className="doc-row">
-                  <span className="doc-row-icon">
-                    <IconDoc width={16} height={16} />
+                <Link key={d.id} to={nodePath(d)} className="doc-row">
+                  <span className={'doc-row-icon' + (d.type === 'table' ? ' table' : '')}>
+                    {d.type === 'table' ? <IconTable width={16} height={16} /> : <IconDoc width={16} height={16} />}
                   </span>
-                  <span className="doc-row-title ellipsis">{untitled(d.title)}</span>
+                  <span className="doc-row-title ellipsis">{nodeTitle(d)}</span>
                   <span className="doc-row-repo ellipsis">{d.repo_name}</span>
                   <span className="doc-row-time">{formatTime(d.updated_at)}</span>
                 </Link>

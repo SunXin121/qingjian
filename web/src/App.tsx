@@ -10,6 +10,7 @@ import Trash from './pages/Trash'
 import { StoreProvider, useStore } from './store'
 
 const DocPage = lazy(() => import('./pages/DocPage'))
+const TablePage = lazy(() => import('./pages/TablePage'))
 const SharePage = lazy(() => import('./pages/SharePage'))
 const Shares = lazy(() => import('./pages/Shares'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -17,7 +18,15 @@ const Settings = lazy(() => import('./pages/Settings'))
 function Shell() {
   const { sidebarOpen, setSidebarOpen } = useStore()
   const location = useLocation()
+  const navigate = useNavigate()
   useEffect(() => setSidebarOpen(false), [location.pathname, setSidebarOpen])
+  // in-app links rendered outside React (e.g. table embeds inside the editor)
+  useEffect(() => {
+    const onNav = (e: Event) => navigate((e as CustomEvent<string>).detail)
+    import('./table/embed').then((m) => m.resetEmbedSource())
+    window.addEventListener('qj-nav', onNav)
+    return () => window.removeEventListener('qj-nav', onNav)
+  }, [navigate])
   return (
     <div className={'shell' + (sidebarOpen ? ' sidebar-open' : '')}>
       <Sidebar />
@@ -71,6 +80,7 @@ function AuthGate() {
           <Route path="settings" element={<Settings />} />
           <Route path="r/:repoId" element={<RepoHome />} />
           <Route path="r/:repoId/d/:docId" element={<DocPage />} />
+          <Route path="r/:repoId/t/:tableId" element={<TablePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

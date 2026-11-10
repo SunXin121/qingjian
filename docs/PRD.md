@@ -197,7 +197,7 @@ backup_blobs  target, sha256                                    (已上传到各
 shares        token, target_type(node|repo), target_id, view_id, password_hash, expires_at, enabled, options, view_count, created_at   (M2)
 bt_fields     id, table_node_id, name, type, options(json), sort                                                                    (M3)
 bt_views      id, table_node_id, name, type, config(json), sort                                                                     (M3)
-bt_records    id, table_node_id, data(json), sort, created_at, updated_at                                                           (M3)
+bt_records    id, table_node_id, seq(自动编号), data(json), sort, created_at, updated_at                                            (M3)
 ```
 
 ## 7. 里程碑
@@ -206,6 +206,6 @@ bt_records    id, table_node_id, data(json), sort, created_at, updated_at       
 |---|---|
 | **M1 文档核心** ✅ | 管理密码、知识库与目录树、Crepe 编辑器、代码 / 公式 / Mermaid / Graphviz / Excalidraw、图片附件、全文搜索、回收站、历史版本、Markdown 导出、响应式布局、Docker 部署 |
 | **M2 分享与增强** ✅ | 分享（密码 / 有效期 / 管理）、draw.io、思维导图、提示块 / 折叠块、版本 diff、自动备份、深色模式、附件清理 |
-| **M3 多维表格基础** | 表格 + 看板视图、P0 字段、筛选排序分组、复制粘贴、CSV、分享、嵌入文档 |
+| **M3 多维表格基础** ✅ | 表格 + 看板视图、P0 字段、筛选排序分组、复制粘贴、CSV、分享、嵌入文档 |
 | **M4 多维表格进阶** | 关联 / 查找 / 汇总 / 公式、画册 / 日历、Excel |
 | **M5** | 甘特、PlantUML、双链、AI 等 |

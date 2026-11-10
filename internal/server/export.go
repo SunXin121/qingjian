@@ -35,11 +35,13 @@ type drawingRef struct {
 }
 
 // portableMarkdown converts editor-only blocks into standard markdown:
-// ```excalidraw|drawio|mindmap {"scene":..,"svg":..}``` → ![](svg url).
+// ```excalidraw|drawio|mindmap {"scene":..,"svg":..}``` → ![](svg url), and
+// ```table {"table":..,"view":..}``` → a markdown table.
 // Blocks without a rendered image (never-drawn drawings) are dropped: their JSON body
 // means nothing outside the editor.
 func (s *Server) portableMarkdown(md string) string {
 	md = stripEmptyParagraphs(md)
+	md = s.embedMarkdown(md)
 	return reDrawing.ReplaceAllStringFunc(md, func(block string) string {
 		m := reDrawing.FindStringSubmatch(block)
 		var ref drawingRef
@@ -230,9 +232,14 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 				base = fmt.Sprintf("%s (%d)", base, c+1)
 			}
 			used[base]++
-			if n.Type == "doc" {
+			switch n.Type {
+			case "doc":
 				if d, err := s.loadDoc(n.ID); err == nil {
 					writeZipText(zw, dir+base+".md", b.markdown(d.Markdown, strings.Count(dir, "/")), n.UpdatedAt)
+				}
+			case "table":
+				if t, err := s.loadTableData(s.db, n.ID); err == nil {
+					writeZipText(zw, dir+base+".csv", t.csv(), n.UpdatedAt)
 				}
 			}
 			if len(children[n.ID]) > 0 {

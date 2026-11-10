@@ -43,6 +43,7 @@ import {
   Search,
   Settings,
   Share2,
+  Sheet,
   Sparkles,
   TableOfContents,
   Trash2,
@@ -108,6 +109,7 @@ export const IconGlobe = wrap(Globe)
 export const IconInfo = wrap(Info)
 export const IconRefresh = wrap(RefreshCw)
 export const IconSidebar = wrap(PanelLeft)
+export const IconTable = wrap(Sheet)
 
 /** Brand mark: stacked bamboo slips (简) on an accent tile. Inline so it follows the theme. */
 export function Logo({ size = 26 }: { size?: number }) {

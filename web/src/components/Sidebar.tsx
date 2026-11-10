@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, NavLink, useMatch, useNavigate } from 'react-router'
-import { api, type NodeType, type TreeNode } from '../api'
-import { childrenMap, untitled, useStore } from '../store'
+import { api, nodePath, type NodeType, type TreeNode } from '../api'
+import { childrenMap, nodeTitle, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast } from './dialog'
 import { editRepoDialog } from './RepoDialog'
 import {
@@ -23,6 +23,7 @@ import {
   IconSearch,
   IconSettings,
   IconShare,
+  IconTable,
   IconTrash,
   IconUp,
   Logo,
@@ -131,7 +132,8 @@ function RepoTree({ repoId }: { repoId: string }) {
   const { repos, tree, treeRepoId, loadTree, setSidebarOpen } = useStore()
   const navigate = useNavigate()
   const docMatch = useMatch('/r/:repoId/d/:docId')
-  const activeId = docMatch?.params.docId
+  const tableMatch = useMatch('/r/:repoId/t/:tableId')
+  const activeId = docMatch?.params.docId ?? tableMatch?.params.tableId
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   const [drag, setDrag] = useState<{ id: string; over?: string; pos?: DropPos } | null>(null)
   const repo = repos.find((r) => r.id === repoId)
@@ -178,11 +180,12 @@ function RepoTree({ repoId }: { repoId: string }) {
       if (!t) return
       title = t
     }
+    if (type === 'table') title = '未命名表格'
     const n = await api.createNode(repoId, parent, type, title)
     if (parent) setExpandedPersist(new Set([...expanded, parent]))
     await loadTree(repoId)
-    if (type === 'doc') {
-      navigate(`/r/${repoId}/d/${n.id}`)
+    if (type !== 'group') {
+      navigate(nodePath(n))
       setSidebarOpen(false)
     }
   }
@@ -220,6 +223,7 @@ function RepoTree({ repoId }: { repoId: string }) {
     openMenu(el, [
       { label: '新建子文档', icon: <IconDocPlus />, onClick: () => create(n.id, 'doc') },
       { label: '新建子分组', icon: <IconFolderPlus />, onClick: () => create(n.id, 'group') },
+      { label: '新建子多维表格', icon: <IconTable />, onClick: () => create(n.id, 'table') },
       {
         label: '重命名',
         icon: <IconEdit />,
@@ -242,7 +246,7 @@ function RepoTree({ repoId }: { repoId: string }) {
         divider: true,
         onClick: async () => {
           const hasKids = (kids.get(n.id) ?? []).length > 0
-          const ok = await confirmDialog(`确定删除「${untitled(n.title)}」${hasKids ? '及其所有子节点' : ''}吗？可在回收站中恢复。`, { danger: true, okText: '删除' })
+          const ok = await confirmDialog(`确定删除「${nodeTitle(n)}」${hasKids ? '及其所有子节点' : ''}吗？可在回收站中恢复。`, { danger: true, okText: '删除' })
           if (!ok) return
           await api.deleteNode(n.id)
           await loadTree(repoId)
@@ -292,7 +296,7 @@ function RepoTree({ repoId }: { repoId: string }) {
             onClick={() => {
               if (n.type === 'group') toggle(n.id)
               else {
-                navigate(`/r/${repoId}/d/${n.id}`)
+                navigate(nodePath(n))
                 setSidebarOpen(false)
               }
             }}
@@ -306,8 +310,8 @@ function RepoTree({ repoId }: { repoId: string }) {
             >
               <IconChevron width={14} height={14} />
             </button>
-            {n.type === 'group' ? open ? <IconFolderOpen className="tree-icon" /> : <IconFolder className="tree-icon" /> : <IconDoc className="tree-icon" />}
-            <span className="tree-title">{n.type === 'group' ? n.title.trim() || '未命名分组' : untitled(n.title)}</span>
+            {n.type === 'group' ? open ? <IconFolderOpen className="tree-icon" /> : <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
+            <span className="tree-title">{nodeTitle(n)}</span>
             <span className="tree-actions">
               <button
                 className="icon-btn sm"
@@ -353,6 +357,7 @@ function RepoTree({ repoId }: { repoId: string }) {
             openMenu(e.currentTarget, [
               { label: '新建文档', icon: <IconDocPlus />, onClick: () => create(null, 'doc') },
               { label: '新建分组', icon: <IconFolderPlus />, onClick: () => create(null, 'group') },
+              { label: '新建多维表格', icon: <IconTable />, onClick: () => create(null, 'table') },
             ])
           }
         >

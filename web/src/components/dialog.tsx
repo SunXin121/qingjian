@@ -162,24 +162,41 @@ export interface MenuItem {
   hidden?: boolean
   /** draw a separator line above this item */
   divider?: boolean
+  /** show a check mark (for option lists) */
+  checked?: boolean
+  disabled?: boolean
 }
 
-export function openMenu(anchor: HTMLElement, items: MenuItem[]) {
-  const rect = anchor.getBoundingClientRect()
+export type Anchor = HTMLElement | { left: number; top: number; right: number; bottom: number }
+
+const anchorRect = (a: Anchor) => (a instanceof HTMLElement ? a.getBoundingClientRect() : a)
+
+export function openMenu(anchor: Anchor, items: MenuItem[], opts: { align?: 'left' | 'right'; width?: number } = {}) {
+  const rect = anchorRect(anchor)
   mount((close) => {
     const visible = items.filter((i) => !i.hidden)
-    const width = 196
-    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
-    const estH = visible.length * 40 + visible.filter((i) => i.divider).length * 9 + 12
+    const width = opts.width ?? 196
+    const x = opts.align === 'left' ? rect.left : rect.right - width
+    const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
+    const estH = visible.length * 34 + visible.filter((i) => i.divider).length * 9 + 12
     const top = rect.bottom + estH > window.innerHeight - 8 ? Math.max(8, rect.top - estH - 4) : rect.bottom + 4
     return (
-      <div className="menu-backdrop" onMouseDown={close} onTouchStart={(e) => e.target === e.currentTarget && close()}>
-        <div className="menu" style={{ left, top, width }} onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className="menu-backdrop"
+        onMouseDown={close}
+        onTouchStart={(e) => e.target === e.currentTarget && close()}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          close()
+        }}
+      >
+        <div className="menu" style={{ left, top, width, maxHeight: window.innerHeight - 16, overflowY: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
           {visible.map((it, i) => (
-            <Fragment key={it.label}>
+            <Fragment key={it.label + i}>
               {it.divider && i > 0 && <div className="menu-sep" />}
               <button
                 className={'menu-item' + (it.danger ? ' danger' : '')}
+                disabled={it.disabled}
                 onClick={() => {
                   close()
                   it.onClick()
@@ -187,6 +204,7 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]) {
               >
                 {it.icon && <span className="menu-icon">{it.icon}</span>}
                 <span className="ellipsis">{it.label}</span>
+                {it.checked && <span className="menu-check">✓</span>}
               </button>
             </Fragment>
           ))}
@@ -194,6 +212,50 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]) {
       </div>
     )
   })
+}
+
+/** A floating panel anchored to an element; closes on outside click or Escape. */
+export function openPopover(anchor: Anchor, render: (close: () => void) => ReactNode, opts: { width?: number; align?: 'left' | 'right'; className?: string; onClose?: () => void } = {}) {
+  const rect = anchorRect(anchor)
+  mount((unmount) => {
+    const close = () => {
+      unmount()
+      opts.onClose?.()
+    }
+    return <PopoverFrame rect={rect} opts={opts} close={close}>{render(close)}</PopoverFrame>
+  })
+}
+
+function PopoverFrame({ rect, opts, close, children }: { rect: { left: number; right: number; top: number; bottom: number }; opts: { width?: number; align?: 'left' | 'right'; className?: string }; close: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const width = Math.min(opts.width ?? 320, window.innerWidth - 16)
+  const x = opts.align === 'right' ? rect.right - width : rect.left
+  const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
+  const [top, setTop] = useState(rect.bottom + 6)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        close()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [close])
+  // flip above the anchor when there is no room below
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const h = el.offsetHeight
+    if (rect.bottom + 6 + h > window.innerHeight - 8 && rect.top - 6 - h > 8) setTop(rect.top - 6 - h)
+  })
+  return (
+    <div className="menu-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()} onTouchStart={(e) => e.target === e.currentTarget && close()}>
+      <div ref={ref} className={'popover ' + (opts.className ?? '')} style={{ left, top, width, maxHeight: `calc(100vh - ${Math.max(16, top + 8)}px)` }}>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 /** Copy text to the clipboard; falls back to execCommand on plain-HTTP origins. */

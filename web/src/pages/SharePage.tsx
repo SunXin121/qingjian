@@ -1,13 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError, formatTime, shareApi, type PublicDoc, type PublicNode, type ShareInfo } from '../api'
-import { IconChevron, IconDoc, IconFolder, IconList, IconLock, IconMenu } from '../components/icons'
+import { IconChevron, IconDoc, IconFolder, IconList, IconLock, IconMenu, IconTable } from '../components/icons'
 import Outline, { parseHeadings } from '../components/Outline'
-import { childrenMap, untitled } from '../store'
+import { childrenMap, nodeTitle, untitled } from '../store'
+import { setEmbedSource } from '../table/embed'
 
 const Editor = lazy(() => import('../editor/Editor'))
+const SharedTable = lazy(() => import('../table/SharedTable'))
 
-const reInternalDoc = /^\/r\/[^/]+\/d\/([0-9a-z]+)\/?$/
+const reInternalDoc = /^\/r\/[^/]+\/[dt]\/([0-9a-z]+)\/?$/
 
 /** Public, read-only view of a share link: /s/:token[/:docId] */
 export default function SharePage() {
@@ -15,6 +17,14 @@ export default function SharePage() {
   const [info, setInfo] = useState<ShareInfo | null>(null)
   const [state, setState] = useState<'loading' | 'password' | 'error' | 'ready'>('loading')
   const [error, setError] = useState('')
+
+  // tables embedded in shared docs are read through the share
+  useEffect(() => {
+    setEmbedSource(
+      (id) => shareApi.table(token, id),
+      () => null,
+    )
+  }, [token])
 
   const load = useCallback(async () => {
     try {
@@ -45,6 +55,14 @@ export default function SharePage() {
     )
   if (state === 'password') return <PasswordGate token={token} onDone={load} />
   if (info!.type === 'repo') return <SharedRepo token={token} info={info!} />
+  if (info!.node_type === 'table')
+    return (
+      <div className="page share-page table-page">
+        <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+          <SharedTable token={token} tableId={info!.doc_id!} header={(extra) => <header className="page-header share-header">{extra}</header>} />
+        </Suspense>
+      </div>
+    )
   return (
     <div className="page share-page">
       <SharedDoc token={token} docId={info!.doc_id!} header={(extra) => <header className="page-header share-header">{extra}</header>} />
@@ -192,6 +210,18 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
   const kids = useMemo(() => childrenMap(nodes ?? []), [nodes])
   const ids = useMemo(() => new Set((nodes ?? []).map((n) => n.id)), [nodes])
   const base = `/s/${token}`
+  const current = nodes?.find((n) => n.id === docId)
+
+  // tables of the shared repo open inside the share
+  useEffect(() => {
+    setEmbedSource(
+      (id) => shareApi.table(token, id),
+      (t, view) => (ids.has(t.id) ? `${base}/${t.id}?view=${view}` : null),
+    )
+    const onNav = (e: Event) => navigate((e as CustomEvent<string>).detail)
+    window.addEventListener('qj-nav', onNav)
+    return () => window.removeEventListener('qj-nav', onNav)
+  }, [token, ids, base, navigate])
 
   const toggle = (id: string) => {
     const s = new Set(collapsed)
@@ -219,8 +249,8 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
             >
               <IconChevron width={14} height={14} />
             </button>
-            {n.type === 'group' ? <IconFolder className="tree-icon" /> : <IconDoc className="tree-icon" />}
-            <span className="tree-title">{n.type === 'group' ? n.title.trim() || '未命名分组' : untitled(n.title)}</span>
+            {n.type === 'group' ? <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
+            <span className="tree-title">{nodeTitle(n)}</span>
           </div>
           {open && children.length > 0 && renderTree(n.id, depth + 1)}
         </div>
@@ -237,8 +267,8 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
           </div>
         ) : (
           <Link to={`${base}/${n.id}`} className="toc-row" style={{ paddingLeft: 12 + depth * 20 }}>
-            <IconDoc className="muted" />
-            <span className="ellipsis">{untitled(n.title)}</span>
+            {n.type === 'table' ? <IconTable className="muted" /> : <IconDoc className="muted" />}
+            <span className="ellipsis">{nodeTitle(n)}</span>
             <span className="spacer" />
             <span className="doc-row-time">{formatTime(n.updated_at)}</span>
           </Link>
@@ -280,6 +310,12 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
                 {header(null)}
                 <div className="empty-state">文档不存在</div>
               </>
+            ) : current?.type === 'table' ? (
+              <div className="table-page">
+                <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+                  <SharedTable key={docId} token={token} tableId={docId} header={header} />
+                </Suspense>
+              </div>
             ) : (
               <SharedDoc
                 token={token}

@@ -155,6 +155,12 @@ export function renderPreview(
     case 'drawio':
     case 'mindmap':
       return drawingPreview(content, lang)
+    case 'table':
+      import('../table/embed').then((m) => {
+        const r = m.renderTableEmbed(content, apply)
+        if (r !== undefined) apply(r)
+      })
+      return undefined
   }
   return null
 }

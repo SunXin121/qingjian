@@ -85,6 +85,38 @@ CREATE TABLE backup_blobs (
   PRIMARY KEY (target, sha256)
 ) WITHOUT ROWID;
 `,
+	// M3: bitable (多维表格). Records keep raw values keyed by field id in a JSON object;
+	// seq backs the auto-number field.
+	`
+CREATE TABLE bt_fields (
+  id            TEXT PRIMARY KEY,
+  table_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  type          TEXT NOT NULL,
+  options       TEXT NOT NULL DEFAULT '{}',
+  sort          REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX bt_fields_table ON bt_fields(table_node_id, sort);
+CREATE TABLE bt_views (
+  id            TEXT PRIMARY KEY,
+  table_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  type          TEXT NOT NULL,
+  config        TEXT NOT NULL DEFAULT '{}',
+  sort          REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX bt_views_table ON bt_views(table_node_id, sort);
+CREATE TABLE bt_records (
+  id            TEXT PRIMARY KEY,
+  table_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  seq           INTEGER NOT NULL,
+  data          TEXT NOT NULL DEFAULT '{}',
+  sort          REAL NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX bt_records_table ON bt_records(table_node_id, sort);
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {
