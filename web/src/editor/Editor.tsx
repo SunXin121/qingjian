@@ -38,6 +38,9 @@ const ICONS = {
   fold: icon('<path d="M4 6h16M4 12h10M4 18h10"/><path d="M17 14l2 2 2-2"/>'),
 }
 
+/** documents at least this long skip layout of off-screen blocks (see .ink-editor.large) */
+const LARGE_DOC = 50_000
+
 export interface EditorHandle {
   getMarkdown: () => string
 }
@@ -45,7 +48,11 @@ export interface EditorHandle {
 interface Props {
   value: string
   readonly?: boolean
-  onChange?: (markdown: string) => void
+  /**
+   * Called (debounced) after the document changed. Serialising a long document is costly,
+   * so the markdown is not computed here: call `getMarkdown` when it is actually needed.
+   */
+  onChange?: (getMarkdown: () => string) => void
   onReady?: (h: EditorHandle) => void
 }
 
@@ -310,10 +317,27 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       }
     }
 
+    // markdown of the latest serialised document node; nodes are immutable, so identity
+    // tells whether the cached string is still current
+    let cachedDoc: PMNode | null = null
+    let cachedMd = value
+    // Reads the editor itself, not crepeRef: the page flushes its last save while
+    // unmounting, after this component's cleanup ran but before the view is destroyed.
+    const getMarkdown = () => {
+      let doc: PMNode
+      try {
+        doc = crepe.editor.ctx.get(editorViewCtx).state.doc
+      } catch {
+        return cachedMd // not created yet, or already destroyed
+      }
+      if (doc !== cachedDoc) {
+        cachedMd = normalizeCalloutMarkdown(crepe.getMarkdown())
+        cachedDoc = doc
+      }
+      return cachedMd
+    }
     crepe.on((api) => {
-      api.markdownUpdated((_ctx, md, prev) => {
-        if (md !== prev) onChangeRef.current?.(normalizeCalloutMarkdown(md))
-      })
+      api.updated(() => onChangeRef.current?.(getMarkdown))
     })
 
     if (readonly) crepe.setReadonly(true)
@@ -333,7 +357,8 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
         })
       view.dom.addEventListener('focus', refreshCursor)
       offFocus = () => view.dom.removeEventListener('focus', refreshCursor)
-      onReady?.({ getMarkdown: () => normalizeCalloutMarkdown(crepe.getMarkdown()) })
+      cachedDoc = view.state.doc
+      onReady?.({ getMarkdown })
     })
 
     // click on a drawing preview opens the board editor
@@ -388,7 +413,7 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
 
   return (
     <>
-      <div ref={rootRef} className={'ink-editor' + (readonly ? ' readonly' : '')} />
+      <div ref={rootRef} className={'ink-editor' + (readonly ? ' readonly' : '') + (value.length >= LARGE_DOC ? ' large' : '')} />
       {drawing !== null &&
         (() => {
           const Modal = MODALS[drawing.kind]

@@ -19,13 +19,42 @@ export function parseHeadings(md: string): Heading[] {
   return out
 }
 
+/**
+ * Long documents render off-screen blocks lazily (content-visibility), so their heights
+ * are estimates until they are laid out and a smooth scroll would stop short. There the
+ * jump is instant and repeated until the heading stays put.
+ */
+function scrollToHeading(el: HTMLElement) {
+  if (!el.closest('.ink-editor.large')) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  // Blocks that come near the viewport get their real height on the next frame and may
+  // push the heading away again, so keep checking until it stayed in place a few frames.
+  const doc = document.scrollingElement!
+  let frames = 0
+  let settled = 0
+  const step = () => {
+    const top = el.getBoundingClientRect().top
+    const atEnd = doc.scrollTop + doc.clientHeight >= doc.scrollHeight - 2
+    if (top < 0 || (top > window.innerHeight / 3 && !atEnd)) {
+      el.scrollIntoView({ block: 'start' })
+      settled = 0
+    } else settled++
+    if (settled < 4 && frames++ < 60) requestAnimationFrame(step)
+  }
+  el.scrollIntoView({ block: 'start' })
+  requestAnimationFrame(step)
+}
+
 /** Right-hand outline (desktop) / bottom drawer (mobile) for the document in `.doc-main`. */
 export default function Outline({ headings, open, onClose }: { headings: Heading[]; open: boolean; onClose: () => void }) {
   const minLevel = useMemo(() => Math.min(6, ...headings.map((h) => h.level)), [headings])
   if (headings.length === 0) return null
   const jumpTo = (h: Heading) => {
     const els = document.querySelectorAll('.doc-main .ink-editor .ProseMirror > :is(h1,h2,h3,h4,h5,h6)')
-    els[h.index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = els[h.index] as HTMLElement | undefined
+    if (el) scrollToHeading(el)
     onClose()
   }
   return (

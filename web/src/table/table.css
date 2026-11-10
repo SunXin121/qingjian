@@ -1098,6 +1098,20 @@ select.bt-input {
   margin-top: 4px;
   white-space: nowrap;
 }
+.bt-col-more {
+  flex: none;
+  height: 32px;
+  border: 1px dashed var(--c-border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bt-col-more:hover {
+  color: var(--c-text);
+  border-color: var(--c-border-strong);
+}
 .bt-kanban-empty {
   display: flex;
   flex-direction: column;
@@ -1409,4 +1423,39 @@ select.bt-input {
 }
 .bt-embed .bt-embed-card-line .muted {
   margin-right: 6px;
+}
+
+/* hover "+" buttons over the grid: insert a record above / below, or a field to the right */
+.bt-insert {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  padding: 0;
+  border: 1px solid var(--c-info);
+  border-radius: 50%;
+  background: var(--c-panel);
+  color: var(--c-info);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  animation: bt-insert-in 0.12s ease-out;
+}
+.bt-insert:hover {
+  background: var(--c-info);
+  color: #fff;
+}
+@keyframes bt-insert-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.bt-insert-line {
+  position: absolute;
+  z-index: 4;
+  background: var(--c-info);
+  pointer-events: none;
 }

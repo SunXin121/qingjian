@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError, formatTime, shareApi, type PublicDoc, type PublicNode, type ShareInfo } from '../api'
 import { IconChevron, IconDoc, IconFolder, IconList, IconLock, IconMenu, IconTable } from '../components/icons'
 import Outline, { parseHeadings } from '../components/Outline'
+import { useWindowed } from '../components/useWindowed'
 import { childrenMap, nodeTitle, untitled } from '../store'
 import { setEmbedSource } from '../table/embed'
 
@@ -229,53 +230,65 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
     setCollapsed(s)
   }
 
-  const renderTree = (parent: string | null, depth: number): React.ReactNode =>
-    (kids.get(parent) ?? []).map((n) => {
-      const children = kids.get(n.id) ?? []
-      const open = !collapsed.has(n.id)
-      return (
-        <div key={n.id}>
-          <div
-            className={'tree-item' + (n.id === docId ? ' active' : '')}
-            style={{ paddingLeft: 8 + depth * 16 }}
-            onClick={() => (n.type === 'group' ? toggle(n.id) : navigate(`${base}/${n.id}`))}
-          >
-            <button
-              className={'tree-toggle' + (open ? ' open' : '') + (children.length ? '' : ' invisible')}
-              onClick={(e) => {
-                e.stopPropagation()
-                toggle(n.id)
-              }}
-            >
-              <IconChevron width={14} height={14} />
-            </button>
-            {n.type === 'group' ? <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
-            <span className="tree-title">{nodeTitle(n)}</span>
-          </div>
-          {open && children.length > 0 && renderTree(n.id, depth + 1)}
-        </div>
-      )
-    })
+  // sidebar tree (expanded part) and home directory as flat lists, rendered windowed
+  const flatten = (skip: (id: string) => boolean) => {
+    const out: { n: PublicNode; depth: number }[] = []
+    const walk = (parent: string | null, depth: number) => {
+      for (const n of kids.get(parent) ?? []) {
+        out.push({ n, depth })
+        if (!skip(n.id)) walk(n.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+    return out
+  }
+  const treeRows = useMemo(() => flatten((id) => collapsed.has(id)), [kids, collapsed]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tocRows = useMemo(() => flatten(() => false), [kids]) // eslint-disable-line react-hooks/exhaustive-deps
+  const treeWin = useWindowed<HTMLDivElement>(treeRows.length, 33)
+  const tocWin = useWindowed<HTMLDivElement>(tocRows.length, 47)
 
-  const renderToc = (parent: string | null, depth: number): React.ReactNode =>
-    (kids.get(parent) ?? []).map((n) => (
-      <div key={n.id}>
-        {n.type === 'group' ? (
-          <div className="toc-row group" style={{ paddingLeft: 12 + depth * 20 }}>
-            <IconFolder className="muted" />
-            <span className="ellipsis">{n.title || '未命名分组'}</span>
-          </div>
-        ) : (
-          <Link to={`${base}/${n.id}`} className="toc-row" style={{ paddingLeft: 12 + depth * 20 }}>
-            {n.type === 'table' ? <IconTable className="muted" /> : <IconDoc className="muted" />}
-            <span className="ellipsis">{nodeTitle(n)}</span>
-            <span className="spacer" />
-            <span className="doc-row-time">{formatTime(n.updated_at)}</span>
-          </Link>
-        )}
-        {renderToc(n.id, depth + 1)}
+  const renderTreeRow = ({ n, depth }: { n: PublicNode; depth: number }) => {
+    const children = kids.get(n.id) ?? []
+    const open = !collapsed.has(n.id)
+    return (
+      <div
+        key={n.id}
+        data-row
+        className={'tree-item' + (n.id === docId ? ' active' : '')}
+        style={{ paddingLeft: 8 + depth * 16 }}
+        onClick={() => (n.type === 'group' ? toggle(n.id) : navigate(`${base}/${n.id}`))}
+      >
+        <button
+          className={'tree-toggle' + (open ? ' open' : '') + (children.length ? '' : ' invisible')}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggle(n.id)
+          }}
+        >
+          <IconChevron width={14} height={14} />
+        </button>
+        {n.type === 'group' ? <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
+        <span className="tree-title">{nodeTitle(n)}</span>
       </div>
-    ))
+    )
+  }
+
+  const renderTocRow = ({ n, depth }: { n: PublicNode; depth: number }, i: number) => {
+    const last = tocWin.start + i === tocRows.length - 1 ? ' last' : ''
+    return n.type === 'group' ? (
+      <div key={n.id} data-row className={'toc-row group' + last} style={{ paddingLeft: 12 + depth * 20 }}>
+        <IconFolder className="muted" />
+        <span className="ellipsis">{n.title || '未命名分组'}</span>
+      </div>
+    ) : (
+      <Link key={n.id} data-row to={`${base}/${n.id}`} className={'toc-row' + last} style={{ paddingLeft: 12 + depth * 20 }}>
+        {n.type === 'table' ? <IconTable className="muted" /> : <IconDoc className="muted" />}
+        <span className="ellipsis">{nodeTitle(n)}</span>
+        <span className="spacer" />
+        <span className="doc-row-time">{formatTime(n.updated_at)}</span>
+      </Link>
+    )
+  }
 
   const header = (extra: React.ReactNode) => (
     <header className="page-header share-header">
@@ -296,7 +309,11 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
           </Link>
         </div>
         <div className="side-scroll tree">
-          {nodes && renderTree(null, 0)}
+          <div ref={treeWin.listRef}>
+            <div style={{ height: treeWin.before }} />
+            {treeRows.slice(treeWin.start, treeWin.end).map(renderTreeRow)}
+            <div style={{ height: treeWin.after }} />
+          </div>
           {nodes?.length === 0 && <div className="side-empty">暂无文档</div>}
         </div>
         <div className="sidebar-foot share-foot">由 青简 分享 · 只读</div>
@@ -338,8 +355,10 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
                   <h2>目录</h2>
                 </div>
                 {error && <div className="empty-state small">{error}</div>}
-                <div className="toc">
-                  {nodes && renderToc(null, 0)}
+                <div className="toc" ref={tocWin.listRef}>
+                  <div style={{ height: tocWin.before }} />
+                  {tocRows.slice(tocWin.start, tocWin.end).map(renderTocRow)}
+                  <div style={{ height: tocWin.after }} />
                   {nodes?.length === 0 && <div className="empty-state small">这个知识库还没有文档</div>}
                 </div>
               </div>

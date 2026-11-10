@@ -38,12 +38,22 @@ export function isEmptyValue(v: any): boolean {
   return v === undefined || v === null || v === '' || v === false || (Array.isArray(v) && v.length === 0)
 }
 
+// toLocaleString builds a new formatter on every call, which dominates search / export of
+// big tables; formatters are cached per precision instead
+const numberFormats = new Map<number | undefined, Intl.NumberFormat>()
+function thousandsFormat(p: number | undefined) {
+  let nf = numberFormats.get(p)
+  if (!nf) {
+    nf = new Intl.NumberFormat('en-US', p === undefined ? { maximumFractionDigits: 10 } : { minimumFractionDigits: p, maximumFractionDigits: p })
+    numberFormats.set(p, nf)
+  }
+  return nf
+}
+
 export function formatNumber(f: Field, v: number): string {
   if (typeof v !== 'number' || !isFinite(v)) return ''
   const p = f.options.precision
-  if (f.options.thousands) {
-    return v.toLocaleString('en-US', p === undefined ? { maximumFractionDigits: 10 } : { minimumFractionDigits: p, maximumFractionDigits: p })
-  }
+  if (f.options.thousands) return thousandsFormat(p).format(v)
   return p === undefined ? String(v) : v.toFixed(p)
 }
 
@@ -413,11 +423,27 @@ export function groupPaths(t: TableData, rec: Rec, rules: SortRule[]): string[] 
 /** Normalised search text; empty means no search. */
 export const searchNeedle = (q: string) => q.trim().toLowerCase()
 
+// Lower-cased display text per (field, record). Both objects are replaced whenever they
+// change (the model never mutates them), so identity is a safe cache key.
+const searchTexts = new WeakMap<Field, WeakMap<Rec, string>>()
+
+/** Lower-cased display text of a cell, cached for repeated searches. */
+export function searchText(f: Field, r: Rec): string {
+  let m = searchTexts.get(f)
+  if (!m) searchTexts.set(f, (m = new WeakMap()))
+  let t = m.get(r)
+  if (t === undefined) {
+    t = displayText(f, cellValue(r, f)).toLowerCase()
+    m.set(r, t)
+  }
+  return t
+}
+
 /** Whether a cell's displayed text contains the (normalised) needle. */
 export function cellMatches(f: Field, r: Rec, needle: string): boolean {
   if (!needle) return false
   if (f.type === 'checkbox') return false
-  return displayText(f, cellValue(r, f)).toLowerCase().includes(needle)
+  return searchText(f, r).includes(needle)
 }
 
 // ---------- summaries ----------
@@ -440,13 +466,14 @@ export function summaryKinds(type: FieldType): { kind: SummaryKind; label: strin
 export function summarize(f: Field, kind: SummaryKind, list: Rec[]): string {
   if (kind === 'none') return ''
   const label = summaryKinds(f.type).find((k) => k.kind === kind)?.label ?? ''
-  const values = list.map((r) => cellValue(r, f))
-  const filled = values.filter((v) => !isEmptyValue(v))
+  if (kind === 'count') return `${label} ${list.length}`
+  const filled: any[] = []
+  for (const r of list) {
+    const v = cellValue(r, f)
+    if (!isEmptyValue(v)) filled.push(v)
+  }
   let out: string
   switch (kind) {
-    case 'count':
-      out = String(list.length)
-      break
     case 'filled':
     case 'checked':
       out = String(filled.length)
@@ -463,8 +490,16 @@ export function summarize(f: Field, kind: SummaryKind, list: Rec[]): string {
     default: {
       const nums = filled.filter((v): v is number => typeof v === 'number')
       if (!nums.length) return label + ' -'
-      const sum = nums.reduce((a, b) => a + b, 0)
-      const n = kind === 'sum' ? sum : kind === 'avg' ? sum / nums.length : kind === 'min' ? Math.min(...nums) : Math.max(...nums)
+      let sum = 0
+      let min = Infinity
+      let max = -Infinity
+      // no Math.min(...nums): spreading 100k+ values overflows the call stack
+      for (const x of nums) {
+        sum += x
+        if (x < min) min = x
+        if (x > max) max = x
+      }
+      const n = kind === 'sum' ? sum : kind === 'avg' ? sum / nums.length : kind === 'min' ? min : max
       out = f.type === 'number' ? formatNumber({ ...f, options: { ...f.options, precision: kind === 'avg' ? Math.max(f.options.precision ?? 2, 2) : f.options.precision } }, n) : String(Math.round(n * 100) / 100)
     }
   }

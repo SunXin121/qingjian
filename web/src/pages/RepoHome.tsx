@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api, formatTime, nodePath, type Repo, type TreeNode } from '../api'
 import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, IconTable, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
+import { useWindowed } from '../components/useWindowed'
 import { childrenMap, nodeTitle, useStore } from '../store'
 import { repoMenu } from './Home'
 
@@ -33,29 +34,42 @@ export default function RepoHome() {
     navigate(`/r/${repoId}/d/${n.id}`)
   }
 
-  const renderList = (parent: string | null, depth: number): React.ReactNode =>
-    (kids.get(parent) ?? []).map((n: TreeNode) => (
-      <div key={n.id}>
-        {n.type === 'group' ? (
-          <div className="toc-row group" style={{ paddingLeft: 12 + depth * 20 }}>
-            <span className="doc-row-icon folder">
-              <IconFolder width={16} height={16} />
-            </span>
-            <span className="ellipsis">{n.title || '未命名分组'}</span>
-          </div>
-        ) : (
-          <Link to={nodePath(n)} className="toc-row" style={{ paddingLeft: 12 + depth * 20 }}>
-            <span className={'doc-row-icon' + (n.type === 'table' ? ' table' : '')}>
-              {n.type === 'table' ? <IconTable width={16} height={16} /> : <IconDoc width={16} height={16} />}
-            </span>
-            <span className="ellipsis">{nodeTitle(n)}</span>
-            <span className="spacer" />
-            <span className="doc-row-time">{formatTime(n.updated_at)}</span>
-          </Link>
-        )}
-        {renderList(n.id, depth + 1)}
+  // the whole directory, flattened and rendered windowed (a repo can hold thousands of docs)
+  const flat = useMemo(() => {
+    const out: { n: TreeNode; depth: number }[] = []
+    const walk = (parent: string | null, depth: number) => {
+      for (const n of kids.get(parent) ?? []) {
+        out.push({ n, depth })
+        walk(n.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+    return out
+  }, [kids])
+  const win = useWindowed<HTMLDivElement>(flat.length, 47)
+  const docCount = useMemo(() => nodes.filter((n) => n.type === 'doc').length, [nodes])
+  const tableCount = useMemo(() => nodes.filter((n) => n.type === 'table').length, [nodes])
+
+  const renderRow = ({ n, depth }: { n: TreeNode; depth: number }, i: number) => {
+    const last = win.start + i === flat.length - 1 ? ' last' : ''
+    return n.type === 'group' ? (
+      <div key={n.id} data-row className={'toc-row group' + last} style={{ paddingLeft: 12 + depth * 20 }}>
+        <span className="doc-row-icon folder">
+          <IconFolder width={16} height={16} />
+        </span>
+        <span className="ellipsis">{n.title || '未命名分组'}</span>
       </div>
-    ))
+    ) : (
+      <Link key={n.id} data-row to={nodePath(n)} className={'toc-row' + last} style={{ paddingLeft: 12 + depth * 20 }}>
+        <span className={'doc-row-icon' + (n.type === 'table' ? ' table' : '')}>
+          {n.type === 'table' ? <IconTable width={16} height={16} /> : <IconDoc width={16} height={16} />}
+        </span>
+        <span className="ellipsis">{nodeTitle(n)}</span>
+        <span className="spacer" />
+        <span className="doc-row-time">{formatTime(n.updated_at)}</span>
+      </Link>
+    )
+  }
 
   if (error) return <div className="page"><PageHeader /><div className="empty-state">{error}</div></div>
 
@@ -92,8 +106,8 @@ export default function RepoHome() {
                 <h1 className="page-title">{repo.name}</h1>
                 <p className={'repo-desc' + (repo.description ? '' : ' muted')}>{repo.description || '暂无简介'}</p>
                 <div className="repo-hero-meta">
-                  {nodes.filter((n) => n.type === 'doc').length} 篇文档
-                  {nodes.some((n) => n.type === 'table') && ` · ${nodes.filter((n) => n.type === 'table').length} 个表格`} · {formatTime(repo.updated_at)}更新
+                  {docCount} 篇文档
+                  {tableCount > 0 && ` · ${tableCount} 个表格`} · {formatTime(repo.updated_at)}更新
                 </div>
               </div>
             </section>
@@ -106,8 +120,10 @@ export default function RepoHome() {
                 <IconDocPlus width={16} height={16} /> 新建文档
               </button>
             </div>
-            <div className="toc">
-              {renderList(null, 0)}
+            <div className="toc" ref={win.listRef}>
+              <div style={{ height: win.before }} />
+              {flat.slice(win.start, win.end).map(renderRow)}
+              <div style={{ height: win.after }} />
               {nodes.length === 0 && <div className="empty-state small">知识库还是空的，新建一篇文档开始记录吧。</div>}
             </div>
           </>

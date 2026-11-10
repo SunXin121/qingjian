@@ -73,7 +73,7 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 			httpError(w, 500, err.Error())
 			return
 		}
-		if _, err := tx.Exec(`INSERT INTO docs_fts(node_id, title, body) VALUES(?,?,?)`, n.ID, n.Title, in.Markdown); err != nil {
+		if err := indexDoc(tx, n.ID, n.Title, in.Markdown, n.CreatedAt); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}

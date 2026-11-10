@@ -874,7 +874,7 @@ mark {
   height: 17px;
 }
 .doc-row:last-child,
-.toc > div:last-child > .toc-row:last-child {
+.toc-row.last {
   border-bottom: 0;
 }
 a.doc-row:hover,
@@ -1043,6 +1043,13 @@ a.toc-row:hover > .ellipsis {
   line-height: 1.75;
   word-break: break-word;
   color: var(--c-text);
+}
+/* long documents: the browser skips style / layout / paint of top-level blocks that are
+   off screen, which otherwise dominates every keystroke once the DOM has ~100k nodes.
+   The size placeholder is replaced by the real height once a block has been rendered. */
+.ink-editor.large .milkdown .ProseMirror > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3em;
 }
 .ink-editor.readonly .milkdown .ProseMirror {
   min-height: 0;

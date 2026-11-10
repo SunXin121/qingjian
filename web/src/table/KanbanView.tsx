@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { openMenu, promptText } from '../components/dialog'
 import { IconEdit, IconMore, IconPlus, IconTrash } from '../components/icons'
 import { ValueView, Tag } from './editors'
@@ -19,6 +19,8 @@ interface Props {
 }
 
 const EMPTY = '__empty'
+/** cards rendered per column at first and added each time the column is scrolled to its end */
+const PAGE = 50
 
 export default function KanbanView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {
   const cfg = view.config
@@ -31,11 +33,15 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     const fields = visibleFields(table, view)
     return list.filter((r) => fields.some((f) => cellMatches(f, r, needle)))
   }, [table, view, model, needle])
-  useEffect(() => onSearchCount?.(records.length), [records.length, onSearchCount])
+  useLayoutEffect(() => onSearchCount?.(records.length), [records.length, onSearchCount])
   const primary = primaryField(table)
   const cardFields = useMemo(() => visibleFields(table, view).filter((f) => f.id !== primary?.id && f.id !== groupField?.id), [table, view, primary, groupField])
   const [drag, setDrag] = useState<{ id: string; over?: string; before?: string } | null>(null)
   const sorted = !!cfg.sorts?.length
+  // how many cards each column shows; starts over when the view or the search changes
+  const [limits, setLimits] = useState<Record<string, number>>({})
+  useEffect(() => setLimits({}), [view.id, needle, groupField?.id])
+  const limitOf = (key: string) => limits[key] ?? PAGE
 
   if (!groupField) {
     return (
@@ -73,7 +79,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     e.preventDefault()
     if (!drag) return
     const rec = model.record(drag.id)
-    const before = drag.before
+    const before = drag.before ?? byColumn.get(colKey)!.filter((r) => r.id !== drag.id)[limitOf(colKey)]?.id
     setDrag(null)
     if (!rec) return
     const value = colKey === EMPTY ? null : colKey
@@ -100,6 +106,8 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     const data = colKey === EMPTY ? {} : { [groupField.id]: colKey }
     const list = byColumn.get(colKey)!
     const [id] = model.addRecords([data], list.at(-1)?.id)
+    // make sure the new card at the end of the column is rendered
+    setLimits((l) => ({ ...l, [colKey]: Math.max(limitOf(colKey), list.length + 1) }))
     onOpenRecord(id, [...allIds, id])
   }
 
@@ -125,6 +133,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     <div className="bt-kanban">
       {columns.map((col) => {
         const list = byColumn.get(col.key)!
+        const shown = list.slice(0, limitOf(col.key))
         return (
           <div
             key={col.key}
@@ -154,7 +163,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               )}
             </div>
             <div className="bt-col-body">
-              {list.map((r) => (
+              {shown.map((r) => (
                 <div
                   key={r.id}
                   className={'bt-card' + (drag?.id === r.id ? ' dragging' : '') + (drag?.over === col.key && drag.before === r.id ? ' drop-before' : '')}
@@ -170,7 +179,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
                     e.preventDefault()
                     e.stopPropagation()
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                    const i = list.indexOf(r)
+                    const i = shown.indexOf(r)
                     const before = e.clientY < rect.top + rect.height / 2 ? r.id : list[i + 1]?.id
                     if (drag.over !== col.key || drag.before !== before) setDrag({ ...drag, over: col.key, before })
                   }}
@@ -186,7 +195,14 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
                   ))}
                 </div>
               ))}
-              {!readOnly && (
+              {shown.length < list.length && (
+                <LoadMore
+                  key={shown.length}
+                  rest={list.length - shown.length}
+                  onLoad={() => setLimits((l) => ({ ...l, [col.key]: (l[col.key] ?? PAGE) + PAGE }))}
+                />
+              )}
+              {!readOnly && shown.length === list.length && (
                 <button className="bt-col-add" onClick={() => addCard(col.key)}>
                   <IconPlus width={14} height={14} /> 新建记录
                 </button>
@@ -207,6 +223,26 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
         </button>
       )}
     </div>
+  )
+}
+
+/** Placeholder at the end of a partly rendered column: loads the next page once it scrolls into view. */
+function LoadMore({ rest, onLoad }: { rest: number; onLoad: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const load = useRef(onLoad)
+  load.current = onLoad
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    // implicit root: the visible part of the target, clipped by the column and page scrollers
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && load.current(), { rootMargin: '300px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return (
+    <button ref={ref} className="bt-col-more" onClick={() => load.current()}>
+      还有 {rest} 条记录，继续加载
+    </button>
   )
 }
 

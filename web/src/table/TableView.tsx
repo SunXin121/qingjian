@@ -31,7 +31,15 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
   // table search: grid highlights matching cells and steps through them, kanban filters cards
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const search = useDeferredValue(query)
+  // big tables: wait for a pause in typing instead of searching on every keystroke
+  const [debounced, setDebounced] = useState('')
+  const big = table.records.length > 3000
+  useEffect(() => {
+    if (!big) return setDebounced(query)
+    const t = window.setTimeout(() => setDebounced(query), 250)
+    return () => clearTimeout(t)
+  }, [query, big])
+  const search = useDeferredValue(big ? debounced : query)
   const [cursor, setCursor] = useState(0)
   const [hits, setHits] = useState(0)
   const searchRef = useRef<HTMLInputElement>(null)

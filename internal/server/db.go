@@ -130,6 +130,17 @@ CREATE TABLE bt_record_history (
 );
 CREATE INDEX bt_record_history_rec ON bt_record_history(record_id, id);
 `,
+	// history as deltas (versions.go) and deferred full-text indexing of long documents
+	`
+ALTER TABLE doc_versions ADD COLUMN delta INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE doc_versions ADD COLUMN size INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE doc_versions ADD COLUMN hash TEXT NOT NULL DEFAULT '';
+UPDATE doc_versions SET size = length(markdown);
+CREATE TABLE fts_pending (
+  node_id TEXT PRIMARY KEY,
+  due_at  INTEGER NOT NULL
+) WITHOUT ROWID;
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

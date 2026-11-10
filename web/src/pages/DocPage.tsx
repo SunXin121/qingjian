@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, ApiError, formatTime, type Doc } from '../api'
 import { confirmDialog, openMenu, toast } from '../components/dialog'
@@ -33,6 +33,11 @@ export default function DocPage() {
   const [mountKey, setMountKey] = useState(0)
 
   const md = useRef('')
+  // serialises the editor content on demand (see Editor's onChange)
+  const getMd = useRef<() => string>(() => md.current)
+  /** markdown and title as last stored on the server, to skip saves that change nothing */
+  const savedMd = useRef('')
+  const savedTitle = useRef('')
   const titleRef = useRef('')
   const base = useRef(0)
   const dirty = useRef(false)
@@ -48,6 +53,9 @@ export default function DocPage() {
       setTitle(d.title)
       titleRef.current = d.title
       md.current = d.markdown
+      getMd.current = () => d.markdown
+      savedMd.current = d.markdown
+      savedTitle.current = d.title
       base.current = d.content_updated_at
       dirty.current = false
       setStatus('saved')
@@ -72,11 +80,23 @@ export default function DocPage() {
       if (!dirty.current && !opts.snapshot) return
       clearTimeout(timer.current)
       dirty.current = false
+      const markdown = (md.current = getMd.current())
+      const title = titleRef.current
+      // outline and word count follow the content at save time, so a long document is
+      // only scanned once per save instead of after every pause in typing
+      setHeadings(parseHeadings(markdown))
+      setStats(markdown)
+      if (markdown === savedMd.current && title === savedTitle.current && !opts.snapshot && !opts.force) {
+        setStatus('saved')
+        return
+      }
       setStatus('saving')
-      const body = { markdown: md.current, title: titleRef.current, base_updated_at: base.current, ...opts }
+      const body = { markdown, title, base_updated_at: base.current, ...opts }
       const p = api
         .saveDoc(docId, body)
         .then((r) => {
+          savedMd.current = markdown
+          savedTitle.current = title
           base.current = r.updated_at
           setSavedAt(r.updated_at)
           patchNode(docId, { title: r.title, updated_at: r.updated_at })
@@ -104,9 +124,11 @@ export default function DocPage() {
     if (statusRef.current === 'conflict') return
     setStatus('dirty')
     clearTimeout(timer.current)
+    // long documents cost more to serialise and store: save them after a longer pause
+    const delay = md.current.length > 200_000 ? 3000 : 1000
     timer.current = window.setTimeout(() => {
       if (statusRef.current !== 'conflict') save()
-    }, 1000)
+    }, delay)
   }, [save, setStatus])
 
   // Ctrl/Cmd+S, unload guard, flush on leave
@@ -138,16 +160,10 @@ export default function DocPage() {
     }
   }, [title, doc])
 
-  const headingsTimer = useRef<number>(0)
   const onChange = useCallback(
-    (m: string) => {
-      md.current = m
+    (get: () => string) => {
+      getMd.current = get
       schedule()
-      clearTimeout(headingsTimer.current)
-      headingsTimer.current = window.setTimeout(() => {
-        setHeadings(parseHeadings(m))
-        setStats(m)
-      }, 400)
     },
     [schedule],
   )
@@ -282,7 +298,7 @@ export default function DocPage() {
       {versionsOpen && (
         <VersionsPanel
           docId={docId}
-          current={{ title: titleRef.current, markdown: md.current }}
+          current={{ title: titleRef.current, markdown: getMd.current() }}
           onClose={() => setVersionsOpen(false)}
           onRestored={() => {
             setVersionsOpen(false)
@@ -309,7 +325,8 @@ function countWords(md: string) {
 }
 
 function DocStats({ markdown, updatedAt }: { markdown: string; updatedAt: number }) {
-  const { words, chars } = countWords(markdown)
+  // the page re-renders on every save status change; only recount when the text changed
+  const { words, chars } = useMemo(() => countWords(markdown), [markdown])
   const minutes = Math.max(1, Math.round(words / 400))
   return (
     <footer className="doc-stats">

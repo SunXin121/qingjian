@@ -39,6 +39,9 @@ type Server struct {
 	limiter       *loginLimiter
 	blobMu        sync.Mutex // serialises blob creation against attachment cleanup
 	backup        *backupRunner
+	stop          chan struct{}  // closed by Close: background workers return
+	workers       sync.WaitGroup // workers that use the database (Close waits for them)
+	indexDone     chan struct{}
 }
 
 func New(cfg Config, static fs.FS) (*Server, error) {
@@ -53,7 +56,7 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: cfg, db: db, filesDir: filesDir, static: static, limiter: newLoginLimiter()}
+	s := &Server{cfg: cfg, db: db, filesDir: filesDir, static: static, limiter: newLoginLimiter(), stop: make(chan struct{}), indexDone: make(chan struct{})}
 	if err := s.initAuth(); err != nil {
 		return nil, err
 	}
@@ -63,10 +66,23 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 	}
 	go s.housekeeping()
 	go s.backup.loop()
+	s.workers.Add(2)
+	go func() {
+		defer s.workers.Done()
+		s.indexLoop()
+	}()
+	go func() {
+		defer s.workers.Done()
+		s.compactVersions()
+	}()
 	return s, nil
 }
 
-func (s *Server) Close() error { return s.db.Close() }
+func (s *Server) Close() error {
+	close(s.stop)
+	s.workers.Wait()
+	return s.db.Close()
+}
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -138,7 +154,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { httpError(w, http.StatusNotFound, "not found") })
 	mux.HandleFunc("/", s.serveStatic)
 
-	return securityHeaders(mux)
+	return securityHeaders(gzipJSON(mux))
 }
 
 func securityHeaders(h http.Handler) http.Handler {

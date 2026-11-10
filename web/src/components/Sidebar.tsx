@@ -4,6 +4,7 @@ import { api, nodePath, type NodeType, type TreeNode } from '../api'
 import { childrenMap, nodeTitle, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast } from './dialog'
 import { editRepoDialog } from './RepoDialog'
+import { useWindowed } from './useWindowed'
 import {
   IconBack,
   IconChevron,
@@ -274,71 +275,84 @@ function RepoTree({ repoId }: { repoId: string }) {
     if (node) move(node, ...placement(n, pos))
   }
 
-  const renderNodes = (parent: string | null, depth: number) =>
-    (kids.get(parent) ?? []).map((n) => {
-      const children = kids.get(n.id) ?? []
-      const open = expanded.has(n.id)
-      const cls = ['tree-item', n.id === activeId && 'active', drag?.over === n.id && `drop-${drag.pos}`, drag?.id === n.id && 'dragging'].filter(Boolean).join(' ')
-      return (
-        <div key={n.id}>
-          <div
-            className={cls}
-            style={{ paddingLeft: 8 + depth * 16 }}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.effectAllowed = 'move'
-              e.dataTransfer.setData('text/plain', n.id)
-              setDrag({ id: n.id })
-            }}
-            onDragEnd={() => setDrag(null)}
-            onDragOver={(e) => onDragOver(e, n)}
-            onDrop={(e) => onDrop(e, n)}
-            onClick={() => {
-              if (n.type === 'group') toggle(n.id)
-              else {
-                navigate(nodePath(n))
-                setSidebarOpen(false)
-              }
+  // the visible (expanded) part of the tree as a flat list, rendered windowed: a repo can
+  // hold thousands of documents
+  const flat = useMemo(() => {
+    const out: { n: TreeNode; depth: number }[] = []
+    const walk = (parent: string | null, depth: number) => {
+      for (const n of kids.get(parent) ?? []) {
+        out.push({ n, depth })
+        if (expanded.has(n.id)) walk(n.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+    return out
+  }, [kids, expanded])
+  const win = useWindowed<HTMLDivElement>(flat.length, 33)
+
+  const renderRow = ({ n, depth }: { n: TreeNode; depth: number }) => {
+    const children = kids.get(n.id) ?? []
+    const open = expanded.has(n.id)
+    const cls = ['tree-item', n.id === activeId && 'active', drag?.over === n.id && `drop-${drag.pos}`, drag?.id === n.id && 'dragging'].filter(Boolean).join(' ')
+    return (
+      <div
+        key={n.id}
+        data-row
+        className={cls}
+        style={{ paddingLeft: 8 + depth * 16 }}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', n.id)
+          setDrag({ id: n.id })
+        }}
+        onDragEnd={() => setDrag(null)}
+        onDragOver={(e) => onDragOver(e, n)}
+        onDrop={(e) => onDrop(e, n)}
+        onClick={() => {
+          if (n.type === 'group') toggle(n.id)
+          else {
+            navigate(nodePath(n))
+            setSidebarOpen(false)
+          }
+        }}
+      >
+        <button
+          className={'tree-toggle' + (open ? ' open' : '') + (children.length ? '' : ' invisible')}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggle(n.id)
+          }}
+        >
+          <IconChevron width={14} height={14} />
+        </button>
+        {n.type === 'group' ? open ? <IconFolderOpen className="tree-icon" /> : <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
+        <span className="tree-title">{nodeTitle(n)}</span>
+        <span className="tree-actions">
+          <button
+            className="icon-btn sm"
+            title="新建子文档"
+            onClick={(e) => {
+              e.stopPropagation()
+              create(n.id, 'doc')
             }}
           >
-            <button
-              className={'tree-toggle' + (open ? ' open' : '') + (children.length ? '' : ' invisible')}
-              onClick={(e) => {
-                e.stopPropagation()
-                toggle(n.id)
-              }}
-            >
-              <IconChevron width={14} height={14} />
-            </button>
-            {n.type === 'group' ? open ? <IconFolderOpen className="tree-icon" /> : <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
-            <span className="tree-title">{nodeTitle(n)}</span>
-            <span className="tree-actions">
-              <button
-                className="icon-btn sm"
-                title="新建子文档"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  create(n.id, 'doc')
-                }}
-              >
-                <IconPlus width={15} height={15} />
-              </button>
-              <button
-                className="icon-btn sm"
-                title="更多"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  nodeMenu(e.currentTarget, n)
-                }}
-              >
-                <IconMore width={15} height={15} />
-              </button>
-            </span>
-          </div>
-          {open && children.length > 0 && renderNodes(n.id, depth + 1)}
-        </div>
-      )
-    })
+            <IconPlus width={15} height={15} />
+          </button>
+          <button
+            className="icon-btn sm"
+            title="更多"
+            onClick={(e) => {
+              e.stopPropagation()
+              nodeMenu(e.currentTarget, n)
+            }}
+          >
+            <IconMore width={15} height={15} />
+          </button>
+        </span>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -365,7 +379,11 @@ function RepoTree({ repoId }: { repoId: string }) {
         </button>
       </div>
       <div className="side-scroll tree">
-        {renderNodes(null, 0)}
+        <div ref={win.listRef}>
+          <div style={{ height: win.before }} />
+          {flat.slice(win.start, win.end).map(renderRow)}
+          <div style={{ height: win.after }} />
+        </div>
         {nodes.length === 0 && (
           <div className="side-empty">
             <button className="btn" onClick={() => create(null, 'doc')}>

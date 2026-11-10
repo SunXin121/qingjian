@@ -75,12 +75,13 @@ function parseCallout(node: PMNode): Parsed | null {
   }
 }
 
-export const calloutKey = new PluginKey<Set<number>>('ink-callout')
-
-/** Positions (blockquote start) whose collapse state differs from its default. */
-function toggledSet(state: { doc: PMNode } & any): Set<number> {
-  return calloutKey.getState(state) ?? new Set()
+interface CalloutState {
+  /** positions (blockquote start) whose collapse state differs from its default */
+  toggled: Set<number>
+  decos: DecorationSet
 }
+
+export const calloutKey = new PluginKey<CalloutState>('ink-callout')
 
 function headWidget(p: Parsed, collapsed: boolean, pos: number) {
   return (view: any) => {
@@ -116,11 +117,10 @@ function headWidget(p: Parsed, collapsed: boolean, pos: number) {
   }
 }
 
-function buildDecorations(state: any): DecorationSet {
-  const toggled = toggledSet(state)
-  const { selection, doc } = state
+/** Decorations of the callouts inside [from, to) (whole top-level blocks). */
+function blockDecorations(doc: PMNode, selection: { from: number; to: number }, toggled: Set<number>, from: number, to: number): Decoration[] {
   const decos: Decoration[] = []
-  doc.descendants((node: PMNode, pos: number) => {
+  doc.nodesBetween(from, to, (node: PMNode, pos: number) => {
     if (node.isTextblock || node.type.name === 'code_block') return false
     if (node.type.name !== 'blockquote') return true
     const p = parseCallout(node)
@@ -143,34 +143,69 @@ function buildDecorations(state: any): DecorationSet {
     )
     return true // callouts can nest
   })
-  return DecorationSet.create(doc, decos)
+  return decos
 }
 
+/** [from, to) widened to whole top-level blocks. */
+function topLevelSpan(doc: PMNode, from: number, to: number): [number, number] {
+  const a = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+  const b = doc.resolve(Math.max(0, Math.min(to, doc.content.size)))
+  return [a.depth > 0 ? a.before(1) : a.pos, b.depth > 0 ? b.after(1) : b.pos]
+}
+
+// The decorations live in the plugin state and are updated incrementally: rebuilding them
+// for the whole document on every keystroke made typing in long documents sluggish. After
+// a transaction only the top-level blocks touched by its changes or by the old / new
+// selection (the marker shows while the cursor is in the title) are rebuilt.
 export const calloutPlugin = $prose(
   () =>
-    new Plugin<Set<number>>({
+    new Plugin<CalloutState>({
       key: calloutKey,
       state: {
-        init: () => new Set(),
-        apply(tr, prev) {
-          let next = prev
-          if (tr.docChanged && prev.size) {
-            next = new Set()
-            for (const p of prev) {
+        init: (_, state) => ({
+          toggled: new Set(),
+          decos: DecorationSet.create(state.doc, blockDecorations(state.doc, state.selection, new Set(), 0, state.doc.content.size)),
+        }),
+        apply(tr, prev, oldState, newState) {
+          let toggled = prev.toggled
+          if (tr.docChanged && toggled.size) {
+            toggled = new Set()
+            for (const p of prev.toggled) {
               const r = tr.mapping.mapResult(p, 1)
-              if (!r.deleted) next.add(r.pos)
+              if (!r.deleted) toggled.add(r.pos)
             }
           }
           const meta = tr.getMeta(calloutKey) as { toggle?: number } | undefined
+          const doc = newState.doc
           if (meta?.toggle !== undefined) {
-            next = new Set(next)
-            next.has(meta.toggle) ? next.delete(meta.toggle) : next.add(meta.toggle)
+            toggled = new Set(toggled)
+            toggled.has(meta.toggle) ? toggled.delete(meta.toggle) : toggled.add(meta.toggle)
+            return { toggled, decos: DecorationSet.create(doc, blockDecorations(doc, newState.selection, toggled, 0, doc.content.size)) }
           }
-          return next
+          if (!tr.docChanged && oldState.selection.eq(newState.selection)) return toggled === prev.toggled ? prev : { ...prev, toggled }
+
+          // ranges to rebuild, in the new document's coordinates
+          const ranges: [number, number][] = []
+          tr.mapping.maps.forEach((map, i) => {
+            const rest = tr.mapping.slice(i + 1)
+            map.forEach((_os, _oe, ns, ne) => ranges.push([rest.map(ns, -1), rest.map(ne, 1)]))
+          })
+          const oldSel = oldState.selection
+          ranges.push([tr.mapping.map(oldSel.from, -1), tr.mapping.map(oldSel.to, 1)], [newState.selection.from, newState.selection.to])
+
+          let decos = prev.decos.map(tr.mapping, doc)
+          const spans = ranges.map(([a, b]) => topLevelSpan(doc, Math.min(a, b), Math.max(a, b))).sort((x, y) => x[0] - y[0])
+          for (let i = 0; i < spans.length; i++) {
+            let [from, to] = spans[i]
+            while (i + 1 < spans.length && spans[i + 1][0] <= to) to = Math.max(to, spans[++i][1])
+            const stale = decos.find(from, to).filter((d) => d.from >= from && d.to <= to)
+            decos = decos.remove(stale).add(doc, blockDecorations(doc, newState.selection, toggled, from, to))
+          }
+          return { toggled, decos }
         },
       },
       props: {
-        decorations: buildDecorations,
+        decorations: (state) => calloutKey.getState(state)?.decos,
       },
     }),
 )

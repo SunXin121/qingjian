@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -103,17 +104,23 @@ func (s *Server) saveDoc(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 500, err.Error())
 		return
 	}
-	tx.Exec(`DELETE FROM docs_fts WHERE node_id = ?`, id)
-	tx.Exec(`INSERT INTO docs_fts(node_id, title, body) VALUES(?,?,?)`, id, n.Title, searchableText(md))
+	if err := indexDoc(tx, id, n.Title, md, t); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
 	tx.Exec(`UPDATE repos SET updated_at = ? WHERE id = ?`, t, n.RepoID)
 
-	// snapshot
-	var lastAt int64
-	var lastMD string
-	verr := tx.QueryRow(`SELECT created_at, markdown FROM doc_versions WHERE node_id = ? ORDER BY id DESC LIMIT 1`, id).Scan(&lastAt, &lastMD)
-	if (in.Snapshot || errors.Is(verr, sql.ErrNoRows) || t-lastAt >= versionInterval) && lastMD != md {
-		tx.Exec(`INSERT INTO doc_versions(node_id, title, markdown, created_at) VALUES(?,?,?,?)`, id, n.Title, md, t)
-		tx.Exec(`DELETE FROM doc_versions WHERE node_id = ? AND id NOT IN (SELECT id FROM doc_versions WHERE node_id = ? ORDER BY id DESC LIMIT ?)`, id, id, maxVersions)
+	// snapshot: only rebuild / compare content when one is due
+	_, lastAt, _, verr := latestVersion(tx, id)
+	if in.Snapshot || errors.Is(verr, sql.ErrNoRows) || t-lastAt >= versionInterval {
+		same, err := sameAsLatest(tx, id, md)
+		if err == nil && !same {
+			err = addVersion(tx, id, n.Title, md, t)
+		}
+		if err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		httpError(w, 500, err.Error())
@@ -132,7 +139,7 @@ type Version struct {
 }
 
 func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(`SELECT id, node_id, title, length(markdown), created_at FROM doc_versions WHERE node_id = ? ORDER BY id DESC`, r.PathValue("id"))
+	rows, err := s.db.Query(`SELECT id, node_id, title, size, created_at FROM doc_versions WHERE node_id = ? ORDER BY id DESC`, r.PathValue("id"))
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -153,10 +160,15 @@ func (s *Server) loadVersion(r *http.Request) (*Version, error) {
 		return nil, sql.ErrNoRows
 	}
 	var v Version
-	err = s.db.QueryRow(`SELECT id, node_id, title, markdown, created_at FROM doc_versions WHERE id = ?`, vid).
-		Scan(&v.ID, &v.NodeID, &v.Title, &v.Markdown, &v.CreatedAt)
-	v.Size = len(v.Markdown)
-	return &v, err
+	if err := s.db.QueryRow(`SELECT id, node_id, title, created_at FROM doc_versions WHERE id = ?`, vid).
+		Scan(&v.ID, &v.NodeID, &v.Title, &v.CreatedAt); err != nil {
+		return nil, err
+	}
+	if v.Markdown, err = versionText(s.db, vid); err != nil {
+		return nil, err
+	}
+	v.Size = utf8.RuneCountInString(v.Markdown)
+	return &v, nil
 }
 
 func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
@@ -190,12 +202,23 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 		t = d.ContentUpdatedAt + 1
 	}
 	// snapshot the current content first so the restore itself is undoable
-	tx.Exec(`INSERT INTO doc_versions(node_id, title, markdown, created_at) VALUES(?,?,?,?)`, d.ID, d.Title, d.Markdown, t-1)
-	tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, v.Title, t, d.ID)
-	tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, v.Markdown, t, d.ID)
-	tx.Exec(`DELETE FROM docs_fts WHERE node_id = ?`, d.ID)
-	tx.Exec(`INSERT INTO docs_fts(node_id, title, body) VALUES(?,?,?)`, d.ID, v.Title, searchableText(v.Markdown))
-	tx.Exec(`INSERT INTO doc_versions(node_id, title, markdown, created_at) VALUES(?,?,?,?)`, d.ID, v.Title, v.Markdown, t)
+	err = addVersion(tx, d.ID, d.Title, d.Markdown, t-1)
+	if err == nil {
+		_, err = tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, v.Title, t, d.ID)
+	}
+	if err == nil {
+		_, err = tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, v.Markdown, t, d.ID)
+	}
+	if err == nil {
+		err = indexDoc(tx, d.ID, v.Title, v.Markdown, t)
+	}
+	if err == nil {
+		err = addVersion(tx, d.ID, v.Title, v.Markdown, t)
+	}
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		httpError(w, 500, err.Error())
 		return

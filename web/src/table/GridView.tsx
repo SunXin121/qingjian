@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   CompactSelection,
   DataEditor,
@@ -10,6 +10,7 @@ import {
   type GridCell,
   type GridColumn,
   type GridKeyEventArgs,
+  type GridMouseEventArgs,
   type GridSelection,
   type Item,
   type Rectangle,
@@ -131,7 +132,8 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const matchKeys = useMemo(() => new Set(matches.map((m) => m.rec.id + ':' + m.field.id)), [matches])
   const current = matches.length ? matches[((searchCursor % matches.length) + matches.length) % matches.length] : undefined
   const currentKey = current ? current.rec.id + ':' + current.field.id : ''
-  useEffect(() => onSearchCount(matches.length), [matches.length, onSearchCount])
+  // layout effect: the toolbar count must not show a stale value for a frame
+  useLayoutEffect(() => onSearchCount(matches.length), [matches.length, onSearchCount])
 
   useEffect(() => setLiveWidths({}), [cfg.widths])
 
@@ -150,6 +152,12 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   )
   const freeze = 1 + Math.max(0, Math.min(cfg.frozen ?? 1, fields.length))
 
+  // summary row texts: computed once per data change, not on every repaint of the row
+  const summaries = useMemo(
+    () => fields.map((f, i) => summarize(f, cfg.summary?.[f.id] ?? (i === 0 ? 'count' : 'none'), records)),
+    [fields, records, cfg.summary],
+  )
+
   const fieldAt = (col: number): Field | undefined => fields[col - 1]
   const rowAt = (row: number): GridRow | undefined => rows[row]
   const recAt = (row: number): Rec | undefined => {
@@ -165,9 +173,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         const foot = { bgCell: palette.footBg }
         if (col === 0)
           return readOnly ? { ...empty, themeOverride: foot } : ({ kind: GridCellKind.Custom, data: { kind: 'qj-add' }, copyData: '', allowOverlay: false, cursor: 'pointer', themeOverride: foot } as AddCell)
-        const f = fieldAt(col)!
-        const kind = cfg.summary?.[f.id] ?? (col === 1 ? 'count' : 'none')
-        const text = summarize(f, kind, records)
+        const text = summaries[col - 1] ?? ''
         return { ...empty, displayData: text, data: text, contentAlign: 'right', themeOverride: { ...foot, textDark: theme.textLight } }
       }
       const item = rowAt(row)!
@@ -196,7 +202,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       if (!matchKeys.has(key)) return cell
       return { ...cell, themeOverride: { ...cell.themeOverride, bgCell: key === currentKey ? palette.searchCurrent : palette.searchHit } } as GridCell
     },
-    [rows, records, fields, ordinal, cfg.summary, readOnly, model, theme.textLight, matchKeys, currentKey],
+    [rows, fields, ordinal, summaries, readOnly, model, theme.textLight, matchKeys, currentKey],
   )
 
   const getRowThemeOverride = useCallback(
@@ -595,6 +601,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
 
   const onPointerDownCapture = (e: React.PointerEvent) => {
     if (readOnly || e.button !== 0 || typing.current) return
+    if ((e.target as Element).closest('.bt-insert')) return
     const b0 = ref.current?.getBounds(0, 0)
     if (!b0 || e.clientX < b0.x || e.clientX > b0.x + GRIP_W) return
     const { top, bottom } = bodyRange()
@@ -609,6 +616,86 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     }
     startRowDrag(item.rec, e.clientX, e.clientY)
   }
+
+  // ---------- hover insert buttons ----------
+  // Hovering a row's index cell shows a "+" on its top or bottom edge (insert above / below);
+  // hovering a column header shows one on its right edge (insert a field there). The grid
+  // is a canvas, so the buttons are DOM elements placed over it.
+  type Hover = { kind: 'row'; row: number; above: boolean } | { kind: 'col'; col: number }
+  const [hover, setHover] = useState<Hover | null>(null)
+  const [insertHot, setInsertHot] = useState(false)
+  const hideTimer = useRef(0)
+  const keepHover = () => clearTimeout(hideTimer.current)
+  const hideHover = (delay = 150) => {
+    clearTimeout(hideTimer.current)
+    hideTimer.current = window.setTimeout(() => {
+      setHover(null)
+      setInsertHot(false)
+    }, delay)
+  }
+  useEffect(() => () => clearTimeout(hideTimer.current), [])
+
+  const onMouseMove = useCallback(
+    (a: GridMouseEventArgs) => {
+      if (readOnly || a.buttons) return
+      let next: Hover | null = null
+      if (a.kind === 'cell' && a.location[0] === 0 && rowsRef.current[a.location[1]]?.kind === 'record') {
+        next = { kind: 'row', row: a.location[1], above: a.localEventY < a.bounds.height / 2 }
+      } else if (a.kind === 'header' && a.location[0] >= 1) {
+        next = { kind: 'col', col: a.location[0] }
+      }
+      if (!next) return hideHover()
+      keepHover()
+      const n = next
+      setHover((h) =>
+        h && h.kind === n.kind && (h.kind === 'row' ? n.kind === 'row' && h.row === n.row && h.above === n.above : n.kind === 'col' && h.col === n.col) ? h : n,
+      )
+    },
+    [readOnly],
+  )
+
+  /** Button position (relative to the grid wrapper) and the insertion line it previews. */
+  const insertSpot = (): { x: number; y: number; line: React.CSSProperties } | null => {
+    const g = ref.current
+    const wrap = wrapRef.current
+    if (!hover || !g || !wrap || dragId) return null
+    const wr = wrap.getBoundingClientRect()
+    if (hover.kind === 'row') {
+      const b = g.getBounds(0, hover.row)
+      if (!b) return null
+      const y = hover.above ? b.y : b.y + b.height
+      const { top, bottom } = bodyRange()
+      if (y < top - 1 || y > bottom + 1) return null
+      return { x: b.x - wr.left + GRIP_W / 2 + 1, y: y - wr.top, line: { left: 0, right: 0, top: y - wr.top - 1, height: 2 } }
+    }
+    const b = g.getBounds(hover.col, -1)
+    if (!b) return null
+    const x = b.x + b.width
+    if (x > wr.right - 4) return null
+    const foot = g.getBounds(0, rowsRef.current.length)
+    const bottom = foot ? foot.y + foot.height : wr.bottom
+    return { x: x - wr.left, y: b.y - wr.top + 10, line: { top: b.y - wr.top, height: bottom - b.y, left: x - wr.left - 1, width: 2 } }
+  }
+
+  const onInsertClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const h = hover
+    setHover(null)
+    setInsertHot(false)
+    if (!h) return
+    if (h.kind === 'row') {
+      const rec = recAt(h.row)
+      if (!rec) return
+      if (cfg.sorts?.length) toast('视图已设置排序，新记录会按排序规则显示')
+      addAndFocus(rec, h.above)
+      return
+    }
+    const f = fieldAt(h.col)
+    if (!f) return
+    const r = e.currentTarget.getBoundingClientRect()
+    openFieldEditor({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }, model, { viewId: view.id, after: h.col === 1 ? undefined : f.id, first: h.col === 1 })
+  }
+
+  const spot = readOnly ? null : insertSpot()
 
   // ---------- columns ----------
 
@@ -760,8 +847,30 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   )
 
   return (
-    <div className="bt-grid" ref={wrapRef} onContextMenu={(e) => e.preventDefault()} onPointerDownCapture={onPointerDownCapture}>
+    <div className="bt-grid" ref={wrapRef} onContextMenu={(e) => e.preventDefault()} onPointerDownCapture={onPointerDownCapture} onMouseLeave={() => hideHover()}>
       <div ref={lineRef} className="bt-drop-line" style={{ left: INDEX_W }} />
+      {spot && (
+        <>
+          {insertHot && <div className="bt-insert-line" style={spot.line} />}
+          <button
+            className="bt-insert"
+            style={{ left: spot.x, top: spot.y }}
+            title={hover?.kind === 'row' ? (hover.above ? '在上方插入记录' : '在下方插入记录') : '在右侧插入字段'}
+            aria-label={hover?.kind === 'row' ? '插入记录' : '插入字段'}
+            onMouseEnter={() => {
+              keepHover()
+              setInsertHot(true)
+            }}
+            onMouseLeave={() => {
+              setInsertHot(false)
+              hideHover()
+            }}
+            onClick={onInsertClick}
+          >
+            <IconPlus width={12} height={12} />
+          </button>
+        </>
+      )}
       <div ref={ghostRef} className="bt-drag-ghost ellipsis" />
       <textarea
         ref={typeRef}
@@ -816,6 +925,8 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         onCellActivated={onCellActivated}
         onCellContextMenu={onCellContextMenu}
         onKeyDown={onGridKeyDown}
+        onMouseMove={onMouseMove}
+        onVisibleRegionChanged={() => hover && setHover(null)}
         onHeaderMenuClick={fieldMenu}
         onHeaderContextMenu={(col, e) => {
           e.preventDefault()
