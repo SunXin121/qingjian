@@ -1478,8 +1478,8 @@ a.toc-row:hover > .ellipsis {
   justify-content: center;
   padding: 16px;
   background: var(--c-overlay);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  /* no backdrop-filter here: re-blurring the whole viewport on every frame of the
+     fade-in made dialogs stutter, and a 2px blur was barely visible anyway */
   animation: fade 0.15s ease-out;
 }
 .modal {

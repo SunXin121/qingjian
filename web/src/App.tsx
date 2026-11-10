@@ -9,17 +9,37 @@ import RepoHome from './pages/RepoHome'
 import Trash from './pages/Trash'
 import { StoreProvider, useStore } from './store'
 
-const DocPage = lazy(() => import('./pages/DocPage'))
-const TablePage = lazy(() => import('./pages/TablePage'))
+const loadDocPage = () => import('./pages/DocPage')
+const loadTablePage = () => import('./pages/TablePage')
+const DocPage = lazy(loadDocPage)
+const TablePage = lazy(loadTablePage)
 const SharePage = lazy(() => import('./pages/SharePage'))
 const Shares = lazy(() => import('./pages/Shares'))
 const Settings = lazy(() => import('./pages/Settings'))
+
+/**
+ * Fetch and evaluate the editor and table chunks while the app sits idle. Evaluating
+ * them (and applying the editor's stylesheet) takes a long main-thread task; doing it
+ * on the first click into a document froze the page right as it should transition.
+ * One chunk per idle callback, so each blocks for as short a stretch as possible.
+ */
+function preloadHeavyPages() {
+  const idle = (fn: () => void) =>
+    'requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 5000 }) : setTimeout(fn, 1500)
+  const queue = [loadDocPage, loadTablePage]
+  const next = () => {
+    const load = queue.shift()
+    if (load) idle(() => load().then(next, next))
+  }
+  setTimeout(next, 800)
+}
 
 function Shell() {
   const { sidebarOpen, setSidebarOpen } = useStore()
   const location = useLocation()
   const navigate = useNavigate()
   useEffect(() => setSidebarOpen(false), [location.pathname, setSidebarOpen])
+  useEffect(preloadHeavyPages, [])
   // in-app links rendered outside React (e.g. table embeds inside the editor)
   useEffect(() => {
     const onNav = (e: Event) => navigate((e as CustomEvent<string>).detail)
