@@ -131,9 +131,9 @@ export interface ViewConfig {
   frozen?: number
   filter?: { conj: 'and' | 'or'; conds: FilterCond[] }
   sorts?: SortRule[]
-  /** grid grouping, outermost first */
+  /** grid / gantt grouping, outermost first */
   groups?: SortRule[]
-  /** collapsed group keys (grid) */
+  /** collapsed group keys (grid / gantt) */
   collapsed?: string[]
   summary?: Record<string, SummaryKind>
   /** kanban: field the board is grouped by (any type but attachment / autonumber) */
@@ -147,9 +147,19 @@ export interface ViewConfig {
   /** calendar: date field records are placed by, and an optional end date */
   dateField?: string
   endField?: string
+  /** gantt: time scale */
+  ganttScale?: GanttScale
+  /** gantt: single select field the bars are coloured by */
+  colorField?: string
+  /** gantt: progress field drawn as a fill inside the bars */
+  progressField?: string
+  /** gantt: link field of this table to itself holding each record's predecessors */
+  depField?: string
 }
 
-export type ViewType = 'grid' | 'kanban' | 'gallery' | 'calendar'
+export type GanttScale = 'day' | 'week' | 'month'
+
+export type ViewType = 'grid' | 'kanban' | 'gallery' | 'calendar' | 'gantt'
 
 export interface View {
   id: string

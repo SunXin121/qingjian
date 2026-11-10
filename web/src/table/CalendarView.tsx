@@ -34,23 +34,23 @@ const MAX_CHIPS = 3
 const MAX_SPAN = 62
 
 /** YYYY-MM-DD of a date-ish cell value. */
-function dayOf(v: any): string | undefined {
+export function dayOf(v: any): string | undefined {
   if (typeof v === 'number') return fmtDateTime(v, false)
   if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10)
   return undefined
 }
 
-const parseDay = (s: string) => {
+export const parseDay = (s: string) => {
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
-const dayStr = (d: Date) => fmtDateTime(d.getTime(), false)
-const addDays = (s: string, n: number) => {
+export const dayStr = (d: Date) => fmtDateTime(d.getTime(), false)
+export const addDays = (s: string, n: number) => {
   const d = parseDay(s)
   d.setDate(d.getDate() + n)
   return dayStr(d)
 }
-const diffDays = (a: string, b: string) => Math.round((parseDay(a).getTime() - parseDay(b).getTime()) / DAY)
+export const diffDays = (a: string, b: string) => Math.round((parseDay(a).getTime() - parseDay(b).getTime()) / DAY)
 
 /** A month grid; records sit on the day of the date field (spanning to the end date if set). */
 export default function CalendarView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {

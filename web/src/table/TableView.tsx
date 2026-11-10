@@ -2,13 +2,14 @@ import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffe
 import { confirmDialog, openMenu, openPopover, promptText, toast } from '../components/dialog'
 import { IconClose, IconCopy, IconDown, IconEdit, IconPlus, IconSearch, IconTrash, IconUp } from '../components/icons'
 import { activeConds, viewRecords } from './engine'
-import { IconBoard, IconCalendar, IconEyeOff, IconFilter, IconGallery, IconGroup, IconGrid, IconRedo, IconSort, IconUndo } from './icons'
+import { IconBoard, IconCalendar, IconEyeOff, IconGantt, IconFilter, IconGallery, IconGroup, IconGrid, IconRedo, IconSort, IconUndo } from './icons'
 import KanbanView from './KanbanView'
 import GalleryView from './GalleryView'
 import CalendarView from './CalendarView'
+import GanttView from './GanttView'
 import { useTable, type TableModel } from './model'
 import RecordCard from './RecordCard'
-import { CalendarPanel, FieldsPanel, FilterPanel, GalleryPanel, GroupPanel, KanbanPanel, SortPanel } from './ViewPanels'
+import { CalendarPanel, FieldsPanel, FilterPanel, GalleryPanel, GanttPanel, GroupPanel, KanbanPanel, SortPanel } from './ViewPanels'
 import type { View, ViewType } from './types'
 
 const GridView = lazy(() => import('./GridView'))
@@ -27,6 +28,8 @@ export const viewIcon = (t: ViewType) =>
     <IconGallery width={15} height={15} />
   ) : t === 'calendar' ? (
     <IconCalendar width={15} height={15} />
+  ) : t === 'gantt' ? (
+    <IconGantt width={15} height={15} />
   ) : (
     <IconGrid width={15} height={15} />
   )
@@ -138,6 +141,7 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
         { label: '看板视图', icon: <IconBoard />, onClick: () => selectView(model.addView(uniqueName(table.views, '看板视图'), 'kanban')) },
         { label: '画册视图', icon: <IconGallery />, onClick: () => selectView(model.addView(uniqueName(table.views, '画册视图'), 'gallery')) },
         { label: '日历视图', icon: <IconCalendar />, onClick: () => selectView(model.addView(uniqueName(table.views, '日历视图'), 'calendar')) },
+        { label: '甘特视图', icon: <IconGantt />, onClick: () => selectView(model.addView(uniqueName(table.views, '甘特视图'), 'gantt')) },
       ],
       { align: 'left', width: 160 },
     )
@@ -230,7 +234,7 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
         <button className={'bt-tool' + (nFilter ? ' on' : '')} onClick={(e) => panel(e.currentTarget, () => <FilterPanel model={model} viewId={active.id} />, 560)}>
           <IconFilter width={15} height={15} /> <span className="bt-tool-label">{nFilter ? `${nFilter} 个筛选条件` : '筛选'}</span>
         </button>
-        {active.type === 'grid' && (
+        {(active.type === 'grid' || active.type === 'gantt') && (
           <button className={'bt-tool' + (nGroup ? ' on' : '')} onClick={(e) => panel(e.currentTarget, () => <GroupPanel model={model} viewId={active.id} />)}>
             <IconGroup width={15} height={15} /> <span className="bt-tool-label">{nGroup ? `${nGroup} 级分组` : '分组'}</span>
           </button>
@@ -248,6 +252,11 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
         {active.type === 'calendar' && (
           <button className="bt-tool" onClick={(e) => panel(e.currentTarget, () => <CalendarPanel model={model} viewId={active.id} />, 300)}>
             <IconCalendar width={15} height={15} /> <span className="bt-tool-label">日历设置</span>
+          </button>
+        )}
+        {active.type === 'gantt' && (
+          <button className="bt-tool" onClick={(e) => panel(e.currentTarget, () => <GanttPanel model={model} viewId={active.id} />, 320)}>
+            <IconGantt width={15} height={15} /> <span className="bt-tool-label">甘特设置</span>
           </button>
         )}
         <button className={'bt-tool' + (nSort ? ' on' : '')} onClick={(e) => panel(e.currentTarget, () => <SortPanel model={model} viewId={active.id} />)}>
@@ -326,6 +335,8 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
           </Suspense>
         ) : active.type === 'gallery' ? (
           <GalleryView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
+        ) : active.type === 'gantt' ? (
+          <GanttView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
         ) : active.type === 'calendar' ? (
           <CalendarView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
         ) : (

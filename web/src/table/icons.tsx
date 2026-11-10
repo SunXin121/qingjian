@@ -1,4 +1,4 @@
-import { ArrowUpDown, CalendarDays, EyeOff, GalleryVerticalEnd, Layers, ListFilter, Redo2, SquareKanban, Table2, Undo2 } from 'lucide-react'
+import { ArrowUpDown, CalendarDays, ChartGantt, EyeOff, GalleryVerticalEnd, Layers, ListFilter, Redo2, SquareKanban, Table2, Undo2 } from 'lucide-react'
 import type { LucideIcon, LucideProps } from 'lucide-react'
 
 const wrap = (I: LucideIcon) =>
@@ -10,6 +10,7 @@ export const IconBoard = wrap(SquareKanban)
 export const IconGrid = wrap(Table2)
 export const IconGallery = wrap(GalleryVerticalEnd)
 export const IconCalendar = wrap(CalendarDays)
+export const IconGantt = wrap(ChartGantt)
 export const IconFilter = wrap(ListFilter)
 export const IconGroup = wrap(Layers)
 export const IconSort = wrap(ArrowUpDown)

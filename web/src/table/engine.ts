@@ -384,7 +384,7 @@ export function sortRecords(t: TableData, list: Rec[], rules: SortRule[]): Rec[]
 export function viewRecords(t: TableData, v: View, sticky?: Set<string>): Rec[] {
   const match = makeMatcher(t, v)
   const list = t.records.filter((r) => match(r) || sticky?.has(r.id))
-  const rules = [...(v.type === 'grid' ? (v.config.groups ?? []) : []), ...(v.config.sorts ?? [])]
+  const rules = [...(v.type === 'grid' || v.type === 'gantt' ? (v.config.groups ?? []) : []), ...(v.config.sorts ?? [])]
   return sortRecords(t, list, rules)
 }
 

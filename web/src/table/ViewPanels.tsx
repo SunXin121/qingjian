@@ -8,6 +8,7 @@ import { compileFilter, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from '.
 import { orderIds, useTable, type TableModel } from './model'
 import { coverField } from './GalleryView'
 import { calendarEndField, calendarField, calendarFieldOk } from './CalendarView'
+import { ganttColorOk, ganttDepOk, ganttProgressOk } from './GanttView'
 import { baseField, fieldTypeLabel, isComputed, newId, type Field, type FilterCond, type SortRule, type View } from './types'
 
 function useView(model: TableModel, viewId: string): [View | undefined, Field[]] {
@@ -474,7 +475,7 @@ export function GalleryPanel({ model, viewId }: { model: TableModel; viewId: str
   )
 }
 
-export function CalendarPanel({ model, viewId }: { model: TableModel; viewId: string }) {
+export function CalendarPanel({ model, viewId, gantt }: { model: TableModel; viewId: string; gantt?: boolean }) {
   const [view, fields] = useView(model, viewId)
   if (!view) return null
   const options = fields.filter(calendarFieldOk)
@@ -493,7 +494,7 @@ export function CalendarPanel({ model, viewId }: { model: TableModel; viewId: st
       </select>
       <div className="bt-panel-title">结束日期</div>
       <select className="bt-input sm" value={end?.id ?? ''} onChange={(e) => model.updateView(viewId, { endField: e.target.value || undefined })}>
-        <option value="">无（只显示在开始日期）</option>
+        <option value="">{gantt ? '无（每条记录只占一天）' : '无（只显示在开始日期）'}</option>
         {options
           .filter((f) => f.id !== cur?.id)
           .map((f) => (
@@ -502,7 +503,72 @@ export function CalendarPanel({ model, viewId }: { model: TableModel; viewId: st
             </option>
           ))}
       </select>
-      <div className="bt-panel-empty">{cur?.type === 'date' ? '拖动记录可修改日期，双击空白处新建记录' : '该字段自动计算，记录不能拖动'}</div>
+      {gantt ? (
+        <GanttOptions model={model} view={view} fields={fields} />
+      ) : (
+        <div className="bt-panel-empty">{cur?.type === 'date' ? '拖动记录可修改日期，双击空白处新建记录' : '该字段自动计算，记录不能拖动'}</div>
+      )}
     </div>
   )
+}
+
+export const GanttPanel = (p: { model: TableModel; viewId: string }) => <CalendarPanel {...p} gantt />
+
+function GanttOptions({ model, view, fields }: { model: TableModel; view: View; fields: Field[] }) {
+  const cfg = view.config
+  const colors = fields.filter(ganttColorOk)
+  const progress = fields.filter(ganttProgressOk)
+  const deps = fields.filter(ganttDepOk(model.data))
+  const pick = (list: Field[], id: string | undefined) => list.find((f) => f.id === id)?.id ?? ''
+  const addDepField = () => {
+    const id = model.addField(uniqueFieldName(fields, '前置任务'), 'link', { table: model.data.id, multiple: true }, { viewId: view.id })
+    model.updateView(view.id, { depField: id })
+  }
+  return (
+    <>
+      <div className="bt-panel-title">条形颜色</div>
+      <select className="bt-input sm" value={pick(colors, cfg.colorField)} onChange={(e) => model.updateView(view.id, { colorField: e.target.value || undefined })}>
+        <option value="">默认颜色</option>
+        {colors.map((f) => (
+          <option key={f.id} value={f.id}>
+            按「{f.name}」的选项颜色
+          </option>
+        ))}
+      </select>
+      <div className="bt-panel-title">进度</div>
+      <select className="bt-input sm" value={pick(progress, cfg.progressField)} onChange={(e) => model.updateView(view.id, { progressField: e.target.value || undefined })}>
+        <option value="">不显示</option>
+        {progress.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+      <div className="bt-panel-title">前置任务</div>
+      <select className="bt-input sm" value={pick(deps, cfg.depField)} onChange={(e) => model.updateView(view.id, { depField: e.target.value || undefined })}>
+        <option value="">不显示依赖</option>
+        {deps.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+      {!deps.length && !model.readOnly && (
+        <button className="btn ghost sm bt-panel-add" onClick={addDepField}>
+          <IconPlus width={14} height={14} /> 新建「前置任务」字段
+        </button>
+      )}
+      <div className="bt-panel-empty">
+        {calendarField(model.data, view)?.type === 'date'
+          ? '拖动条形可调整日期，拖动两端可调整开始 / 结束；没有日期的记录点击时间轴即可安排。前置任务是关联本表的关联字段，依赖用箭头表示，冲突时显示为红色。'
+          : '前置任务是关联本表的关联字段，依赖用箭头表示，冲突时显示为红色。'}
+      </div>
+    </>
+  )
+}
+
+function uniqueFieldName(fields: Field[], base: string) {
+  const names = new Set(fields.map((f) => f.name))
+  if (!names.has(base)) return base
+  for (let i = 2; ; i++) if (!names.has(`${base} ${i}`)) return `${base} ${i}`
 }
