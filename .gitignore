@@ -2,3 +2,4 @@
 /qingjian
 /bin
 .env
+*.tsbuildinfo

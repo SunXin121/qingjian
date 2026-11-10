@@ -8,10 +8,10 @@ import (
 )
 
 type Repo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Icon        string  `json:"icon"`
 	Sort        float64 `json:"sort"`
 	DocCount    int     `json:"doc_count"`
 	CreatedAt   int64   `json:"created_at"`

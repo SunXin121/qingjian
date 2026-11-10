@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, formatTime, type Repo, type TreeNode } from '../api'
-import { IconDoc, IconFolder, IconMore, IconPlus } from '../components/icons'
+import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { childrenMap, untitled, useStore } from '../store'
 import { repoMenu } from './Home'
@@ -38,12 +38,16 @@ export default function RepoHome() {
       <div key={n.id}>
         {n.type === 'group' ? (
           <div className="toc-row group" style={{ paddingLeft: 12 + depth * 20 }}>
-            <IconFolder className="muted" />
+            <span className="doc-row-icon folder">
+              <IconFolder width={16} height={16} />
+            </span>
             <span className="ellipsis">{n.title || '未命名分组'}</span>
           </div>
         ) : (
           <Link to={`/r/${repoId}/d/${n.id}`} className="toc-row" style={{ paddingLeft: 12 + depth * 20 }}>
-            <IconDoc className="muted" />
+            <span className="doc-row-icon">
+              <IconDoc width={16} height={16} />
+            </span>
             <span className="ellipsis">{untitled(n.title)}</span>
             <span className="spacer" />
             <span className="doc-row-time">{formatTime(n.updated_at)}</span>
@@ -82,12 +86,23 @@ export default function RepoHome() {
       <div className="page-body">
         {repo && (
           <>
-            <h1 className="page-title">{repo.name}</h1>
-            {repo.description && <p className="repo-desc">{repo.description}</p>}
+            <section className="repo-hero">
+              <RepoMark repo={repo} className="repo-hero-icon" />
+              <div className="repo-hero-main">
+                <h1 className="page-title">{repo.name}</h1>
+                <p className={'repo-desc' + (repo.description ? '' : ' muted')}>{repo.description || '暂无简介'}</p>
+                <div className="repo-hero-meta">
+                  {nodes.filter((n) => n.type === 'doc').length} 篇文档 · {formatTime(repo.updated_at)}更新
+                </div>
+              </div>
+            </section>
             <div className="section-head">
-              <h2>目录</h2>
+              <h2>
+                <IconList className="section-icon" width={17} height={17} />
+                目录
+              </h2>
               <button className="btn primary" onClick={newDoc}>
-                <IconPlus width={16} height={16} /> 新建文档
+                <IconDocPlus width={16} height={16} /> 新建文档
               </button>
             </div>
             <div className="toc">

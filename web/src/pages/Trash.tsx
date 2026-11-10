@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, formatTime, type TrashItem } from '../api'
 import { confirmDialog, toast } from '../components/dialog'
-import { IconBook, IconDoc, IconFolder } from '../components/icons'
+import { IconBook, IconDoc, IconFolder, IconRestore, IconTrash } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { useStore } from '../store'
 
@@ -36,21 +36,30 @@ export default function Trash() {
         <div className="doc-list">
           {items?.map((it) => (
             <div key={it.kind + it.id} className="doc-row">
-              {it.kind === 'repo' ? <IconBook className="muted" /> : it.type === 'group' ? <IconFolder className="muted" /> : <IconDoc className="muted" />}
+              <span className={'doc-row-icon' + (it.kind === 'repo' ? ' repo' : it.type === 'group' ? ' folder' : '')}>
+                {it.kind === 'repo' ? <IconBook width={16} height={16} /> : it.type === 'group' ? <IconFolder width={16} height={16} /> : <IconDoc width={16} height={16} />}
+              </span>
               <span className="doc-row-title ellipsis">{it.title || (it.type === 'group' ? '未命名分组' : '无标题文档')}</span>
               <span className="doc-row-repo ellipsis">{it.kind === 'repo' ? '知识库' : it.repo_name}</span>
               <span className="doc-row-time">{formatTime(it.deleted_at)}</span>
               <span className="row-actions">
                 <button className="btn sm" onClick={() => restore(it)}>
-                  恢复
+                  <IconRestore width={14} height={14} /> 恢复
                 </button>
                 <button className="btn sm danger" onClick={() => purge(it)}>
-                  删除
+                  <IconTrash width={14} height={14} /> 删除
                 </button>
               </span>
             </div>
           ))}
-          {items?.length === 0 && <div className="empty-state small">回收站是空的</div>}
+          {items?.length === 0 && (
+            <div className="empty-state small">
+              <span className="empty-icon">
+                <IconTrash width={22} height={22} />
+              </span>
+              回收站是空的
+            </div>
+          )}
         </div>
       </div>
     </div>

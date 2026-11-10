@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { uploadFile } from '../api'
 import { confirmDialog, toast } from '../components/dialog'
-import { parseDrawing } from './previews'
+import { parseDrawing, prefersDark } from './previews'
 
 type ExcalidrawModule = typeof import('@excalidraw/excalidraw')
 
@@ -12,6 +12,12 @@ function loadExcalidraw() {
   modP ??= Promise.all([import('@excalidraw/excalidraw'), import('@excalidraw/excalidraw/index.css')]).then(([m]) => m)
   return modP
 }
+
+const sceneSignature = (elements: readonly any[]) =>
+  elements
+    .filter((e) => !e.isDeleted)
+    .map((e) => `${e.id}:${e.version}`)
+    .join(',')
 
 interface Props {
   content: string
@@ -24,7 +30,10 @@ export default function ExcalidrawModal({ content, onSave, onClose }: Props) {
   const [initial, setInitial] = useState<any>(undefined)
   const [saving, setSaving] = useState(false)
   const apiRef = useRef<any>(null)
-  const changes = useRef(0)
+  // signature of the scene when it was loaded; compared on close to detect real edits
+  // (Excalidraw fires onChange several times while mounting, so counting calls is unreliable)
+  const baseline = useRef<string | null>(null)
+  const dirty = useRef(false)
 
   useEffect(() => {
     let alive = true
@@ -62,7 +71,7 @@ export default function ExcalidrawModal({ content, onSave, onClose }: Props) {
   }, [])
 
   const close = async () => {
-    if (changes.current > 1 && !(await confirmDialog('画板有未保存的修改，确定放弃吗？', { danger: true, okText: '放弃' }))) return
+    if (dirty.current && !(await confirmDialog('画板有未保存的修改，确定放弃吗？', { danger: true, okText: '放弃' }))) return
     onClose()
   }
 
@@ -113,10 +122,13 @@ export default function ExcalidrawModal({ content, onSave, onClose }: Props) {
           <Excalidraw
             initialData={initial}
             excalidrawAPI={(api: any) => (apiRef.current = api)}
-            onChange={() => {
-              changes.current++
+            onChange={(elements: readonly any[]) => {
+              const sig = sceneSignature(elements)
+              if (baseline.current === null) baseline.current = sig
+              else if (sig !== baseline.current) dirty.current = true
             }}
             langCode="zh-CN"
+            theme={prefersDark() ? 'dark' : 'light'}
             UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false } }}
           />
         ) : (

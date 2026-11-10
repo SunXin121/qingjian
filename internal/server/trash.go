@@ -121,6 +121,10 @@ func purgeItem(tx *sql.Tx, kind, id string) error {
 		if _, err := tx.Exec(`DELETE FROM docs_fts WHERE node_id IN (SELECT id FROM nodes WHERE repo_id = ?)`, id); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(`DELETE FROM shares WHERE (target_type = 'repo' AND target_id = ?)
+  OR (target_type = 'node' AND target_id IN (SELECT id FROM nodes WHERE repo_id = ?))`, id, id); err != nil {
+			return err
+		}
 		_, err := tx.Exec(`DELETE FROM repos WHERE id = ? AND deleted_at IS NOT NULL`, id)
 		return err
 	case "node":
@@ -130,6 +134,7 @@ func purgeItem(tx *sql.Tx, kind, id string) error {
 		}
 		for _, x := range ids {
 			tx.Exec(`DELETE FROM docs_fts WHERE node_id = ?`, x)
+			tx.Exec(`DELETE FROM shares WHERE target_type = 'node' AND target_id = ?`, x)
 			tx.Exec(`DELETE FROM nodes WHERE id = ?`, x)
 		}
 	}

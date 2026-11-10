@@ -63,6 +63,28 @@ CREATE TABLE attachments (
 CREATE INDEX attachments_sha ON attachments(sha256);
 CREATE VIRTUAL TABLE docs_fts USING fts5(node_id UNINDEXED, title, body, tokenize = 'trigram');
 `,
+	// M2: read-only shares and backup bookkeeping
+	`
+CREATE TABLE shares (
+  token         TEXT PRIMARY KEY,
+  target_type   TEXT NOT NULL,
+  target_id     TEXT NOT NULL,
+  view_id       TEXT,
+  password_hash TEXT NOT NULL DEFAULT '',
+  expires_at    INTEGER,
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  options       TEXT NOT NULL DEFAULT '{}',
+  view_count    INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX shares_target ON shares(target_type, target_id);
+CREATE TABLE backup_blobs (
+  target TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  PRIMARY KEY (target, sha256)
+) WITHOUT ROWID;
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

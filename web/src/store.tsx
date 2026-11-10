@@ -42,14 +42,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 export const useStore = () => useContext(Ctx)
 
-export function childrenMap(nodes: TreeNode[]) {
-  const map = new Map<string | null, TreeNode[]>()
+export function childrenMap<T extends { parent_id: string | null; sort: number; created_at?: number }>(nodes: T[]) {
+  const map = new Map<string | null, T[]>()
   for (const n of nodes) {
     const k = n.parent_id
     if (!map.has(k)) map.set(k, [])
     map.get(k)!.push(n)
   }
-  for (const list of map.values()) list.sort((a, b) => a.sort - b.sort || a.created_at - b.created_at)
+  for (const list of map.values()) list.sort((a, b) => a.sort - b.sort || (a.created_at ?? 0) - (b.created_at ?? 0))
   return map
 }
 

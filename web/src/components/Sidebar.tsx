@@ -1,9 +1,32 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
-import { Link, useMatch, useNavigate } from 'react-router'
+import { Link, NavLink, useMatch, useNavigate } from 'react-router'
 import { api, type NodeType, type TreeNode } from '../api'
 import { childrenMap, untitled, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast } from './dialog'
-import { IconBack, IconBook, IconChevron, IconDoc, IconFolder, IconHome, IconLogout, IconMore, IconPlus, IconSearch, IconTrash } from './icons'
+import {
+  IconBack,
+  IconChevron,
+  IconDoc,
+  IconDocPlus,
+  IconDown,
+  IconEdit,
+  IconFolder,
+  IconFolderOpen,
+  IconFolderPlus,
+  IconHome,
+  IconIndent,
+  IconLogout,
+  IconMore,
+  IconOutdent,
+  IconPlus,
+  IconSearch,
+  IconSettings,
+  IconShare,
+  IconTrash,
+  IconUp,
+  Logo,
+  RepoMark,
+} from './icons'
 
 const EXPAND_KEY = 'qj.expanded'
 function loadExpanded(): Set<string> {
@@ -41,13 +64,13 @@ export default function Sidebar() {
     <aside className="sidebar" onClick={(e) => (e.target as Element).closest('a') && setSidebarOpen(false)}>
       <div className="sidebar-head">
         <Link to="/" className="brand">
-          <img src="/favicon.svg" alt="" width="24" height="24" />
-          <span>青简</span>
+          <Logo size={26} />
+          <span className="brand-name">青简</span>
         </Link>
       </div>
       <button className="search-trigger" onClick={() => setSearchOpen(true)}>
-        <IconSearch />
-        <span>搜索</span>
+        <IconSearch width={16} height={16} />
+        <span>搜索文档</span>
         <kbd>Ctrl K</kbd>
       </button>
 
@@ -56,33 +79,51 @@ export default function Sidebar() {
       ) : (
         <>
           <nav className="side-nav">
-            <Link to="/" className="side-link">
+            <NavLink to="/" end className="side-link">
               <IconHome /> 首页
-            </Link>
-            <Link to="/trash" className="side-link">
+            </NavLink>
+            <NavLink to="/shares" className="side-link">
+              <IconShare /> 分享管理
+            </NavLink>
+            <NavLink to="/trash" className="side-link">
               <IconTrash /> 回收站
-            </Link>
+            </NavLink>
           </nav>
           <div className="side-section">
             <span>知识库</span>
             <button className="icon-btn" title="新建知识库" onClick={newRepo}>
-              <IconPlus />
+              <IconPlus width={15} height={15} />
             </button>
           </div>
           <div className="side-scroll">
             {repos.map((r) => (
-              <Link key={r.id} to={`/r/${r.id}`} className="side-link">
-                <IconBook /> <span className="ellipsis">{r.name}</span>
-              </Link>
+              <NavLink key={r.id} to={`/r/${r.id}`} className="side-link">
+                <RepoMark repo={r} className="side-dot" /> <span className="ellipsis">{r.name}</span>
+                <span className="side-count">{r.doc_count || ''}</span>
+              </NavLink>
             ))}
-            {repos.length === 0 && <div className="side-empty">还没有知识库</div>}
+            {repos.length === 0 && (
+              <button className="side-empty-btn" onClick={newRepo}>
+                <IconPlus width={15} height={15} /> 新建第一个知识库
+              </button>
+            )}
           </div>
         </>
       )}
 
       <div className="sidebar-foot">
-        <button className="side-link" onClick={logout}>
-          <IconLogout /> 退出登录
+        <span className="avatar" aria-hidden>
+          管
+        </span>
+        <div className="foot-who">
+          <div className="foot-name">管理员</div>
+          <div className="foot-sub">个人知识库</div>
+        </div>
+        <NavLink to="/settings" className="icon-btn" title="设置">
+          <IconSettings width={17} height={17} />
+        </NavLink>
+        <button className="icon-btn" title="退出登录" onClick={logout}>
+          <IconLogout width={17} height={17} />
         </button>
       </div>
     </aside>
@@ -182,10 +223,12 @@ function RepoTree({ repoId }: { repoId: string }) {
     const i = siblings.findIndex((s) => s.id === n.id)
     const parent = n.parent_id ? byId.get(n.parent_id) : undefined
     openMenu(el, [
-      { label: '新建子文档', onClick: () => create(n.id, 'doc') },
-      { label: '新建子分组', onClick: () => create(n.id, 'group') },
+      { label: '新建子文档', icon: <IconDocPlus />, onClick: () => create(n.id, 'doc') },
+      { label: '新建子分组', icon: <IconFolderPlus />, onClick: () => create(n.id, 'group') },
       {
         label: '重命名',
+        icon: <IconEdit />,
+        divider: true,
         onClick: async () => {
           const t = await promptText('重命名', n.title)
           if (t === null) return
@@ -193,13 +236,15 @@ function RepoTree({ repoId }: { repoId: string }) {
           await loadTree(repoId)
         },
       },
-      { label: '上移', hidden: i <= 0, onClick: () => move(n, ...placement(siblings[i - 1], 'before')) },
-      { label: '下移', hidden: i >= siblings.length - 1, onClick: () => move(n, ...placement(siblings[i + 1], 'after')) },
-      { label: '移入上一项', hidden: i <= 0, onClick: () => move(n, ...placement(siblings[i - 1], 'inside')) },
-      { label: '移出到上一级', hidden: !parent, onClick: () => parent && move(n, ...placement(parent, 'after')) },
+      { label: '上移', icon: <IconUp />, hidden: i <= 0, onClick: () => move(n, ...placement(siblings[i - 1], 'before')) },
+      { label: '下移', icon: <IconDown />, hidden: i >= siblings.length - 1, onClick: () => move(n, ...placement(siblings[i + 1], 'after')) },
+      { label: '移入上一项', icon: <IconIndent />, hidden: i <= 0, onClick: () => move(n, ...placement(siblings[i - 1], 'inside')) },
+      { label: '移出到上一级', icon: <IconOutdent />, hidden: !parent, onClick: () => parent && move(n, ...placement(parent, 'after')) },
       {
         label: '删除',
+        icon: <IconTrash />,
         danger: true,
+        divider: true,
         onClick: async () => {
           const hasKids = (kids.get(n.id) ?? []).length > 0
           const ok = await confirmDialog(`确定删除「${untitled(n.title)}」${hasKids ? '及其所有子节点' : ''}吗？可在回收站中恢复。`, { danger: true, okText: '删除' })
@@ -266,7 +311,7 @@ function RepoTree({ repoId }: { repoId: string }) {
             >
               <IconChevron width={14} height={14} />
             </button>
-            {n.type === 'group' ? <IconFolder className="tree-icon" /> : <IconDoc className="tree-icon" />}
+            {n.type === 'group' ? open ? <IconFolderOpen className="tree-icon" /> : <IconFolder className="tree-icon" /> : <IconDoc className="tree-icon" />}
             <span className="tree-title">{n.type === 'group' ? n.title.trim() || '未命名分组' : untitled(n.title)}</span>
             <span className="tree-actions">
               <button
@@ -300,18 +345,19 @@ function RepoTree({ repoId }: { repoId: string }) {
     <>
       <div className="repo-head">
         <Link to="/" className="icon-btn" title="返回首页">
-          <IconBack />
+          <IconBack width={17} height={17} />
         </Link>
-        <Link to={`/r/${repoId}`} className="repo-name ellipsis">
-          {repo?.name ?? '知识库'}
+        <Link to={`/r/${repoId}`} className="repo-name">
+          {repo && <RepoMark repo={repo} className="side-dot" />}
+          <span>{repo?.name ?? '知识库'}</span>
         </Link>
         <button
           className="icon-btn"
           title="新建"
           onClick={(e) =>
             openMenu(e.currentTarget, [
-              { label: '新建文档', onClick: () => create(null, 'doc') },
-              { label: '新建分组', onClick: () => create(null, 'group') },
+              { label: '新建文档', icon: <IconDocPlus />, onClick: () => create(null, 'doc') },
+              { label: '新建分组', icon: <IconFolderPlus />, onClick: () => create(null, 'group') },
             ])
           }
         >
@@ -323,7 +369,7 @@ function RepoTree({ repoId }: { repoId: string }) {
         {nodes.length === 0 && (
           <div className="side-empty">
             <button className="btn" onClick={() => create(null, 'doc')}>
-              新建第一篇文档
+              <IconDocPlus width={16} height={16} /> 新建第一篇文档
             </button>
           </div>
         )}

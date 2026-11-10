@@ -59,7 +59,7 @@
 | 代码块（高亮、语言选择、复制） | P0 |
 | 数学公式（KaTeX，行内 + 块级） | P0 |
 | 图片（粘贴 / 拖拽 / 上传）、附件卡片 | P0 |
-| 提示块（info/warn/success/error）、折叠块 | P1 |
+| 提示块（info/warn/success/error）、折叠块（`> [!TYPE]` 语法，兼容 Obsidian / GitHub） | P1 |
 | 视频 / 音频、链接卡片、文档嵌入 | P2 |
 | Markdown 源码模式切换 | P1 |
 
@@ -69,8 +69,8 @@
 | Mermaid | 前端 mermaid.js | 正文 ```` ```mermaid ```` 代码块 | P0 |
 | Graphviz (DOT) | 前端 @viz-js/viz (WASM) | 正文 ```` ```dot ```` 代码块 | P0 |
 | 手绘画板 | Excalidraw | 场景 JSON + SVG 预览均为附件，正文 ```` ```excalidraw ```` 引用块 | P0 |
-| 流程图 / 架构图 | draw.io 嵌入（静态资源自托管） | 同上 | P1 |
-| 思维导图 | simple-mind-map / mind-elixir | 同上 | P1 |
+| 流程图 / 架构图 | draw.io 嵌入（默认 embed.diagrams.net，可配置自托管静态资源） | 同上 | P1 |
+| 思维导图 | simple-mind-map（原生 SVG 导出） | 同上 | P1 |
 | PlantUML | 可选 plantuml-server 容器 | 代码块 | P2 |
 | ECharts 图表 | 前端 | JSON 代码块 | P2 |
 
@@ -178,7 +178,7 @@
   Milkdown(Crepe) 编辑器 │ Excalidraw │ Mermaid │ Graphviz(WASM) │ 多维表格
         │ HTTPS（外部反向代理：Nginx / Caddy 等）
 Go 单二进制（内嵌前端静态资源）
-  ├─ REST API：auth / repos / nodes / docs / files / search / trash / export / shares / tables
+  ├─ REST API：auth / repos / nodes / docs / files / search / trash / export / shares / backup / tables
   ├─ SQLite（WAL）+ FTS5 trigram
   └─ /data/files（按 sha256 分目录存储）
 ```
@@ -193,6 +193,7 @@ doc_contents  node_id, markdown, updated_at
 doc_versions  id, node_id, title, markdown, created_at
 docs_fts      FTS5(node_id, title, body) tokenize=trigram
 attachments   id, sha256, name, mime, size, created_at
+backup_blobs  target, sha256                                    (已上传到各备份目标的附件，M2)
 shares        token, target_type(node|repo), target_id, view_id, password_hash, expires_at, enabled, options, view_count, created_at   (M2)
 bt_fields     id, table_node_id, name, type, options(json), sort                                                                    (M3)
 bt_views      id, table_node_id, name, type, config(json), sort                                                                     (M3)
@@ -203,8 +204,8 @@ bt_records    id, table_node_id, data(json), sort, created_at, updated_at       
 
 | 阶段 | 内容 |
 |---|---|
-| **M1 文档核心** | 管理密码、知识库与目录树、Crepe 编辑器、代码 / 公式 / Mermaid / Graphviz / Excalidraw、图片附件、全文搜索、回收站、历史版本、Markdown 导出、响应式布局、Docker 部署 |
-| **M2 分享与增强** | 分享（密码 / 有效期 / 管理）、draw.io、思维导图、提示块 / 折叠块、版本 diff、自动备份、深色模式、附件清理 |
+| **M1 文档核心** ✅ | 管理密码、知识库与目录树、Crepe 编辑器、代码 / 公式 / Mermaid / Graphviz / Excalidraw、图片附件、全文搜索、回收站、历史版本、Markdown 导出、响应式布局、Docker 部署 |
+| **M2 分享与增强** ✅ | 分享（密码 / 有效期 / 管理）、draw.io、思维导图、提示块 / 折叠块、版本 diff、自动备份、深色模式、附件清理 |
 | **M3 多维表格基础** | 表格 + 看板视图、P0 字段、筛选排序分组、复制粘贴、CSV、分享、嵌入文档 |
 | **M4 多维表格进阶** | 关联 / 查找 / 汇总 / 公式、画册 / 日历、Excel |
 | **M5** | 甘特、PlantUML、双链、AI 等 |

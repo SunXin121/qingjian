@@ -119,6 +119,9 @@ func (s *Server) storeUpload(src io.Reader, name, contentType string, limit int6
 	}
 	sum := hex.EncodeToString(h.Sum(nil))
 	dst := s.blobPath(sum)
+	// held until the attachment row exists so cleanup can't remove the blob in between
+	s.blobMu.Lock()
+	defer s.blobMu.Unlock()
 	if _, err := os.Stat(dst); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return nil, err

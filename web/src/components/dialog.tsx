@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 // Imperative dialogs (confirm / prompt) and toasts, mounted outside the React tree.
 
-function mount(render: (close: () => void) => ReactNode) {
+export function mount(render: (close: () => void) => ReactNode) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -157,35 +157,59 @@ export function toast(message: string, ms = 2600) {
 export interface MenuItem {
   label: string
   onClick: () => void
+  icon?: ReactNode
   danger?: boolean
   hidden?: boolean
+  /** draw a separator line above this item */
+  divider?: boolean
 }
 
 export function openMenu(anchor: HTMLElement, items: MenuItem[]) {
   const rect = anchor.getBoundingClientRect()
   mount((close) => {
     const visible = items.filter((i) => !i.hidden)
-    const width = 180
+    const width = 196
     const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
-    const estH = visible.length * 40 + 12
+    const estH = visible.length * 40 + visible.filter((i) => i.divider).length * 9 + 12
     const top = rect.bottom + estH > window.innerHeight - 8 ? Math.max(8, rect.top - estH - 4) : rect.bottom + 4
     return (
       <div className="menu-backdrop" onMouseDown={close} onTouchStart={(e) => e.target === e.currentTarget && close()}>
         <div className="menu" style={{ left, top, width }} onMouseDown={(e) => e.stopPropagation()}>
-          {visible.map((it) => (
-            <button
-              key={it.label}
-              className={'menu-item' + (it.danger ? ' danger' : '')}
-              onClick={() => {
-                close()
-                it.onClick()
-              }}
-            >
-              {it.label}
-            </button>
+          {visible.map((it, i) => (
+            <Fragment key={it.label}>
+              {it.divider && i > 0 && <div className="menu-sep" />}
+              <button
+                className={'menu-item' + (it.danger ? ' danger' : '')}
+                onClick={() => {
+                  close()
+                  it.onClick()
+                }}
+              >
+                {it.icon && <span className="menu-icon">{it.icon}</span>}
+                <span className="ellipsis">{it.label}</span>
+              </button>
+            </Fragment>
           ))}
         </div>
       </div>
     )
   })
+}
+
+/** Copy text to the clipboard; falls back to execCommand on plain-HTTP origins. */
+export async function copyText(text: string, done = '已复制') {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    if (!ok) return toast('复制失败，请手动复制')
+  }
+  toast(done)
 }

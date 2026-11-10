@@ -41,6 +41,23 @@ func main() {
 		MaxUploadMB:   envInt("QINGJIAN_MAX_UPLOAD_MB", 100),
 		TrustProxy:    env("QINGJIAN_TRUST_PROXY", "") == "1",
 		TrashDays:     int(envInt("QINGJIAN_TRASH_DAYS", 30)),
+		Version:       version,
+		DrawioURL:     os.Getenv("QINGJIAN_DRAWIO_URL"),
+		DrawioDir:     os.Getenv("QINGJIAN_DRAWIO_DIR"),
+		Backup: server.BackupConfig{
+			IntervalHours:  int(envInt("QINGJIAN_BACKUP_INTERVAL_HOURS", 24)),
+			Keep:           int(envInt("QINGJIAN_BACKUP_KEEP", 7)),
+			Dir:            os.Getenv("QINGJIAN_BACKUP_DIR"),
+			WebDAVURL:      os.Getenv("QINGJIAN_BACKUP_WEBDAV_URL"),
+			WebDAVUser:     os.Getenv("QINGJIAN_BACKUP_WEBDAV_USER"),
+			WebDAVPassword: os.Getenv("QINGJIAN_BACKUP_WEBDAV_PASSWORD"),
+			S3Endpoint:     os.Getenv("QINGJIAN_BACKUP_S3_ENDPOINT"),
+			S3Region:       os.Getenv("QINGJIAN_BACKUP_S3_REGION"),
+			S3Bucket:       os.Getenv("QINGJIAN_BACKUP_S3_BUCKET"),
+			S3Prefix:       os.Getenv("QINGJIAN_BACKUP_S3_PREFIX"),
+			S3AccessKey:    os.Getenv("QINGJIAN_BACKUP_S3_ACCESS_KEY"),
+			S3SecretKey:    os.Getenv("QINGJIAN_BACKUP_S3_SECRET_KEY"),
+		},
 	}
 
 	static, err := fs.Sub(web.Dist, "dist")

@@ -10,6 +10,9 @@ import Trash from './pages/Trash'
 import { StoreProvider, useStore } from './store'
 
 const DocPage = lazy(() => import('./pages/DocPage'))
+const SharePage = lazy(() => import('./pages/SharePage'))
+const Shares = lazy(() => import('./pages/Shares'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 function Shell() {
   const { sidebarOpen, setSidebarOpen } = useStore()
@@ -64,6 +67,8 @@ function AuthGate() {
         <Route element={<Shell />}>
           <Route index element={<Home />} />
           <Route path="trash" element={<Trash />} />
+          <Route path="shares" element={<Shares />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="r/:repoId" element={<RepoHome />} />
           <Route path="r/:repoId/d/:docId" element={<DocPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -77,6 +82,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* public share links live outside the admin session */}
+        <Route
+          path="s/:token/:docId?"
+          element={
+            <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+              <SharePage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<AuthGate />} />
       </Routes>
     </BrowserRouter>

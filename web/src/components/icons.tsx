@@ -1,25 +1,140 @@
-import type { SVGProps } from 'react'
+import {
+  Archive,
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  ArrowUpLeft,
+  BookMarked,
+  Check,
+  ChevronRight,
+  Clock,
+  Cloud,
+  Camera,
+  Copy,
+  CornerDownRight,
+  Database,
+  Download,
+  Ellipsis,
+  Eye,
+  FilePlus2,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Globe,
+  HardDrive,
+  History,
+  House,
+  Info,
+  KeyRound,
+  Library,
+  Link2,
+  Lock,
+  LogOut,
+  Menu,
+  PanelLeft,
+  Pencil,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Search,
+  Settings,
+  Share2,
+  Sparkles,
+  TableOfContents,
+  Trash2,
+  Unlink,
+  X,
+  type LucideIcon,
+  type LucideProps,
+} from 'lucide-react'
 
-const base = (d: React.ReactNode) =>
-  function Icon(props: SVGProps<SVGSVGElement>) {
-    return (
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
-        {d}
-      </svg>
-    )
+// One icon set (lucide) everywhere, with app-wide defaults for size and stroke.
+const wrap = (I: LucideIcon) =>
+  function Icon(props: LucideProps) {
+    return <I size={18} strokeWidth={1.75} aria-hidden {...props} />
   }
 
-export const IconDoc = base(<><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></>)
-export const IconFolder = base(<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />)
-export const IconBook = base(<><path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z" /><path d="M4 19V5M8 7h7" /></>)
-export const IconHome = base(<><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /></>)
-export const IconSearch = base(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></>)
-export const IconTrash = base(<><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></>)
-export const IconPlus = base(<path d="M12 5v14M5 12h14" />)
-export const IconMore = base(<><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></>)
-export const IconChevron = base(<path d="M9 6l6 6-6 6" />)
-export const IconMenu = base(<path d="M4 6h16M4 12h16M4 18h16" />)
-export const IconBack = base(<path d="M15 6l-6 6 6 6" />)
-export const IconHistory = base(<><path d="M3 12a9 9 0 103-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>)
-export const IconList = base(<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />)
-export const IconLogout = base(<><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" /></>)
+export type IconType = ReturnType<typeof wrap>
+
+export const IconDoc = wrap(FileText)
+export const IconFolder = wrap(Folder)
+export const IconFolderOpen = wrap(FolderOpen)
+export const IconBook = wrap(BookMarked)
+export const IconLibrary = wrap(Library)
+export const IconHome = wrap(House)
+export const IconSearch = wrap(Search)
+export const IconTrash = wrap(Trash2)
+export const IconPlus = wrap(Plus)
+export const IconMore = wrap(Ellipsis)
+export const IconChevron = wrap(ChevronRight)
+export const IconMenu = wrap(Menu)
+export const IconBack = wrap(ArrowLeft)
+export const IconHistory = wrap(History)
+export const IconList = wrap(TableOfContents)
+export const IconLogout = wrap(LogOut)
+export const IconShare = wrap(Share2)
+export const IconLink = wrap(Link2)
+export const IconUnlink = wrap(Unlink)
+export const IconSettings = wrap(Settings)
+export const IconLock = wrap(Lock)
+export const IconKey = wrap(KeyRound)
+export const IconDownload = wrap(Download)
+export const IconEdit = wrap(Pencil)
+export const IconCopy = wrap(Copy)
+export const IconSave = wrap(Save)
+export const IconCamera = wrap(Camera)
+export const IconDocPlus = wrap(FilePlus2)
+export const IconFolderPlus = wrap(FolderPlus)
+export const IconUp = wrap(ArrowUp)
+export const IconDown = wrap(ArrowDown)
+export const IconIndent = wrap(CornerDownRight)
+export const IconOutdent = wrap(ArrowUpLeft)
+export const IconClock = wrap(Clock)
+export const IconSparkles = wrap(Sparkles)
+export const IconArchive = wrap(Archive)
+export const IconRestore = wrap(RotateCcw)
+export const IconDatabase = wrap(Database)
+export const IconDisk = wrap(HardDrive)
+export const IconCloud = wrap(Cloud)
+export const IconCheck = wrap(Check)
+export const IconClose = wrap(X)
+export const IconEye = wrap(Eye)
+export const IconGlobe = wrap(Globe)
+export const IconInfo = wrap(Info)
+export const IconRefresh = wrap(RefreshCw)
+export const IconSidebar = wrap(PanelLeft)
+
+/** Brand mark: stacked bamboo slips (简) on an accent tile. Inline so it follows the theme. */
+export function Logo({ size = 26 }: { size?: number }) {
+  return (
+    <svg className="logo" width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <rect width="64" height="64" rx="16" fill="var(--logo)" />
+      <g fill="var(--on-logo)">
+        <rect x="14" y="15" width="7" height="34" rx="2.5" opacity="0.95" />
+        <rect x="24.5" y="15" width="7" height="34" rx="2.5" opacity="0.85" />
+        <rect x="35" y="15" width="7" height="34" rx="2.5" opacity="0.95" />
+        <rect x="45.5" y="15" width="5" height="34" rx="2.5" opacity="0.6" />
+      </g>
+      <path d="M10 25h44M10 39h44" stroke="var(--logo)" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** Stable accent tone (0–5) for a repo, so each knowledge base gets its own colour. */
+export function repoTone(id: string) {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return h % 6
+}
+
+/** Repo badge: its icon (emoji) if set, otherwise the first character of its name on a tinted tile. */
+export function RepoMark({ repo, className }: { repo: { id: string; name: string; icon?: string }; className: string }) {
+  const glyph = repo.icon?.trim() || Array.from(repo.name.trim())[0]?.toUpperCase() || '库'
+  return (
+    <span className={className} style={{ '--tone': `var(--tone-${repoTone(repo.id)})` } as React.CSSProperties} aria-hidden>
+      {glyph}
+    </span>
+  )
+}

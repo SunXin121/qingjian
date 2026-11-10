@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,12 @@ type Config struct {
 	MaxUploadMB   int64
 	TrustProxy    bool
 	TrashDays     int
+	Version       string
+	// draw.io editor: either a URL (default embed.diagrams.net) or a local directory with
+	// the draw.io webapp, which is then served from /drawio/.
+	DrawioURL string
+	DrawioDir string
+	Backup    BackupConfig
 }
 
 type Server struct {
@@ -30,6 +37,8 @@ type Server struct {
 	pwFingerprint []byte
 	storedHash    string
 	limiter       *loginLimiter
+	blobMu        sync.Mutex // serialises blob creation against attachment cleanup
+	backup        *backupRunner
 }
 
 func New(cfg Config, static fs.FS) (*Server, error) {
@@ -48,7 +57,12 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 	if err := s.initAuth(); err != nil {
 		return nil, err
 	}
+	if s.backup, err = newBackupRunner(s, cfg.Backup); err != nil {
+		db.Close()
+		return nil, err
+	}
 	go s.housekeeping()
+	go s.backup.loop()
 	return s, nil
 }
 
@@ -90,7 +104,29 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/trash/{kind}/{id}", a(s.purgeTrash))
 
 	mux.Handle("POST /api/files", a(s.uploadFile))
+	mux.Handle("GET /api/files/stats", a(s.storageStats))
+	mux.Handle("POST /api/files/cleanup", a(s.cleanupFiles))
 	mux.HandleFunc("GET /files/{id}/{name...}", s.serveFile)
+
+	mux.Handle("GET /api/shares", a(s.listShares))
+	mux.Handle("POST /api/shares", a(s.createShare))
+	mux.Handle("PATCH /api/shares/{token}", a(s.updateShare))
+	mux.Handle("POST /api/shares/{token}/regenerate", a(s.regenerateShare))
+	mux.Handle("DELETE /api/shares/{token}", a(s.deleteShare))
+
+	// visitor endpoints: no admin session, guarded per share
+	mux.HandleFunc("GET /api/s/{token}", s.shareInfo)
+	mux.HandleFunc("POST /api/s/{token}/auth", s.shareAuth)
+	mux.HandleFunc("GET /api/s/{token}/tree", s.shareTree)
+	mux.HandleFunc("GET /api/s/{token}/docs/{id}", s.shareDoc)
+
+	mux.Handle("GET /api/backup", a(s.backupStatus))
+	mux.Handle("POST /api/backup/run", a(s.backupRun))
+	mux.Handle("GET /api/config", a(s.clientConfig))
+
+	if s.cfg.DrawioDir != "" {
+		mux.Handle("GET /drawio/", http.StripPrefix("/drawio/", http.FileServer(http.Dir(s.cfg.DrawioDir))))
+	}
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { httpError(w, http.StatusNotFound, "not found") })
@@ -105,6 +141,8 @@ func securityHeaders(h http.Handler) http.Handler {
 		hd.Set("X-Content-Type-Options", "nosniff")
 		hd.Set("Referrer-Policy", "same-origin")
 		hd.Set("X-Frame-Options", "SAMEORIGIN")
+		// a personal knowledge base (and its share links) should never end up in search engines
+		hd.Set("X-Robots-Tag", "noindex, nofollow")
 		h.ServeHTTP(w, r)
 	})
 }
@@ -135,6 +173,23 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	serveStaticFile(w, r, s.static, "index.html")
+}
+
+// clientConfig exposes the settings the frontend needs.
+func (s *Server) clientConfig(w http.ResponseWriter, r *http.Request) {
+	drawio := s.cfg.DrawioURL
+	if s.cfg.DrawioDir != "" {
+		drawio = "/drawio/"
+	}
+	if drawio == "" {
+		drawio = "https://embed.diagrams.net/"
+	}
+	writeJSON(w, 200, map[string]any{
+		"version":       s.cfg.Version,
+		"drawio_url":    drawio,
+		"max_upload_mb": s.cfg.MaxUploadMB,
+		"trash_days":    s.cfg.TrashDays,
+	})
 }
 
 func (s *Server) housekeeping() {

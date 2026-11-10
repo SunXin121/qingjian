@@ -1,10 +1,36 @@
-// Rendering of "diagram" code blocks (mermaid / graphviz / excalidraw) into previews.
+// Rendering of "diagram" code blocks (mermaid / graphviz / excalidraw / drawio / mindmap) into previews.
 // Heavy libraries are loaded lazily the first time they are needed.
 
 export interface DrawingRef {
   scene?: string
   svg?: string
   new?: string
+}
+
+/** Drawing blocks: the block body is JSON pointing at the source + SVG preview attachments. */
+export type DrawingKind = 'excalidraw' | 'drawio' | 'mindmap'
+
+export const DRAWINGS: Record<DrawingKind, { label: string; empty: string; svgName: string; sceneName: string }> = {
+  excalidraw: { label: '画板', empty: '空白画板 · 点击开始绘制', svgName: 'drawing.svg', sceneName: 'scene.excalidraw' },
+  drawio: { label: '流程图', empty: '空白流程图 · 点击用 draw.io 绘制', svgName: 'diagram.svg', sceneName: 'diagram.drawio' },
+  mindmap: { label: '思维导图', empty: '空白思维导图 · 点击开始编辑', svgName: 'mindmap.svg', sceneName: 'mindmap.json' },
+}
+
+export const isDrawingKind = (k: string): k is DrawingKind => k in DRAWINGS
+
+export const prefersDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+
+/** Decode a data: URL (base64 or percent-encoded) into UTF-8 text. */
+export function dataURLToText(url: string): string {
+  const comma = url.indexOf(',')
+  const meta = url.slice(0, comma)
+  const body = url.slice(comma + 1)
+  if (/;base64$/i.test(meta)) {
+    const bin = atob(body)
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  }
+  return decodeURIComponent(body)
 }
 
 export const DIAGRAM_TEMPLATES: Record<string, string> = {
@@ -27,7 +53,7 @@ function getMermaid() {
     m.default.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
-      theme: 'default',
+      theme: prefersDark() ? 'dark' : 'default',
       fontFamily: 'inherit',
     })
     return m.default
@@ -44,7 +70,7 @@ function remember(key: string, value: string) {
 }
 
 async function renderMermaid(code: string): Promise<string> {
-  const key = 'mermaid:' + code
+  const key = 'mermaid:' + (prefersDark() ? 'dark:' : '') + code
   if (cache.has(key)) return cache.get(key)!
   const mermaid = await getMermaid()
   const id = `ink-mmd-${++seq}`
@@ -71,7 +97,7 @@ async function renderDot(code: string): Promise<string> {
   const viz = await getViz()
   try {
     const svg: string = viz.renderString(code, { format: 'svg', engine: 'dot' })
-    return remember(key, `<div class="ink-diagram">${svg.replace(/^<\?xml[^>]*>\s*(<!DOCTYPE[^>]*>)?/, '')}</div>`)
+    return remember(key, `<div class="ink-diagram dot">${svg.replace(/^<\?xml[^>]*>\s*(<!DOCTYPE[^>]*>)?/, '')}</div>`)
   } catch (e: any) {
     return errorBox('Graphviz 语法错误', String(e?.message ?? e))
   }
@@ -87,22 +113,23 @@ export function parseDrawing(content: string): DrawingRef {
   }
 }
 
-function drawingPreview(content: string): HTMLElement {
+function drawingPreview(content: string, kind: DrawingKind): HTMLElement {
   const ref = parseDrawing(content)
+  const meta = DRAWINGS[kind]
   const wrap = document.createElement('div')
-  wrap.className = 'ink-drawing'
+  wrap.className = 'ink-drawing ink-drawing-' + kind
   wrap.setAttribute('data-ink-drawing', content)
+  wrap.setAttribute('data-ink-kind', kind)
   if (ref.svg) {
     const img = document.createElement('img')
-    img.src = `/files/${ref.svg}/drawing.svg`
-    img.alt = '画板'
-    img.setAttribute('data-ink-drawing', content)
+    img.src = `/files/${ref.svg}/${meta.svgName}`
+    img.alt = meta.label
+    img.loading = 'lazy'
     wrap.appendChild(img)
   } else {
     const empty = document.createElement('div')
     empty.className = 'ink-drawing-empty'
-    empty.setAttribute('data-ink-drawing', content)
-    empty.textContent = '空白画板 · 点击开始绘制'
+    empty.textContent = meta.empty
     wrap.appendChild(empty)
   }
   return wrap
@@ -125,7 +152,9 @@ export function renderPreview(
       renderDot(content).then(apply)
       return undefined
     case 'excalidraw':
-      return drawingPreview(content)
+    case 'drawio':
+    case 'mindmap':
+      return drawingPreview(content, lang)
   }
   return null
 }

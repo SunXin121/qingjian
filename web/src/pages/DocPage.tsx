@@ -1,33 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 import { api, ApiError, formatTime, type Doc } from '../api'
 import { confirmDialog, openMenu, toast } from '../components/dialog'
-import { IconHistory, IconList, IconMore } from '../components/icons'
+import { IconCamera, IconChevron, IconDownload, IconHistory, IconList, IconMore, IconShare, IconTrash, RepoMark } from '../components/icons'
+import Outline, { parseHeadings, type Heading } from '../components/Outline'
 import PageHeader from '../components/PageHeader'
+import { openShareDialog } from '../components/ShareDialog'
 import VersionsPanel from '../components/VersionsPanel'
 import Editor from '../editor/Editor'
 import { useStore } from '../store'
 
 type Status = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict'
-
-interface Heading {
-  level: number
-  text: string
-  index: number
-}
-
-function parseHeadings(md: string): Heading[] {
-  const out: Heading[] = []
-  let fence = false
-  let index = 0
-  for (const line of md.split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) fence = !fence
-    if (fence) continue
-    const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line)
-    if (m) out.push({ level: m[1].length, text: m[2].replace(/[*_`~]|\\(?=.)/g, ''), index: index++ })
-  }
-  return out
-}
 
 export default function DocPage() {
   const { repoId, docId } = useParams() as { repoId: string; docId: string }
@@ -44,6 +27,7 @@ export default function DocPage() {
   }, [])
   const [savedAt, setSavedAt] = useState(0)
   const [headings, setHeadings] = useState<Heading[]>([])
+  const [stats, setStats] = useState('')
   const [outlineOpen, setOutlineOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [mountKey, setMountKey] = useState(0)
@@ -69,6 +53,7 @@ export default function DocPage() {
       setStatus('saved')
       setSavedAt(d.content_updated_at)
       setHeadings(parseHeadings(d.markdown))
+      setStats(d.markdown)
       setMountKey((k) => k + 1)
     } catch (e: any) {
       setError(e instanceof ApiError && e.status === 404 ? '文档不存在或已被删除' : e.message)
@@ -159,27 +144,35 @@ export default function DocPage() {
       md.current = m
       schedule()
       clearTimeout(headingsTimer.current)
-      headingsTimer.current = window.setTimeout(() => setHeadings(parseHeadings(m)), 400)
+      headingsTimer.current = window.setTimeout(() => {
+        setHeadings(parseHeadings(m))
+        setStats(m)
+      }, 400)
     },
     [schedule],
   )
 
-  const jumpTo = (h: Heading) => {
-    const els = document.querySelectorAll('.doc-main .ink-editor .ProseMirror > :is(h1,h2,h3,h4,h5,h6)')
-    els[h.index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    setOutlineOpen(false)
-  }
-
-  const minLevel = useMemo(() => Math.min(6, ...headings.map((h) => h.level)), [headings])
   const repo = repos.find((r) => r.id === repoId)
+
+  const share = () => openShareDialog({ target_type: 'node', target_id: docId, title: titleRef.current || '无标题文档' })
 
   const more = (el: HTMLElement) =>
     openMenu(el, [
-      { label: '导出 Markdown', onClick: () => (location.href = `/api/docs/${docId}/export`) },
-      { label: '保存版本快照', onClick: () => save({ snapshot: true }).then(() => toast('已保存快照')) },
+      { label: '分享', icon: <IconShare />, onClick: share },
+      {
+        label: '导出 Markdown (zip)',
+        icon: <IconDownload />,
+        onClick: async () => {
+          await save()
+          location.href = `/api/docs/${docId}/export`
+        },
+      },
+      { label: '保存版本快照', icon: <IconCamera />, onClick: () => save({ snapshot: true }).then(() => toast('已保存快照')) },
       {
         label: '删除文档',
+        icon: <IconTrash />,
         danger: true,
+        divider: true,
         onClick: async () => {
           if (!(await confirmDialog('确定删除这篇文档及其子文档吗？可在回收站中恢复。', { danger: true, okText: '删除' }))) return
           dirty.current = false
@@ -211,7 +204,14 @@ export default function DocPage() {
   return (
     <div className="page doc-page">
       <PageHeader>
-        <span className="crumb ellipsis">{repo?.name}</span>
+        <nav className="crumbs">
+          <Link to={`/r/${repoId}`} className="crumb-link">
+            {repo && <RepoMark repo={repo} className="side-dot sm" />}
+            <span className="ellipsis">{repo?.name}</span>
+          </Link>
+          <IconChevron className="crumb-sep" width={14} height={14} />
+          <span className="crumb-cur ellipsis">{title.trim() || '无标题文档'}</span>
+        </nav>
         <span className={'save-status ' + status}>{statusText[status]}</span>
         <span className="spacer" />
         {headings.length > 0 && (
@@ -219,6 +219,9 @@ export default function DocPage() {
             <IconList />
           </button>
         )}
+        <button className="icon-btn hide-mobile" title="分享" onClick={share}>
+          <IconShare />
+        </button>
         <button
           className="icon-btn"
           title="历史版本"
@@ -271,23 +274,15 @@ export default function DocPage() {
             <Editor key={doc.id + ':' + mountKey} value={doc.markdown} onChange={onChange} />
           </div>
         </main>
-        {headings.length > 0 && (
-          <aside className={'outline' + (outlineOpen ? ' open' : '')} onClick={(e) => e.target === e.currentTarget && setOutlineOpen(false)}>
-            <div className="outline-inner">
-              <div className="outline-head">大纲</div>
-              {headings.map((h) => (
-                <button key={h.index} className="outline-item" style={{ paddingLeft: 8 + (h.level - minLevel) * 14 }} onClick={() => jumpTo(h)}>
-                  {h.text}
-                </button>
-              ))}
-            </div>
-          </aside>
-        )}
+        <Outline headings={headings} open={outlineOpen} onClose={() => setOutlineOpen(false)} />
       </div>
+
+      <DocStats markdown={stats} updatedAt={savedAt} />
 
       {versionsOpen && (
         <VersionsPanel
           docId={docId}
+          current={{ title: titleRef.current, markdown: md.current }}
           onClose={() => setVersionsOpen(false)}
           onRestored={() => {
             setVersionsOpen(false)
@@ -296,5 +291,33 @@ export default function DocPage() {
         />
       )}
     </div>
+  )
+}
+
+/** Count words the way Chinese editors do: each CJK character is a word, latin runs count once. */
+function countWords(md: string) {
+  const text = md
+    .replace(/```(excalidraw|drawio|mindmap)\n[\s\S]*?\n```/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\]\([^)]*\)/g, ']')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[#>*_`~|[\]-]/g, ' ')
+  const cjk = text.match(/[\u3400-\u9fff\uf900-\ufaff]/g)?.length ?? 0
+  const latin = text.replace(/[\u3400-\u9fff\uf900-\ufaff]/g, ' ').match(/[A-Za-z0-9\u00C0-\u024F]+(?:['’.-][A-Za-z0-9]+)*/g)?.length ?? 0
+  const chars = text.replace(/\s/g, '').length
+  return { words: cjk + latin, chars }
+}
+
+function DocStats({ markdown, updatedAt }: { markdown: string; updatedAt: number }) {
+  const { words, chars } = countWords(markdown)
+  const minutes = Math.max(1, Math.round(words / 400))
+  return (
+    <footer className="doc-stats">
+      <span>{words.toLocaleString()} 字</span>
+      <span>{chars.toLocaleString()} 字符</span>
+      <span>约 {minutes} 分钟读完</span>
+      <span className="spacer" />
+      {updatedAt > 0 && <span className="hide-mobile">更新于 {new Date(updatedAt).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })}</span>}
+    </footer>
   )
 }

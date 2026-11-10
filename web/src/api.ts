@@ -66,6 +66,82 @@ export interface Attachment {
   url: string
 }
 
+export interface Share {
+  token: string
+  target_type: 'node' | 'repo'
+  target_id: string
+  has_password: boolean
+  expires_at: number | null
+  enabled: boolean
+  view_count: number
+  created_at: number
+  updated_at: number
+  title: string
+  repo_id: string
+  repo_name: string
+  target_alive: boolean
+}
+
+export interface ShareInfo {
+  token: string
+  type: 'node' | 'repo'
+  title: string
+  expires_at: number | null
+  doc_id?: string
+  repo?: { name: string; description: string; updated_at: number }
+}
+
+export interface PublicNode {
+  id: string
+  parent_id: string | null
+  type: NodeType
+  title: string
+  sort: number
+  updated_at: number
+}
+
+export interface PublicDoc {
+  id: string
+  title: string
+  markdown: string
+  updated_at: number
+}
+
+export interface StorageStats {
+  attachments: number
+  blobs: number
+  logical_bytes: number
+  stored_bytes: number
+  unreferenced: number
+  unreferenced_bytes: number
+  docs: number
+  versions: number
+  db_bytes: number
+  grace_hours: number
+}
+
+export interface BackupStatus {
+  enabled: boolean
+  interval_hours: number
+  keep: number
+  targets: string[]
+  running: boolean
+  last: null | {
+    started_at: number
+    finished_at: number
+    ok: boolean
+    error?: string
+    results: { target: string; ok: boolean; error?: string; snapshot?: string; files: number }[]
+  }
+}
+
+export interface ClientConfig {
+  version: string
+  drawio_url: string
+  max_upload_mb: number
+  trash_days: number
+}
+
 export class ApiError extends Error {
   status: number
   data: any
@@ -94,7 +170,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     data = text
   }
   if (!res.ok) {
-    if (res.status === 401 && !url.startsWith('/api/auth/')) authEvents.dispatchEvent(new Event('unauthorized'))
+    if (res.status === 401 && !url.startsWith('/api/auth/') && !url.startsWith('/api/s/')) authEvents.dispatchEvent(new Event('unauthorized'))
     throw new ApiError(res.status, data?.error || res.statusText || '请求失败', data)
   }
   return data as T
@@ -135,7 +211,41 @@ export const api = {
   trash: () => request<TrashItem[]>('GET', '/api/trash'),
   restoreTrash: (kind: string, id: string) => request('POST', `/api/trash/${kind}/${id}/restore`),
   purgeTrash: (kind: string, id: string) => request('DELETE', `/api/trash/${kind}/${id}`),
+
+  shares: (target?: { target_type: string; target_id: string }) =>
+    request<Share[]>('GET', '/api/shares' + (target ? `?target_type=${target.target_type}&target_id=${target.target_id}` : '')),
+  createShare: (body: { target_type: 'node' | 'repo'; target_id: string; password?: string; expires_at?: number | null }) =>
+    request<Share>('POST', '/api/shares', body),
+  updateShare: (token: string, patch: { password?: string; expires_at?: number | null; enabled?: boolean }) =>
+    request<Share>('PATCH', `/api/shares/${token}`, patch),
+  regenerateShare: (token: string) => request<Share>('POST', `/api/shares/${token}/regenerate`),
+  deleteShare: (token: string) => request('DELETE', `/api/shares/${token}`),
+
+  storageStats: () => request<StorageStats>('GET', '/api/files/stats'),
+  cleanupFiles: () => request<{ removed: number; freed_bytes: number }>('POST', '/api/files/cleanup'),
+  backupStatus: () => request<BackupStatus>('GET', '/api/backup'),
+  runBackup: () => request('POST', '/api/backup/run'),
+  config: () => request<ClientConfig>('GET', '/api/config'),
 }
+
+/** Visitor-side API for share links (no admin session). */
+export const shareApi = {
+  info: (token: string) => request<ShareInfo>('GET', `/api/s/${token}`),
+  auth: (token: string, password: string) => request('POST', `/api/s/${token}/auth`, { password }),
+  tree: (token: string) => request<PublicNode[]>('GET', `/api/s/${token}/tree`),
+  doc: (token: string, id: string) => request<PublicDoc>('GET', `/api/s/${token}/docs/${id}`),
+}
+
+let configP: Promise<ClientConfig> | null = null
+export function getConfig() {
+  configP ??= api.config().catch((e) => {
+    configP = null
+    throw e
+  })
+  return configP
+}
+
+export const shareURL = (token: string) => `${location.origin}/s/${token}`
 
 export function uploadFile(file: Blob, name?: string, onProgress?: (ratio: number) => void): Promise<Attachment> {
   return new Promise((resolve, reject) => {

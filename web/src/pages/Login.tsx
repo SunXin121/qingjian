@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
+import { IconLock, Logo } from '../components/icons'
 
 export default function Login({ onLogin }: { onLogin: () => void }) {
   const [pw, setPw] = useState('')
@@ -23,14 +24,19 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <img src="/favicon.svg" alt="" width="48" height="48" />
+        <span className="login-logo">
+          <Logo size={40} />
+        </span>
         <h1>青简</h1>
-        <p className="muted">个人知识库</p>
+        <p className="muted">落笔成简，安放每一条想法</p>
         <input type="password" autoFocus autoComplete="current-password" placeholder="管理密码" value={pw} onChange={(e) => setPw(e.target.value)} />
         {err && <div className="login-error">{err}</div>}
         <button className="btn primary block" disabled={busy || !pw}>
           {busy ? '登录中…' : '进入'}
         </button>
+        <div className="login-foot">
+          <IconLock width={13} height={13} /> 私有知识库 · 数据由你掌控
+        </div>
       </form>
     </div>
   )
