@@ -1,22 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { api, formatTime, type RecentDoc, type Repo } from '../api'
-import { confirmDialog, openMenu, promptForm, toast } from '../components/dialog'
+import { confirmDialog, openMenu, toast } from '../components/dialog'
+import { editRepoDialog } from '../components/RepoDialog'
 import { IconClock, IconDoc, IconDownload, IconEdit, IconLibrary, IconMore, IconPlus, IconSearch, IconShare, IconSparkles, IconTrash, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { openShareDialog } from '../components/ShareDialog'
 import { untitled, useStore } from '../store'
-
-export async function editRepoDialog(repo?: Repo) {
-  return promptForm(
-    repo ? '编辑知识库' : '新建知识库',
-    [
-      { name: 'name', label: '名称', value: repo?.name, placeholder: '例如：读书笔记', required: true },
-      { name: 'description', label: '简介', value: repo?.description, placeholder: '可选', multiline: true },
-    ],
-    repo ? '保存' : '创建',
-  )
-}
 
 export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?: () => void) {
   openMenu(el, [
@@ -26,7 +16,7 @@ export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?
       onClick: async () => {
         const v = await editRepoDialog(r)
         if (!v) return
-        await api.updateRepo(r.id, { name: v.name, description: v.description })
+        await api.updateRepo(r.id, v)
         after()
       },
     },
@@ -61,7 +51,7 @@ export default function Home() {
   const create = async () => {
     const v = await editRepoDialog()
     if (!v) return
-    const r = await api.createRepo(v.name, v.description)
+    const r = await api.createRepo(v.name, v.description, v.icon)
     await loadRepos()
     navigate(`/r/${r.id}`)
   }

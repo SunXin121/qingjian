@@ -3,6 +3,7 @@ import { Link, NavLink, useMatch, useNavigate } from 'react-router'
 import { api, type NodeType, type TreeNode } from '../api'
 import { childrenMap, untitled, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast } from './dialog'
+import { editRepoDialog } from './RepoDialog'
 import {
   IconBack,
   IconChevron,
@@ -53,9 +54,9 @@ export default function Sidebar() {
   }
 
   const newRepo = async () => {
-    const name = await promptText('新建知识库', '', '知识库名称')
-    if (!name) return
-    const r = await api.createRepo(name)
+    const value = await editRepoDialog()
+    if (!value) return
+    const r = await api.createRepo(value.name, value.description, value.icon)
     await loadRepos()
     navigate(`/r/${r.id}`)
   }
@@ -112,13 +113,6 @@ export default function Sidebar() {
       )}
 
       <div className="sidebar-foot">
-        <span className="avatar" aria-hidden>
-          管
-        </span>
-        <div className="foot-who">
-          <div className="foot-name">管理员</div>
-          <div className="foot-sub">个人知识库</div>
-        </div>
         <NavLink to="/settings" className="icon-btn" title="设置">
           <IconSettings width={17} height={17} />
         </NavLink>

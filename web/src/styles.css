@@ -164,6 +164,24 @@ mark {
   background: transparent;
 }
 
+/* Keep shared UI icons aligned with text, including inline metadata. */
+.lucide {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Compact controls center a single text line, independent of body leading. */
+.btn,
+.icon-btn,
+.search-trigger,
+.side-link,
+.side-empty-btn,
+.tree-toggle,
+.menu-item {
+  line-height: 1;
+}
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;
@@ -410,6 +428,7 @@ mark {
   color: var(--tone, var(--tone-0));
   font-size: 11px;
   font-weight: 650;
+  line-height: 1;
 }
 .side-dot.sm {
   width: 18px;
@@ -451,40 +470,14 @@ mark {
 .sidebar-foot {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 10px 10px 14px;
-  padding-bottom: calc(10px + var(--safe-b));
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 10px calc(8px + var(--safe-b));
   border-top: 1px solid var(--c-border);
 }
 .sidebar-foot .icon-btn.active {
   background: var(--c-active);
   color: var(--c-primary);
-}
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--logo);
-  color: var(--on-logo);
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: 0 0 0 2px var(--c-side), 0 0 0 3px color-mix(in srgb, var(--c-primary) 25%, transparent);
-}
-.foot-who {
-  flex: 1;
-  min-width: 0;
-  line-height: 1.3;
-}
-.foot-name {
-  font-weight: 600;
-  font-size: 13px;
-}
-.foot-sub {
-  font-size: 11.5px;
-  color: var(--c-text-3);
 }
 .repo-head {
   display: flex;
@@ -511,6 +504,12 @@ mark {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Text glyphs sit slightly below their line-box centre beside the fixed-size icons. */
+.repo-name > span:last-child,
+.tree-title {
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 /* ---------- tree ---------- */
@@ -801,6 +800,7 @@ mark {
   color: var(--tone, var(--tone-0));
   font-size: 18px;
   font-weight: 650;
+  line-height: 1;
 }
 .repo-card-main {
   flex: 1;
@@ -1501,6 +1501,7 @@ a.toc-row:hover > .ellipsis {
 }
 .field input,
 .field textarea,
+.repo-icon-input input,
 .login-card input {
   width: 100%;
   padding: 8px 11px;
@@ -1515,11 +1516,13 @@ a.toc-row:hover > .ellipsis {
 }
 .field input::placeholder,
 .field textarea::placeholder,
+.repo-icon-input input::placeholder,
 .login-card input::placeholder {
   color: var(--c-placeholder);
 }
 .field input:focus,
 .field textarea:focus,
+.repo-icon-input input:focus,
 .login-card input:focus {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px var(--c-primary-ring);
@@ -1565,6 +1568,8 @@ a.toc-row:hover > .ellipsis {
 }
 .menu-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   color: var(--c-text-3);
 }
@@ -3013,6 +3018,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  vertical-align: middle;
 }
 
 /* repo landing */
@@ -3033,6 +3039,7 @@ code {
   color: var(--tone, var(--tone-0));
   font-size: 24px;
   font-weight: 650;
+  line-height: 1;
 }
 .repo-hero-main {
   min-width: 0;
@@ -3136,4 +3143,67 @@ code {
     font-size: 20px;
     border-radius: 13px;
   }
+}
+
+/* Knowledge base icon editor */
+.repo-icon-field > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.repo-icon-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.repo-icon-input input {
+  flex: 1;
+  min-width: 0;
+}
+.repo-icon-preview {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--tone, var(--tone-0)) 15%, transparent);
+  color: var(--tone, var(--tone-0));
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+.repo-icon-hint {
+  margin: 6px 0 10px;
+  color: var(--c-text-3);
+  font-size: 12px;
+}
+.repo-icon-hint.invalid {
+  color: var(--c-danger);
+}
+.repo-icon-options {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+}
+.repo-icon-option {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.repo-icon-option:hover {
+  background: var(--c-hover-strong);
+}
+.repo-icon-option.selected {
+  border-color: var(--c-primary);
+  background: var(--c-primary-soft);
 }

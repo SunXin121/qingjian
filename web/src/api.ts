@@ -183,7 +183,7 @@ export const api = {
 
   repos: () => request<Repo[]>('GET', '/api/repos'),
   repo: (id: string) => request<Repo>('GET', `/api/repos/${id}`),
-  createRepo: (name: string, description = '') => request<Repo>('POST', '/api/repos', { name, description }),
+  createRepo: (name: string, description = '', icon = '') => request<Repo>('POST', '/api/repos', { name, description, icon }),
   updateRepo: (id: string, patch: Partial<Pick<Repo, 'name' | 'description' | 'icon'>>) =>
     request<Repo>('PATCH', `/api/repos/${id}`, patch),
   deleteRepo: (id: string) => request('DELETE', `/api/repos/${id}`),
