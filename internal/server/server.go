@@ -25,7 +25,9 @@ type Config struct {
 	// the draw.io webapp, which is then served from /drawio/.
 	DrawioURL string
 	DrawioDir string
-	Backup    BackupConfig
+	// PlantUML: base URL of a plantuml-server (e.g. http://plantuml:8080); empty disables it.
+	PlantUMLURL string
+	Backup      BackupConfig
 }
 
 type Server struct {
@@ -39,6 +41,7 @@ type Server struct {
 	limiter       *loginLimiter
 	blobMu        sync.Mutex // serialises blob creation against attachment cleanup
 	backup        *backupRunner
+	puml          pumlCache
 	stop          chan struct{}  // closed by Close: background workers return
 	workers       sync.WaitGroup // workers that use the database (Close waits for them)
 	indexDone     chan struct{}
@@ -141,10 +144,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/s/{token}/tree", s.shareTree)
 	mux.HandleFunc("GET /api/s/{token}/docs/{id}", s.shareDoc)
 	mux.HandleFunc("GET /api/s/{token}/tables/{id}", s.shareTable)
+	mux.HandleFunc("POST /api/s/{token}/plantuml", s.sharePlantUML)
 
 	mux.Handle("GET /api/backup", a(s.backupStatus))
 	mux.Handle("POST /api/backup/run", a(s.backupRun))
 	mux.Handle("GET /api/config", a(s.clientConfig))
+	mux.Handle("POST /api/plantuml", a(s.plantUML))
 
 	if s.cfg.DrawioDir != "" {
 		mux.Handle("GET /drawio/", http.StripPrefix("/drawio/", http.FileServer(http.Dir(s.cfg.DrawioDir))))
@@ -211,6 +216,7 @@ func (s *Server) clientConfig(w http.ResponseWriter, r *http.Request) {
 		"drawio_url":    drawio,
 		"max_upload_mb": s.cfg.MaxUploadMB,
 		"trash_days":    s.cfg.TrashDays,
+		"plantuml":      s.cfg.PlantUMLURL != "",
 	})
 }
 

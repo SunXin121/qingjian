@@ -13,6 +13,7 @@ services:
       QINGJIAN_TRASH_DAYS: ${QINGJIAN_TRASH_DAYS:-30}
       QINGJIAN_DRAWIO_URL: ${QINGJIAN_DRAWIO_URL:-}
       QINGJIAN_DRAWIO_DIR: ${QINGJIAN_DRAWIO_DIR:-}
+      QINGJIAN_PLANTUML_URL: ${QINGJIAN_PLANTUML_URL:-}
       QINGJIAN_BACKUP_INTERVAL_HOURS: ${QINGJIAN_BACKUP_INTERVAL_HOURS:-24}
       QINGJIAN_BACKUP_KEEP: ${QINGJIAN_BACKUP_KEEP:-7}
       QINGJIAN_BACKUP_DIR: ${QINGJIAN_BACKUP_DIR:-}
@@ -33,3 +34,9 @@ services:
       # - ./backup:/backup
       # 离线 draw.io（配合 QINGJIAN_DRAWIO_DIR=/drawio）
       # - ./drawio:/drawio:ro
+
+  # PlantUML 渲染服务（可选）：取消注释，并在 .env 中设置 QINGJIAN_PLANTUML_URL=http://plantuml:8080
+  # plantuml:
+  #   image: plantuml/plantuml-server:jetty
+  #   container_name: qingjian-plantuml
+  #   restart: unless-stopped

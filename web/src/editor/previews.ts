@@ -2,6 +2,8 @@
 // textDiagram.ts) and drawing blocks (excalidraw / drawio / mindmap, via Crepe's renderPreview).
 // Heavy libraries are loaded lazily the first time they are needed.
 
+import { renderPlantUML } from '../api'
+
 export interface DrawingRef {
   scene?: string
   svg?: string
@@ -36,6 +38,7 @@ export function dataURLToText(url: string): string {
 
 export const DIAGRAM_TEMPLATES: Record<string, string> = {
   mermaid: 'graph TD\n  A[开始] --> B{条件判断}\n  B -->|是| C[处理 A]\n  B -->|否| D[处理 B]\n  C --> E[结束]\n  D --> E',
+  plantuml: '@startuml\nactor 用户\n用户 -> 浏览器: 打开文档\n浏览器 -> 服务端: 请求数据\n服务端 --> 浏览器: 返回 Markdown\n浏览器 --> 用户: 渲染页面\n@enduml',
   dot: 'digraph G {\n  rankdir=LR\n  node [shape=box, style=rounded]\n  浏览器 -> 服务端 -> 数据库\n  服务端 -> 文件存储\n}',
 }
 
@@ -62,13 +65,14 @@ function remember(key: string, value: string) {
   return value
 }
 
-export type TextDiagramLang = 'mermaid' | 'dot'
+export type TextDiagramLang = 'mermaid' | 'dot' | 'plantuml'
 
-/** Code-block languages shown as text diagrams ("graphviz" is an alias of "dot"). */
+/** Code-block languages shown as text diagrams ("graphviz" is an alias of "dot", "puml" of "plantuml"). */
 export function textDiagramLang(language: string | null | undefined): TextDiagramLang | null {
   const l = (language || '').toLowerCase()
   if (l === 'mermaid') return 'mermaid'
   if (l === 'dot' || l === 'graphviz') return 'dot'
+  if (l === 'plantuml' || l === 'puml') return 'plantuml'
   return null
 }
 
@@ -104,11 +108,29 @@ async function renderDot(code: string): Promise<string> {
   return `<div class="ink-diagram dot">${svg.replace(/^<\?xml[^>]*>\s*(<!DOCTYPE[^>]*>)?/, '')}</div>`
 }
 
+// ---------- plantuml (rendered by the server's PlantUML service) ----------
+async function renderPlantUMLBlock(code: string): Promise<string> {
+  let res: { svg: string; error?: boolean }
+  try {
+    res = await renderPlantUML(code)
+  } catch (e: any) {
+    throw Object.assign(new Error(e?.message ?? String(e)), { title: 'PlantUML 渲染失败' })
+  }
+  const { svg, error } = res
+  // syntax errors come back as a picture of the error: pass its text on as the message
+  if (error) {
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    const lines = [...doc.querySelectorAll('text')].map((t) => t.textContent?.trim()).filter(Boolean)
+    throw new Error(lines.join('\n') || 'syntax error')
+  }
+  return `<div class="ink-diagram dot plantuml">${svg.replace(/^<\?xml[^>]*>\s*/, '')}</div>`
+}
+
 /** Render a text diagram to (unsanitised) HTML; rejects with the syntax error. */
 export async function renderTextDiagram(lang: TextDiagramLang, code: string): Promise<string> {
   const key = lang + ':' + (lang === 'mermaid' && prefersDark() ? 'dark:' : '') + code
   if (cache.has(key)) return cache.get(key)!
-  const html = await (lang === 'mermaid' ? renderMermaid(code) : renderDot(code))
+  const html = await (lang === 'mermaid' ? renderMermaid(code) : lang === 'plantuml' ? renderPlantUMLBlock(code) : renderDot(code))
   return remember(key, html)
 }
 

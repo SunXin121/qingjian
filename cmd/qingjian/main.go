@@ -44,6 +44,7 @@ func main() {
 		Version:       version,
 		DrawioURL:     os.Getenv("QINGJIAN_DRAWIO_URL"),
 		DrawioDir:     os.Getenv("QINGJIAN_DRAWIO_DIR"),
+		PlantUMLURL:   os.Getenv("QINGJIAN_PLANTUML_URL"),
 		Backup: server.BackupConfig{
 			IntervalHours:  int(envInt("QINGJIAN_BACKUP_INTERVAL_HOURS", 24)),
 			Keep:           int(envInt("QINGJIAN_BACKUP_KEEP", 7)),

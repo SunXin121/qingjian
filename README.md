@@ -3,7 +3,7 @@
 个人自托管的在线知识库：打开网页就能记笔记，原生 Markdown + 所见即所得，桌面和手机都能看、能写。
 
 - **编辑器**：Markdown 快捷语法、`/` 斜杠菜单、块拖拽、表格、任务列表、代码高亮、LaTeX 公式
-- **绘图**：Mermaid、Graphviz 文本绘图（实时预览），Excalidraw 手绘画板（支持中文手写字体），draw.io 流程图，思维导图
+- **绘图**：Mermaid、Graphviz、PlantUML 文本绘图（实时预览，PlantUML 需另外运行渲染服务），Excalidraw 手绘画板（支持中文手写字体），draw.io 流程图，思维导图
 - **提示块 / 折叠块**：信息、警告、成功、错误四种提示块和可折叠块，存储为 Obsidian / GitHub 兼容的 `> [!INFO]` 语法
 - **附件**：粘贴 / 拖拽 / 菜单上传图片和任意文件，按内容去重
 - **组织**：多知识库、多级目录树（桌面拖拽，手机菜单移动）、分组
@@ -85,6 +85,7 @@ server {
 | `QINGJIAN_TRASH_DAYS` | `30` | 回收站保留天数 |
 | `QINGJIAN_DRAWIO_URL` | `https://embed.diagrams.net/` | draw.io 编辑器地址，可换成自建的 draw.io |
 | `QINGJIAN_DRAWIO_DIR` | （空） | 本地 draw.io 静态文件目录，设置后由青简在 `/drawio/` 下提供，完全离线可用（见下文） |
+| `QINGJIAN_PLANTUML_URL` | （空） | PlantUML 渲染服务地址，如 `http://plantuml:8080`；为空时不提供 PlantUML（见下文） |
 | `QINGJIAN_BACKUP_*` | （空） | 自动备份，见下文 |
 
 修改管理密码后，所有已登录的会话都会失效。
@@ -152,6 +153,15 @@ files/ab/cd/<sha256>                 附件
 2. 挂载到容器并设置 `QINGJIAN_DRAWIO_DIR=/drawio`，青简会在 `/drawio/` 下提供这些静态文件。
 
 或者运行官方的 `jgraph/drawio` 镜像，把 `QINGJIAN_DRAWIO_URL` 指向它。
+
+## PlantUML
+
+PlantUML 依赖 Java，体积较大，所以默认不启用。需要时在 `docker-compose.yml` 里取消 `plantuml` 服务的注释，并在 `.env` 中设置 `QINGJIAN_PLANTUML_URL=http://plantuml:8080`，然后 `docker compose up -d`。
+
+- 浏览器只和青简通信，由青简转发给 PlantUML 服务渲染成 SVG，所以 PlantUML 服务不需要对外暴露端口。
+- 渲染结果在内存中缓存；分享页的访客只能渲染分享文档里出现过的图表，不能把服务当作公共渲染接口使用。
+- 在文本绘图块的语言切换中选择 PlantUML，或直接写 ```` ```plantuml ```` 代码块（`puml` 也可以）。
+- 如果图中的中文显示为方框，说明 PlantUML 镜像里缺少中文字体，可以基于官方镜像安装 `fonts-noto-cjk` 后使用。
 
 ## 开发
 

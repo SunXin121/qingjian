@@ -15,6 +15,7 @@ import type { EditorView, NodeViewConstructor } from '@milkdown/kit/prose/view'
 import { $viewAsync } from '@milkdown/kit/utils'
 import DOMPurify from 'dompurify'
 import './textDiagram.css'
+import { getConfig } from '../api'
 import { toast } from '../components/dialog'
 import { deleteBlockAt, isPreviewBlock } from './previewBlocks'
 import { DIAGRAM_TEMPLATES, renderTextDiagram, textDiagramLang, type TextDiagramLang } from './previews'
@@ -22,6 +23,7 @@ import { DIAGRAM_TEMPLATES, renderTextDiagram, textDiagramLang, type TextDiagram
 const LANGS: { lang: TextDiagramLang; label: string }[] = [
   { lang: 'mermaid', label: 'Mermaid' },
   { lang: 'dot', label: 'Graphviz' },
+  { lang: 'plantuml', label: 'PlantUML' },
 ]
 const labelOf = (lang: TextDiagramLang) => LANGS.find((l) => l.lang === lang)!.label
 
@@ -104,6 +106,15 @@ class TextDiagramView extends Base {
       group.appendChild(b)
       return b
     })
+    // PlantUML needs a PlantUML server: offer it only when one is configured
+    if (this.view.editable)
+      getConfig().then(
+        (c) => {
+          const b = switches.find((x) => x.dataset.lang === 'plantuml')
+          if (b && !c.plantuml && this.lang !== 'plantuml') b.hidden = true
+        },
+        () => {},
+      )
     const copy = el('button', 'td-btn', '复制代码')
     copy.type = 'button'
     copy.onclick = () =>
@@ -255,9 +266,9 @@ class TextDiagramView extends Base {
         this.lastHtml = sanitize(html)
         this.showPreview()
       },
-      (e: Error) => {
+      (e: Error & { title?: string }) => {
         if (seq !== this.renderSeq) return
-        this.showPreview(`${labelOf(lang)} 语法错误`, e.message)
+        this.showPreview(e.title ?? `${labelOf(lang)} 语法错误`, e.message)
       },
     )
   }

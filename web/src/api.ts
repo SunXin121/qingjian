@@ -154,6 +154,8 @@ export interface ClientConfig {
   drawio_url: string
   max_upload_mb: number
   trash_days: number
+  /** a PlantUML server is configured */
+  plantuml: boolean
 }
 
 export class ApiError extends Error {
@@ -255,6 +257,13 @@ export const shareApi = {
   tree: (token: string) => request<PublicNode[]>('GET', `/api/s/${token}/tree`),
   doc: (token: string, id: string) => request<PublicDoc>('GET', `/api/s/${token}/docs/${id}`),
   table: (token: string, id: string) => request<TableData>('GET', `/api/s/${token}/tables/${id}`),
+}
+
+/** Renders PlantUML through the server (inside a share link: through the share). */
+export function renderPlantUML(source: string) {
+  const share = /^\/s\/([^/]+)/.exec(location.pathname)
+  const url = share ? `/api/s/${share[1]}/plantuml` : '/api/plantuml'
+  return request<{ svg: string; error?: boolean }>('POST', url, { source })
 }
 
 /** Path of a node's page in the admin UI. */
