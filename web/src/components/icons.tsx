@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import {
+  Upload,
   Archive,
   ArrowDown,
   ArrowLeft,
@@ -58,6 +60,7 @@ const wrap = (I: LucideIcon) =>
 
 export type IconType = ReturnType<typeof wrap>
 
+export const IconUpload = wrap(Upload)
 export const IconDoc = wrap(FileText)
 export const IconFolder = wrap(Folder)
 export const IconFolderOpen = wrap(FolderOpen)
@@ -129,12 +132,17 @@ export function repoTone(id: string) {
   return h % 6
 }
 
-/** Repo badge: its icon (emoji) if set, otherwise the first character of its name on a tinted tile. */
+/** Repo badge: uploaded image, chosen glyph, or the initial on a tinted tile. */
 export function RepoMark({ repo, className }: { repo: { id: string; name: string; icon?: string }; className: string }) {
-  const glyph = repo.icon?.trim() || Array.from(repo.name.trim())[0]?.toUpperCase() || '库'
+  const [failedImage, setFailedImage] = useState('')
+  const icon = repo.icon?.trim() ?? ''
+  const isImage = icon.startsWith('/files/')
+  const glyph = (!isImage && icon) || Array.from(repo.name.trim())[0]?.toUpperCase() || '库'
   return (
     <span className={className} style={{ '--tone': `var(--tone-${repoTone(repo.id)})` } as React.CSSProperties} aria-hidden>
-      {glyph}
+      {isImage && failedImage !== icon ? (
+        <img className="repo-mark-image" src={icon} alt="" onError={() => setFailedImage(icon)} />
+      ) : glyph}
     </span>
   )
 }

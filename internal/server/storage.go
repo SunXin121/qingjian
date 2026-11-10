@@ -27,11 +27,11 @@ func collectRefs(md string, refs map[string]bool) {
 	}
 }
 
-// referencedAttachments scans every document, including trashed ones and all history
-// versions, so restoring a version never yields a broken image.
+// referencedAttachments includes repo icons, trashed content and all history
+// versions, so restoring a knowledge base or version never yields a broken image.
 func (s *Server) referencedAttachments() (map[string]bool, error) {
 	refs := map[string]bool{}
-	for _, q := range []string{`SELECT markdown FROM doc_contents`, `SELECT markdown FROM doc_versions`} {
+	for _, q := range []string{`SELECT icon FROM repos`, `SELECT markdown FROM doc_contents`, `SELECT markdown FROM doc_versions`} {
 		rows, err := s.db.Query(q)
 		if err != nil {
 			return nil, err
@@ -140,7 +140,7 @@ func (s *Server) storageStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// cleanupAttachments removes attachment rows that no document or version references
+// cleanupAttachments removes attachment rows that no repo, document or version references
 // (and that are older than the grace period), then deletes blobs no row points to.
 func (s *Server) cleanupAttachments() (removed int, freed int64, err error) {
 	s.blobMu.Lock()

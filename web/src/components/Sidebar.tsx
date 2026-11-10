@@ -113,10 +113,11 @@ export default function Sidebar() {
       )}
 
       <div className="sidebar-foot">
-        <NavLink to="/settings" className="icon-btn" title="设置">
+        <NavLink to="/settings" className="sidebar-settings" title="设置">
           <IconSettings width={17} height={17} />
+          <span>设置</span>
         </NavLink>
-        <button className="icon-btn" title="退出登录" onClick={logout}>
+        <button className="icon-btn" title="退出登录" aria-label="退出登录" onClick={logout}>
           <IconLogout width={17} height={17} />
         </button>
       </div>
