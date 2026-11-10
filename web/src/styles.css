@@ -2970,18 +2970,6 @@ code {
 .repo-card {
   overflow: hidden;
 }
-.repo-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  background: var(--tone, var(--tone-0));
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.repo-card:hover::before {
-  opacity: 1;
-}
 .repo-card-meta > span {
   display: inline-flex;
   align-items: center;
