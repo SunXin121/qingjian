@@ -126,13 +126,24 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
   const more = (el: HTMLElement) =>
     openMenu(el, [
       { label: '分享', icon: <IconShare />, onClick: share },
+      {
+        label: '导出当前视图 (Excel)',
+        icon: <IconDownload />,
+        onClick: () =>
+          import('../table/xlsx')
+            .then((m) => m.exportXLSX(model.data, active))
+            .catch((e) => toast('导出失败：' + e.message)),
+      },
       { label: '导出当前视图 (CSV)', icon: <IconDownload />, onClick: () => exportCSV(model.data, active) },
       {
-        label: '导入 CSV',
+        label: '导入 Excel / CSV',
         icon: <IconUpload />,
         onClick: async () => {
           const [file] = await pickFiles(false)
-          if (file) importCSV(model, file, active.id).catch((e) => toast('导入失败：' + e.message))
+          if (!file) return
+          const xlsx = /\.xlsx$/i.test(file.name)
+          const run = xlsx ? import('../table/xlsx').then((m) => m.importXLSX(model, file, active.id)) : importCSV(model, file, active.id)
+          run.catch((e) => toast('导入失败：' + (xlsx && /zip|central directory/i.test(e.message) ? '不是有效的 .xlsx 文件（旧版 .xls 请先另存为 .xlsx）' : e.message)))
         },
       },
       {

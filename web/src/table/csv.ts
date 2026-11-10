@@ -3,8 +3,8 @@ import { cellValue, choiceCollector, displayText, parseCSV, parseText, toCSV, vi
 import { choiceOps, type TableModel } from './model'
 import { isComputed, type FieldType, type TableData, type View } from './types'
 
-function download(name: string, text: string, type = 'text/csv;charset=utf-8') {
-  const url = URL.createObjectURL(new Blob([text], { type }))
+export function download(name: string, data: string | Blob, type = 'text/csv;charset=utf-8') {
+  const url = URL.createObjectURL(typeof data === 'string' ? new Blob([data], { type }) : data)
   const a = document.createElement('a')
   a.href = url
   a.download = name
@@ -14,7 +14,7 @@ function download(name: string, text: string, type = 'text/csv;charset=utf-8') {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-const safeName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || '表格'
+export const safeName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || '表格'
 
 /** Exports what the view shows: visible fields, filtered and sorted records. */
 export function exportCSV(t: TableData, v: View) {
@@ -40,9 +40,13 @@ function guessType(values: string[]): FieldType {
  * columns become new fields (type guessed from their values). One undo step.
  */
 export async function importCSV(model: TableModel, file: File, viewId?: string) {
-  const text = await file.text()
-  const rows = parseCSV(text)
+  const rows = parseCSV(await file.text())
   if (rows.length < 2) return toast('CSV 文件没有数据行')
+  importRows(model, rows, viewId)
+}
+
+/** Appends rows (header first) as records; see importCSV. */
+export function importRows(model: TableModel, rows: string[][], viewId?: string) {
   const [header, ...body] = rows
   const t = model.state
   const byName = new Map(t.fields.map((f) => [f.name.trim().toLowerCase(), f]))
