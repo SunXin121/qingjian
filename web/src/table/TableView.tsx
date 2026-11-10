@@ -160,7 +160,7 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
 
   const addRecord = () => {
     const [id] = model.addRecords([{}])
-    setCard({ id, list: [...viewRecords(model.state, active, model.sticky).map((r) => r.id)] })
+    setCard({ id, list: [...viewRecords(model.data, active, model.sticky).map((r) => r.id)] })
   }
 
   return (

@@ -5,7 +5,7 @@ import { IconClose, IconDoc, IconLink, IconPlus, IconUpload } from '../component
 import { cellValue, choiceCollector, displayText, formatProgress, parseText } from './engine'
 import type { TableModel } from './model'
 import type { AttachmentValue, Choice, Field, Rec } from './types'
-import { isComputed, ratingMax } from './types'
+import { baseField, isComputed, ratingMax } from './types'
 
 export function Tag({ choice, onRemove }: { choice: Choice; onRemove?: () => void }) {
   return (
@@ -336,8 +336,16 @@ export function FieldInput({ model, field, rec, readOnly }: { model: TableModel;
     return parseText(field, s, col.resolve)
   }
   const ro = readOnly || model.readOnly
-  if (isComputed(field.type)) return <div className="bt-static">{displayText(field, v) || <span className="muted">—</span>}</div>
+  if (isComputed(field.type)) {
+    if (field.rt?.error) return <div className="bt-static bt-field-error">{field.rt.error}</div>
+    const b = baseField(field)
+    if (b.type === 'checkbox') return <input type="checkbox" className="bt-checkbox" checked={!!v} disabled />
+    if (b.type === 'progress') return <div className="bt-static">{typeof v === 'number' ? <ProgressBar field={b} value={v} /> : <span className="muted">—</span>}</div>
+    return <div className="bt-static bt-static-wrap">{displayText(field, v) || <span className="muted">—</span>}</div>
+  }
   switch (field.type) {
+    case 'link':
+      return <LinkField model={model} field={field} value={v} onChange={set} readOnly={ro} />
     case 'text':
       return <CommitInput value={v ?? ''} readOnly={ro} onCommit={(s) => set(s.trim())} placeholder={ro ? '' : '输入文本'} />
     case 'longtext':
@@ -451,9 +459,173 @@ export function LivePicker({ model, fieldId, initial, onChange, onDone, initialQ
   )
 }
 
+/** Record titles of a link value as chips. */
+export function LinkChips({ field, value, onRemove }: { field: Field; value: any; onRemove?: (id: string) => void }) {
+  const titles = field.rt?.titles
+  const ids = (Array.isArray(value) ? value : []).filter((id) => titles?.has(id))
+  return (
+    <span className="bt-tags">
+      {ids.map((id) => (
+        <span key={id} className="bt-tag bt-link-chip">
+          <span className="ellipsis">{titles!.get(id)}</span>
+          {onRemove && (
+            <button
+              className="bt-tag-x"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove(id)
+              }}
+            >
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** Searchable list of the linked table's records; toggles links. */
+export function LinkPicker({ field, value, onChange, onDone, initialQuery = '' }: { field: Field; value: any; onChange: (v: string[] | undefined) => void; onDone?: () => void; initialQuery?: string }) {
+  const [q, setQ] = useState(initialQuery)
+  const [hi, setHi] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const focus = () => inputRef.current && document.activeElement !== inputRef.current && inputRef.current.focus()
+    const raf = requestAnimationFrame(focus)
+    const t = setTimeout(focus, 60)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(t)
+    }
+  }, [])
+  const multi = field.options.multiple !== false
+  const titles = field.rt?.titles
+  const selected: string[] = (Array.isArray(value) ? value : []).filter((id: string) => titles?.has(id))
+  const query = q.trim().toLowerCase()
+  const list = useMemo(() => {
+    const out: [string, string][] = []
+    if (!titles) return out
+    for (const [id, t] of titles) {
+      if (query && !t.toLowerCase().includes(query)) continue
+      out.push([id, t])
+      if (out.length >= 200) break
+    }
+    return out
+  }, [titles, query])
+  if (field.rt?.error || !titles) return <div className="bt-picker-empty">{field.rt?.error ?? '关联的表格加载中…'}</div>
+  const toggle = (id: string) => {
+    if (!multi) {
+      onChange(selected[0] === id ? undefined : [id])
+      onDone?.()
+      return
+    }
+    const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]
+    onChange(next.length ? next : undefined)
+  }
+  return (
+    <div className="bt-picker" onMouseDown={(e) => e.target instanceof HTMLInputElement || e.preventDefault()}>
+      {selected.length > 0 && (
+        <div className="bt-picker-selected">
+          <LinkChips field={field} value={selected} onRemove={toggle} />
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        className="bt-picker-input"
+        value={q}
+        placeholder={`搜索「${field.rt?.table?.title.trim() || '未命名表格'}」中的记录`}
+        onChange={(e) => {
+          setQ(e.target.value)
+          setHi(0)
+        }}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setHi((h) => Math.min(list.length - 1, h + 1))
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setHi((h) => Math.max(0, h - 1))
+          } else if (e.key === 'Enter') {
+            e.preventDefault()
+            e.stopPropagation()
+            if (list[hi]) toggle(list[hi][0])
+            else onDone?.()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            e.stopPropagation()
+            onDone?.()
+          }
+        }}
+      />
+      <div className="bt-picker-list">
+        {list.map(([id, t], i) => (
+          <button key={id} className={'bt-picker-item' + (i === hi ? ' hi' : '')} onMouseEnter={() => setHi(i)} onClick={() => toggle(id)}>
+            <span className="ellipsis">{t}</span>
+            <span className="spacer" />
+            {selected.includes(id) && <span className="bt-check">✓</span>}
+          </button>
+        ))}
+        {!list.length && <div className="bt-picker-empty">{titles.size ? '没有匹配的记录' : '关联的表格还没有记录'}</div>}
+      </div>
+      {multi && onDone && (
+        <div className="bt-overlay-foot">
+          <button className="btn sm primary" onClick={onDone}>
+            完成
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** LinkPicker following the live field (titles change as the linked table loads). */
+export function LiveLinkPicker({ model, fieldId, initial, onChange, onDone, initialQuery }: { model: TableModel; fieldId: string; initial: any; onChange: (v: any) => void; onDone: () => void; initialQuery?: string }) {
+  const [, force] = useState(0)
+  const [value, setValue] = useState(initial)
+  useEffect(() => model.subscribe(() => force((n) => n + 1)), [model])
+  const field = model.dataField(fieldId)
+  useEffect(() => {
+    if (field?.options.table) model.ensureLinked(field.options.table).catch(() => {})
+  }, [model, field?.options.table])
+  if (!field) return null
+  return (
+    <LinkPicker
+      field={field}
+      value={value}
+      initialQuery={initialQuery}
+      onChange={(v) => {
+        setValue(v)
+        onChange(v)
+      }}
+      onDone={onDone}
+    />
+  )
+}
+
+function LinkField({ model, field, value, onChange, readOnly }: { model: TableModel; field: Field; value: any; onChange: (v: any) => void; readOnly?: boolean }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  if (field.rt?.error) return <div className="bt-static bt-field-error">{field.rt.error}</div>
+  const has = Array.isArray(value) && value.some((id) => field.rt?.titles?.has(id))
+  const open = () => {
+    if (readOnly || !ref.current) return
+    openPopover(ref.current, (close) => <LiveLinkPicker model={model} fieldId={field.id} initial={value} onChange={onChange} onDone={close} />, { width: 320 })
+  }
+  return (
+    <button ref={ref} className="bt-input bt-choice-field" onClick={open} disabled={readOnly}>
+      <LinkChips field={field} value={value} />
+      {!has && <span className="muted">{readOnly ? '—' : '选择关联记录'}</span>}
+    </button>
+  )
+}
+
 /** Compact read-only rendering of a value (kanban cards, embeds in React). */
 export function ValueView({ field, rec }: { field: Field; rec: Rec }): ReactNode {
   const v = cellValue(rec, field)
+  if (field.type === 'link') return <LinkChips field={field} value={v} />
+  field = baseField(field)
   switch (field.type) {
     case 'select':
     case 'multiselect':

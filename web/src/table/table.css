@@ -1644,3 +1644,41 @@ select.bt-input {
   width: 80px;
   flex: none;
 }
+
+/* ---------- computed / link fields ---------- */
+.bt-link-chip {
+  background: var(--tag-0-bg);
+  color: var(--tag-0-fg);
+}
+.bt-field-error {
+  color: var(--c-warn);
+}
+.bt-static-wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bt-expr-sample {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--c-surface-low);
+  color: var(--c-text-2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.bt-field-editor .bt-expr-bar {
+  margin-top: -2px;
+  padding-left: 0;
+}
+.bt-field-editor .bt-expr-error {
+  text-align: left;
+}
+.bt-field-editor .bt-expr-error,
+.bt-field-editor .bt-expr-ok {
+  margin-top: 4px;
+  font-size: 12px;
+}

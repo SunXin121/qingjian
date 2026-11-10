@@ -455,8 +455,19 @@ func (s *Server) shareTable(w http.ResponseWriter, r *http.Request) {
 			t.Views = t.Views[:1]
 		}
 	}
-	writeJSON(w, 200, map[string]any{"id": t.ID, "title": t.Title, "updated_at": t.UpdatedAt,
-		"fields": t.Fields, "views": t.Views, "records": t.Records})
+	out := map[string]any{"id": t.ID, "title": t.Title, "updated_at": t.UpdatedAt,
+		"fields": t.Fields, "views": t.Views, "records": t.Records}
+	// linked tables: only the fields and records the computed fields read
+	if linked := s.linkedTables(s.db, t); len(linked) > 0 {
+		trimLinked(t, linked)
+		lite := map[string]any{}
+		for id, lt := range linked {
+			lite[id] = map[string]any{"id": lt.ID, "title": lt.Title, "updated_at": lt.UpdatedAt,
+				"fields": lt.Fields, "views": []View{}, "records": lt.Records}
+		}
+		out["linked"] = lite
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) shareCoversTable(sh *Share, n *Node) bool {

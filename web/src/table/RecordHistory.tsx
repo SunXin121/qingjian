@@ -139,6 +139,10 @@ function HistoryValue({ field, value }: { field: Field; value: any }) {
     }
     case 'attachment':
       return <>{(value as AttachmentValue[]).map((a) => a.name).join('、')}</>
+    case 'link': {
+      const t = displayText(field, value)
+      return t ? <>{t}</> : <span className="bt-history-empty-value">已删除的记录</span>
+    }
     default:
       return <>{displayText(field, value)}</>
   }

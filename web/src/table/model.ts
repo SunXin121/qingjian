@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from 'react'
 import { api } from '../api'
 import { toast } from '../components/dialog'
+import { derive } from './compute'
 import { cellValue, choiceCollector, convertValue, isEmptyValue } from './engine'
 import type { Choice, Field, FieldOptions, FieldType, Op, Rec, TableData, View, ViewConfig, ViewType } from './types'
 import { isComputed, newId } from './types'
@@ -22,6 +23,60 @@ function bySortSeq(a: Rec, b: Rec) {
   return a.sort - b.sort || a.seq - b.seq
 }
 
+const linkIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+
+/**
+ * Two-way links: the server keeps the paired field of the other table in sync. The local
+ * copy of that table (t.linked) is updated the same way so lookups stay current.
+ */
+function mirrorLinks(t: TableData, fields: Field[], changes: { rec: string; before: Record<string, any>; after: Record<string, any> }[]): TableData['linked'] {
+  let linked = t.linked
+  if (!linked) return linked
+  const pairs = fields.filter((f) => f.type === 'link' && f.options.pair && f.options.table && f.options.table !== t.id && linked![f.options.table])
+  if (!pairs.length) return linked
+  // table id -> record id -> pair field -> [added sources, removed sources]
+  const edits = new Map<string, Map<string, Map<string, [Set<string>, Set<string>]>>>()
+  for (const c of changes)
+    for (const f of pairs) {
+      if (!(f.id in c.before) && !(f.id in c.after)) continue
+      const before = new Set(linkIds(c.before[f.id]))
+      const after = new Set(linkIds(c.after[f.id]))
+      const touch = (target: string, add: boolean) => {
+        let byRec = edits.get(f.options.table!)
+        if (!byRec) edits.set(f.options.table!, (byRec = new Map()))
+        let byField = byRec.get(target)
+        if (!byField) byRec.set(target, (byField = new Map()))
+        let e = byField.get(f.options.pair!)
+        if (!e) byField.set(f.options.pair!, (e = [new Set(), new Set()]))
+        e[add ? 0 : 1].add(c.rec)
+        e[add ? 1 : 0].delete(c.rec)
+      }
+      for (const id of after) if (!before.has(id)) touch(id, true)
+      for (const id of before) if (!after.has(id)) touch(id, false)
+    }
+  if (!edits.size) return linked
+  linked = { ...linked }
+  for (const [tid, byRec] of edits) {
+    const lt = linked[tid]
+    linked[tid] = {
+      ...lt,
+      records: lt.records.map((r) => {
+        const byField = byRec.get(r.id)
+        if (!byField) return r
+        const data = { ...r.data }
+        for (const [fid, [add, remove]] of byField) {
+          const list = linkIds(data[fid]).filter((id) => !remove.has(id))
+          for (const id of add) if (!list.includes(id)) list.push(id)
+          if (list.length) data[fid] = list
+          else delete data[fid]
+        }
+        return { ...r, data }
+      }),
+    }
+  }
+  return linked
+}
+
 /** Pure local application of ops, mirroring the server. */
 export function applyOps(t: TableData, ops: Op[]): TableData {
   let fields = t.fields
@@ -31,6 +86,9 @@ export function applyOps(t: TableData, ops: Op[]): TableData {
   let index: Map<string, number> | null = null
   const recIndex = () => (index ??= new Map(records.map((r, i) => [r.id, i])))
   const now = Date.now()
+  // record value changes of two-way link fields, mirrored into linked tables at the end
+  const hasPairs = !!t.linked && t.fields.some((f) => f.type === 'link' && f.options.pair)
+  const linkChanges: { rec: string; before: Record<string, any>; after: Record<string, any> }[] = []
   for (const op of ops) {
     switch (op.op) {
       case 'field.create':
@@ -69,6 +127,7 @@ export function applyOps(t: TableData, ops: Op[]): TableData {
       case 'record.create': {
         const data: Record<string, any> = {}
         for (const [k, v] of Object.entries(op.data)) if (v !== null && v !== undefined) data[k] = v
+        if (hasPairs) linkChanges.push({ rec: op.id, before: {}, after: data })
         records = [...records, { id: op.id, seq: op.seq, data, sort: op.sort, created_at: op.created_at ?? now, updated_at: now }]
         recordsDirty = true
         index = null
@@ -84,19 +143,24 @@ export function applyOps(t: TableData, ops: Op[]): TableData {
           else data[k] = v
         }
         if (records === t.records) records = [...records]
+        if (hasPairs && op.data) linkChanges.push({ rec: r.id, before: r.data, after: { ...op.data } })
         // a move (sort only) is not a modification
         records[i] = { ...r, data, updated_at: op.data ? now : r.updated_at, ...(op.sort !== undefined && { sort: op.sort }) }
         if (op.sort !== undefined) recordsDirty = true
         break
       }
-      case 'record.delete':
+      case 'record.delete': {
+        const i = recIndex().get(op.id)
+        if (hasPairs && i !== undefined) linkChanges.push({ rec: op.id, before: records[i].data, after: Object.fromEntries(Object.keys(records[i].data).map((k) => [k, null])) })
         records = records.filter((r) => r.id !== op.id)
         index = null
         break
+      }
     }
   }
   if (recordsDirty) records = [...records].sort(bySortSeq)
-  return { ...t, fields, views, records }
+  const linked = linkChanges.length ? mirrorLinks(t, fields, linkChanges) : t.linked
+  return { ...t, fields, views, records, linked }
 }
 
 export interface CellChange {
@@ -118,11 +182,43 @@ export class TableModel {
   private timer = 0
   private flushing: Promise<void> | null = null
   private onReload?: () => void
+  private fetchTable?: (id: string) => Promise<TableData>
 
-  constructor(data: TableData, opts: { readOnly?: boolean; onReload?: () => void } = {}) {
+  constructor(data: TableData, opts: { readOnly?: boolean; onReload?: () => void; fetchTable?: (id: string) => Promise<TableData> } = {}) {
     this.state = { ...data, records: [...data.records].sort(bySortSeq) }
     this.readOnly = !!opts.readOnly
     this.onReload = opts.onReload
+    this.fetchTable = opts.fetchTable
+  }
+
+  /** The table with computed values (formulas, lookups…) and field runtime info. */
+  get data(): TableData {
+    return derive(this.state)
+  }
+
+  /** A field with its runtime info (link titles, formula kind…). */
+  dataField(id: string) {
+    return this.data.fields.find((f) => f.id === id)
+  }
+
+  private loadingLinked = new Map<string, Promise<void>>()
+
+  /** Loads a table for link fields (and the tables it links to) if it is not there yet. */
+  ensureLinked(id: string): Promise<void> {
+    if (!id || id === this.state.id || this.state.linked?.[id] || !this.fetchTable) return Promise.resolve()
+    let p = this.loadingLinked.get(id)
+    if (!p) {
+      p = this.fetchTable(id)
+        .then((t) => {
+          const add: Record<string, TableData> = { ...(t.linked ?? {}), [t.id]: { ...t, linked: undefined, views: [] } }
+          delete add[this.state.id]
+          this.state = { ...this.state, linked: { ...add, ...(this.state.linked ?? {}) } }
+          this.emit()
+        })
+        .finally(() => this.loadingLinked.delete(id))
+      this.loadingLinked.set(id, p)
+    }
+    return p
   }
 
   subscribe = (fn: () => void) => {
@@ -131,7 +227,7 @@ export class TableModel {
       this.listeners.delete(fn)
     }
   }
-  getSnapshot = () => this.state
+  getSnapshot = () => this.data
   private emit() {
     for (const fn of this.listeners) fn()
   }
@@ -308,7 +404,10 @@ export class TableModel {
       const id = newId()
       ids.push(id)
       const clean: Record<string, any> = {}
-      for (const [key, v] of Object.entries(data)) if (!isEmptyValue(v)) clean[key] = v
+      for (const [key, v] of Object.entries(data)) {
+        const f = this.field(key)
+        if (!isEmptyValue(v) && !(f && isComputed(f.type))) clean[key] = v
+      }
       forward.push({ op: 'record.create', id, data: clean, sort: lo + step * (k + 1), seq: seq++ })
       inverse.push({ op: 'record.delete', id })
       this.sticky.add(id)
@@ -421,18 +520,29 @@ export class TableModel {
     if (patch.type && patch.type !== f.type) {
       const col = choiceCollector([next])
       const changes: [Rec, any][] = []
-      for (const r of this.state.records) {
-        const v = r.data[f.id]
-        if (v === undefined) continue
-        changes.push([r, convertValue(f, next, v, col.resolve)])
-      }
+      // computed values (formulas…) are converted too: read them from the derived table
+      const d = this.data
+      const from = d.fields.find((x) => x.id === id) ?? f
+      d.records.forEach((dr, i) => {
+        const v = dr.data[f.id]
+        if (v === undefined) return
+        changes.push([this.state.records[i], convertValue(from, next, v, col.resolve)])
+      })
       const added = col.added.get(id)
       if (added?.length) {
         next.options = { ...next.options, choices: [...(next.options.choices ?? []), ...added] }
         ;(forward[0] as any).options = next.options
       }
       for (const [r, v] of changes) {
+        if (isEmptyValue(v) && r.data[id] === undefined) continue
         forward.push({ op: 'record.update', id: r.id, data: { [id]: isEmptyValue(v) ? null : v } })
+        inverse.push({ op: 'record.update', id: r.id, data: { [id]: r.data[id] ?? null } })
+      }
+    } else if (f.type === 'link' && patch.options && patch.options.table !== f.options.table) {
+      // links point at records of another table now
+      for (const r of this.state.records) {
+        if (r.data[id] === undefined) continue
+        forward.push({ op: 'record.update', id: r.id, data: { [id]: null } })
         inverse.push({ op: 'record.update', id: r.id, data: { [id]: r.data[id] } })
       }
     } else if (patch.options?.choices && (f.type === 'select' || f.type === 'multiselect')) {

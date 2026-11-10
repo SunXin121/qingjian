@@ -27,7 +27,7 @@ export default function TablePage() {
           m.reset(data)
           return m
         }
-        const next = new TableModel(data, { onReload: () => load() })
+        const next = new TableModel(data, { onReload: () => load(), fetchTable: (id) => api.table(id) })
         return next
       })
     } catch (e: any) {
@@ -126,7 +126,7 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
   const more = (el: HTMLElement) =>
     openMenu(el, [
       { label: '分享', icon: <IconShare />, onClick: share },
-      { label: '导出当前视图 (CSV)', icon: <IconDownload />, onClick: () => exportCSV(model.state, active) },
+      { label: '导出当前视图 (CSV)', icon: <IconDownload />, onClick: () => exportCSV(model.data, active) },
       {
         label: '导入 CSV',
         icon: <IconUpload />,

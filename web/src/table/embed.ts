@@ -5,7 +5,8 @@
 import { api, type TableSummary } from '../api'
 import { cellValue, displayText, KANBAN_EMPTY, kanbanField, kanbanLayout, primaryField, viewRecords, visibleFields, type KanbanColumn } from './engine'
 import type { AttachmentValue, Field, Rec, TableData } from './types'
-import { ratingMax } from './types'
+import { baseField, ratingMax } from './types'
+import { derive } from './compute'
 
 export interface EmbedRef {
   table?: string
@@ -61,6 +62,13 @@ function safeURL(u: string) {
 
 function cellHTML(f: Field, r: Rec): string {
   const v = cellValue(r, f)
+  if (f.type === 'link')
+    return (Array.isArray(v) ? v : [])
+      .map((id) => f.rt?.titles?.get(id))
+      .filter((x) => x !== undefined)
+      .map((x) => `<span class="bt-tag bt-link-chip"><span>${esc(x!)}</span></span>`)
+      .join('')
+  f = baseField(f)
   switch (f.type) {
     case 'select':
     case 'multiselect': {
@@ -96,6 +104,7 @@ function cellHTML(f: Field, r: Rec): string {
 const MAX_ROWS = 50
 
 export function embedHTML(t: TableData, viewId?: string): string {
+  t = derive(t)
   const view = t.views.find((v) => v.id === viewId) ?? t.views[0]
   if (!view) return hint('表格没有视图')
   const fields = visibleFields(t, view)

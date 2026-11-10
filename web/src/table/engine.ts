@@ -2,7 +2,7 @@
 // display text, filtering, sorting, grouping, summaries, parsing pasted text and CSV.
 
 import type { AttachmentValue, Choice, Field, FieldType, FilterCond, FilterOp, Rec, SortRule, SummaryKind, TableData, View } from './types'
-import { isComputed, isNumeric, newId, ratingMax } from './types'
+import { baseField, isComputed, isNumeric, newId, ratingMax } from './types'
 import { compileFilter } from './formula'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -67,7 +67,21 @@ export function formatProgress(f: Field, v: number): string {
 /** Plain-text rendering of a value (used for copy, CSV, search, embeds). */
 export function displayText(f: Field, v: any): string {
   if (isEmptyValue(v) && f.type !== 'autonumber') return ''
+  f = baseField(f)
   switch (f.type) {
+    case 'link': {
+      const titles = f.rt?.titles
+      return (Array.isArray(v) ? v : [])
+        .map((id) => titles?.get(id))
+        .filter((x) => x !== undefined)
+        .join(', ')
+    }
+    case 'lookup': {
+      const t = f.rt?.target
+      const one = (x: any) =>
+        typeof x === 'number' ? (t?.type === 'progress' ? formatProgress(t, x) : t?.type === 'number' ? formatNumber(t, x) : String(x)) : typeof x === 'boolean' ? (x ? '✓' : '') : String(x)
+      return (Array.isArray(v) ? v : [v]).map(one).filter(Boolean).join(', ')
+    }
     case 'number':
     case 'autonumber':
       return f.type === 'autonumber' ? String(v ?? '') : formatNumber(f, v)
@@ -90,7 +104,7 @@ export function displayText(f: Field, v: any): string {
     case 'modified_time':
       return typeof v === 'number' ? fmtDateTime(v) : ''
     default:
-      return typeof v === 'string' ? v : String(v)
+      return typeof v === 'string' ? v : Array.isArray(v) ? v.map((x) => (typeof x === 'boolean' ? (x ? '✓' : '') : String(x))).join(', ') : String(v)
   }
 }
 
@@ -193,6 +207,7 @@ function datePart(v: any): string {
 }
 
 function condActive(c: FilterCond, f: Field): boolean {
+  f = baseField(f)
   const def = filterOps(f.type).find((o) => o.op === c.op)
   if (!def) return false
   if (def.unary || f.type === 'checkbox') return true
@@ -202,6 +217,7 @@ function condActive(c: FilterCond, f: Field): boolean {
 
 function matchCond(c: FilterCond, f: Field, r: Rec): boolean {
   const v = cellValue(r, f)
+  f = baseField(f)
   if (c.op === 'empty') return isEmptyValue(v)
   if (c.op === 'not_empty') return !isEmptyValue(v)
   switch (f.type) {
@@ -304,6 +320,7 @@ const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base'
 
 /** Comparable key for sorting / grouping; undefined sorts last. */
 function sortKey(f: Field, v: any): number | string | undefined {
+  f = baseField(f)
   if (isEmptyValue(v) && f.type !== 'checkbox') return undefined
   switch (f.type) {
     case 'number':
@@ -374,6 +391,7 @@ export function viewRecords(t: TableData, v: View, sticky?: Set<string>): Rec[] 
 // ---------- grouping ----------
 
 export function groupKey(f: Field, v: any): string {
+  f = baseField(f)
   if (f.type === 'checkbox') return v ? '1' : '0'
   if (isEmptyValue(v)) return ''
   switch (f.type) {
@@ -391,6 +409,7 @@ export function groupKey(f: Field, v: any): string {
 }
 
 export function groupLabel(f: Field, key: string): string {
+  f = baseField(f)
   if (f.type === 'checkbox') return key === '1' ? '已勾选' : '未勾选'
   if (key === '') return `${f.name}为空`
   if (f.type === 'select') return choiceOf(f, key)?.name ?? key
@@ -633,6 +652,7 @@ export function summaryKinds(type: FieldType): { kind: SummaryKind; label: strin
 
 export function summarize(f: Field, kind: SummaryKind, list: Rec[]): string {
   if (kind === 'none') return ''
+  f = baseField(f)
   const label = summaryKinds(f.type).find((k) => k.kind === kind)?.label ?? ''
   if (kind === 'count') return `${label} ${list.length}`
   const filled: any[] = []
@@ -752,6 +772,20 @@ export function parseText(f: Field, text: string, resolve: ChoiceResolver): any 
       return parseDate(s, !!f.options.time)
     case 'checkbox':
       return reTrue.test(s.trim()) || undefined
+    case 'link': {
+      // record titles, matched against the linked table
+      const titles = f.rt?.titles
+      if (!titles) return undefined
+      const byTitle = new Map<string, string>()
+      for (const [id, t] of titles) {
+        const k = t.trim().toLowerCase()
+        if (!byTitle.has(k)) byTitle.set(k, id)
+      }
+      const names = s.split(/[,，、;；\n]/).map((x) => x.trim().toLowerCase()).filter(Boolean)
+      const ids = [...new Set(names.map((n) => byTitle.get(n)).filter((x): x is string => !!x))]
+      if (f.options.multiple === false) ids.splice(1)
+      return ids.length ? ids : undefined
+    }
     default:
       return undefined
   }
@@ -764,11 +798,13 @@ export function convertValue(from: Field, to: Field, v: any, resolve: ChoiceReso
   if (from.type === 'select' && to.type === 'multiselect') return choiceOf(to, v) ? [v] : undefined
   if (from.type === 'multiselect' && to.type === 'select') return (v as string[]).find((id) => choiceOf(to, id))
   if (to.type === 'attachment' || isComputed(to.type)) return undefined
-  if (isNumeric(from.type) && isNumeric(to.type) && typeof v === 'number') {
+  // links can only keep pointing at records of the same table
+  if (to.type === 'link') return from.type === 'link' && from.options.table === to.options.table ? v : undefined
+  if (isNumeric(baseField(from).type) && isNumeric(to.type) && typeof v === 'number') {
     if (to.type === 'rating') return Math.max(0, Math.min(ratingMax(to), Math.round(v))) || undefined
     return v
   }
-  if (from.type === 'checkbox' && to.type !== 'checkbox') return to.type === 'number' ? 1 : parseText(to, '✓', resolve)
+  if (baseField(from).type === 'checkbox' && to.type !== 'checkbox') return to.type === 'number' ? 1 : parseText(to, '✓', resolve)
   return parseText(to, displayText(from, v), resolve)
 }
 

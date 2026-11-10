@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { openPopover, type Anchor } from '../components/dialog'
+import { openPopover, toast, type Anchor } from '../components/dialog'
 import { IconClose, IconPlus } from '../components/icons'
+import { FormulaOptions, LinkOptions, LookupOptions, NumberFormat } from './ComputedOptions'
 import type { TableModel } from './model'
 import { FIELD_TYPES, newId, TAG_COLORS, type Choice, type Field, type FieldOptions, type FieldType } from './types'
 
 type Target = { field: Field } | { viewId?: string; after?: string; first?: boolean; type?: FieldType; name?: string; onCreated?: (id: string) => void }
 
 export function openFieldEditor(anchor: Anchor, model: TableModel, target: Target) {
-  openPopover(anchor, (close) => <FieldEditor model={model} target={target} onClose={close} />, { width: 300, align: 'left' })
+  openPopover(anchor, (close) => <FieldEditor model={model} target={target} onClose={close} />, { width: 340, align: 'left' })
 }
 
 function defaultName(model: TableModel, type: FieldType) {
@@ -33,10 +34,25 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
     const opts: FieldOptions = { ...options }
     if (type !== 'select' && type !== 'multiselect') delete opts.choices
     else opts.choices = choices.filter((c) => c.name.trim()).map((c) => ({ ...c, name: c.name.trim() }))
-    if (type !== 'number' && type !== 'progress') delete opts.precision
-    if (type !== 'number') delete opts.thousands
+    const numberFormat = type === 'number' || type === 'formula' || type === 'rollup'
+    if (!numberFormat && type !== 'progress') delete opts.precision
+    if (!numberFormat) delete opts.thousands
     if (type !== 'date') delete opts.time
     if (type !== 'rating') delete opts.max
+    if (type !== 'formula') delete opts.expr
+    if (type !== 'link') {
+      delete opts.table
+      delete opts.pair
+      delete opts.multiple
+    }
+    if (type !== 'lookup' && type !== 'rollup') {
+      delete opts.link
+      delete opts.target
+    }
+    if (type !== 'rollup') delete opts.agg
+    // the pair name is only needed to create the paired field
+    if (type !== 'link' || !opts.pair || editing?.options.pair) delete opts.pairName
+    if (type === 'link' && !opts.table) return toast('请选择关联的表格')
     if (editing) {
       model.updateField(editing.id, { name: finalName, ...(type !== editing.type && { type }), options: opts })
     } else {
@@ -82,29 +98,12 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
         </select>
       </label>
 
-      {type === 'number' && (
-        <>
-          <label className="bt-form-row">
-            <span>小数位数</span>
-            <select
-              className="bt-input"
-              value={options.precision ?? ''}
-              onChange={(e) => setOptions({ ...options, precision: e.target.value === '' ? undefined : Number(e.target.value) })}
-            >
-              <option value="">不限</option>
-              <option value="0">整数</option>
-              {[1, 2, 3, 4].map((n) => (
-                <option key={n} value={n}>
-                  {n} 位小数
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="bt-check-row">
-            <input type="checkbox" checked={!!options.thousands} onChange={(e) => setOptions({ ...options, thousands: e.target.checked })} /> 千分位分隔
-          </label>
-        </>
-      )}
+      {type === 'link' && <LinkOptions model={model} editing={editing} options={options} setOptions={setOptions} />}
+      {(type === 'lookup' || type === 'rollup') && <LookupOptions model={model} editing={editing} options={options} setOptions={setOptions} type={type} />}
+      {type === 'formula' && <FormulaOptions model={model} editing={editing} options={options} setOptions={setOptions} />}
+      {editing?.rt?.error && type === editing.type && <div className="bt-hint warn">{editing.rt.error}</div>}
+
+      {type === 'number' && <NumberFormat options={options} setOptions={setOptions} />}
 
       {type === 'rating' && (
         <label className="bt-form-row">
@@ -178,6 +177,7 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
 
       {editing && type !== editing.type && <div className="bt-hint warn">修改类型会转换这一列已有的数据，可用 Ctrl+Z 撤销。</div>}
       {(type === 'autonumber' || type === 'created_time' || type === 'modified_time') && <div className="bt-hint">由系统自动生成，不能手动编辑。</div>}
+      {editing && type !== editing.type && (type === 'formula' || type === 'lookup' || type === 'rollup') && <div className="bt-hint">这一列会改为自动计算，已有的数据会被清除。</div>}
 
       <div className="bt-form-actions">
         <button type="button" className="btn sm" onClick={onClose}>

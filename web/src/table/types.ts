@@ -17,6 +17,12 @@ export type FieldType =
   | 'progress'
   | 'phone'
   | 'email'
+  | 'formula'
+  | 'link'
+  | 'lookup'
+  | 'rollup'
+
+export type RollupAgg = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'unique' | 'concat' | 'concat_unique' | 'earliest' | 'latest'
 
 export interface Choice {
   id: string
@@ -35,6 +41,39 @@ export interface FieldOptions {
   time?: boolean
   /** rating: highest score (1–10, default 5) */
   max?: number
+  /** formula: expression in stored form (fields as {#id}) */
+  expr?: string
+  /** link: id of the linked table (may be this table) */
+  table?: string
+  /** link: the paired field in the linked table (two-way link) */
+  pair?: string
+  /** link: name for the paired field created with a two-way link (only sent on create) */
+  pairName?: string
+  /** link: allow several linked records (default true) */
+  multiple?: boolean
+  /** lookup / rollup: link field of this table */
+  link?: string
+  /** lookup / rollup: field of the linked table */
+  target?: string
+  /** rollup: aggregation */
+  agg?: RollupAgg
+}
+
+/** How a computed field's values behave (inferred for formulas). */
+export type ValueKind = 'number' | 'text' | 'date' | 'datetime' | 'checkbox' | 'list'
+
+/** Client-side runtime data attached to fields by compute.ts; never sent to the server. */
+export interface FieldRuntime {
+  kind?: ValueKind
+  /** configuration / evaluation problem shown in the header and the field editor */
+  error?: string
+  /** pseudo field used to display / sort / filter the computed values */
+  base?: Field
+  /** link: the linked table and its record titles */
+  table?: TableData
+  titles?: Map<string, string>
+  /** lookup / rollup: the field looked up in the linked table */
+  target?: Field
 }
 
 export interface Field {
@@ -43,6 +82,7 @@ export interface Field {
   type: FieldType
   options: FieldOptions
   sort: number
+  rt?: FieldRuntime
 }
 
 export interface AttachmentValue {
@@ -129,6 +169,8 @@ export interface TableData {
   fields: Field[]
   views: View[]
   records: Rec[]
+  /** tables referenced by link fields (directly or through linked tables), by id */
+  linked?: Record<string, TableData>
 }
 
 export type Op =
@@ -173,6 +215,10 @@ export const FIELD_TYPES: { type: FieldType; label: string }[] = [
   { type: 'progress', label: '进度' },
   { type: 'phone', label: '电话' },
   { type: 'email', label: '邮箱' },
+  { type: 'link', label: '关联' },
+  { type: 'lookup', label: '查找引用' },
+  { type: 'rollup', label: '汇总' },
+  { type: 'formula', label: '公式' },
   { type: 'attachment', label: '附件' },
   { type: 'autonumber', label: '自动编号' },
   { type: 'created_time', label: '创建时间' },
@@ -181,8 +227,15 @@ export const FIELD_TYPES: { type: FieldType; label: string }[] = [
 
 export const fieldTypeLabel = (t: FieldType) => FIELD_TYPES.find((x) => x.type === t)?.label ?? t
 
-/** Fields whose value is computed from the record, not stored. */
-export const isComputed = (t: FieldType) => t === 'autonumber' || t === 'created_time' || t === 'modified_time'
+/** Fields whose value is computed, not stored. */
+export const isComputed = (t: FieldType) =>
+  t === 'autonumber' || t === 'created_time' || t === 'modified_time' || t === 'formula' || t === 'lookup' || t === 'rollup'
+
+/** The field used to display, sort and filter a field's values (computed fields: by value kind). */
+export const baseField = (f: Field): Field => f.rt?.base ?? f
+
+/** Fields computed by compute.ts from other fields (and other tables). */
+export const isDerived = (t: FieldType) => t === 'formula' || t === 'lookup' || t === 'rollup'
 
 /** Fields holding a number (sorted, filtered and summarised as numbers). */
 export const isNumeric = (t: FieldType) => t === 'number' || t === 'autonumber' || t === 'rating' || t === 'progress'

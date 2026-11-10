@@ -3,7 +3,7 @@
 
 import { useRef, useState } from 'react'
 import { drawTextCell, GridCellKind, roundedRect, type CustomCell, type CustomRenderer, type ProvideEditorCallbackResult } from '@glideapps/glide-data-grid'
-import { AttachmentList, fromInputDate, LivePicker, toInputDate } from './editors'
+import { AttachmentList, fromInputDate, LiveLinkPicker, LivePicker, toInputDate } from './editors'
 import { displayText, parseText } from './engine'
 import type { TableModel } from './model'
 import { palette } from './theme'
@@ -90,6 +90,18 @@ export const valueRenderer: CustomRenderer<ValueCell> = {
         }
         return true
       }
+      case 'link': {
+        let x = left
+        const titles = field.rt?.titles
+        for (const id of Array.isArray(value) ? value : []) {
+          const t = titles?.get(id)
+          if (t === undefined) continue
+          const nx = drawPill(ctx, x, cy, right, t, palette.linkBg, palette.linkFg)
+          if (nx === x) break
+          x = nx
+        }
+        return true
+      }
       case 'attachment': {
         let x = left
         for (const a of (value as AttachmentValue[] | undefined) ?? []) {
@@ -146,6 +158,7 @@ export const valueRenderer: CustomRenderer<ValueCell> = {
     if (field.type === 'date') return { editor: DateEditor } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'number' || field.type === 'progress' || field.type === 'rating') return { editor: NumberEditor } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'attachment') return { editor: FilesEditor, disablePadding: true } as ProvideEditorCallbackResult<ValueCell>
+    if (field.type === 'link') return { editor: LinkEditor, disablePadding: true } as ProvideEditorCallbackResult<ValueCell>
     return undefined
   },
   onPaste: () => undefined,
@@ -262,6 +275,25 @@ function DateEditor({ value: cell, onChange, onFinishedEditing }: EditorProps) {
         }
       }}
     />
+  )
+}
+
+function LinkEditor({ value: cell, onChange, onFinishedEditing, initialValue }: EditorProps) {
+  const cur = useRef(cell)
+  return (
+    <div className="bt-overlay" style={{ width: 320 }}>
+      <LiveLinkPicker
+        model={cell.data.model}
+        fieldId={cell.data.field.id}
+        initial={cell.data.value}
+        initialQuery={initialValue}
+        onChange={(v) => {
+          cur.current = withValue(cell, v)
+          onChange(cur.current)
+        }}
+        onDone={() => onFinishedEditing(cur.current)}
+      />
+    </div>
   )
 }
 

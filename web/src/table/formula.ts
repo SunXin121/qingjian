@@ -1,4 +1,4 @@
-// Filter expressions: a small formula language evaluated per record.
+// A small formula language evaluated per record: formula fields and filter expressions.
 //
 //   {价格} > 100 AND CONTAINS({标题}, "bug")
 //   {截止日期} < TODAY() + 7 && {状态} != "已完成"
@@ -9,7 +9,7 @@
 // toStoredExpr / toDisplayExpr convert between the two forms.
 
 import { cellValue, choiceOf, fmtDateTime, parseDate } from './engine'
-import type { AttachmentValue, Field, Rec, TableData } from './types'
+import type { AttachmentValue, Field, Rec, TableData, ValueKind } from './types'
 
 // ---------- values ----------
 
@@ -24,7 +24,7 @@ export class DateV {
   }
 }
 
-type Value = number | string | boolean | null | DateV | Value[]
+export type Value = number | string | boolean | null | DateV | Value[]
 
 const DAY = 86_400_000
 
@@ -44,9 +44,11 @@ function dateFromString(s: string): DateV | null {
   return new DateV(new Date(y, m - 1, dd, hh, mm).getTime(), !hasTime)
 }
 
-/** Value of a field for a record, in formula terms. */
-function fieldValue(f: Field, r: Rec): Value {
-  const v = cellValue(r, f)
+/** Reads the cell value of a field (computed fields included) for a record. */
+export type CellReader = (f: Field, r: Rec) => any
+
+/** A cell value in formula terms. */
+export function toFormulaValue(f: Field, v: any): Value {
   switch (f.type) {
     case 'number':
     case 'autonumber':
@@ -66,9 +68,41 @@ function fieldValue(f: Field, r: Rec): Value {
     case 'created_time':
     case 'modified_time':
       return typeof v === 'number' ? new DateV(v, false) : null
+    case 'link': {
+      const titles = f.rt?.titles
+      return (Array.isArray(v) ? v : []).map((id) => titles?.get(id)).filter((x): x is string => x !== undefined)
+    }
+    case 'lookup':
+      return Array.isArray(v) ? v.filter((x) => x !== null && x !== undefined && x !== '') : []
+    case 'formula':
+    case 'rollup': {
+      const kind = f.rt?.kind
+      const one = (x: any): Value => {
+        if (x === undefined || x === null || x === '') return null
+        if ((kind === 'date' || kind === 'datetime') && typeof x === 'string') return dateFromString(x) ?? x
+        return x
+      }
+      return Array.isArray(v) ? v.map(one) : one(v)
+    }
     default:
       return typeof v === 'string' && v !== '' ? v : null
   }
+}
+
+const defaultReader: CellReader = (f, r) => cellValue(r, f)
+
+/** A formula result as a cell value, plus what kind of value it is. */
+export function toCellValue(v: Value): { value: any; kind?: ValueKind } {
+  if (v === null || v === '') return { value: undefined }
+  if (v instanceof DateV) return { value: v.toString(), kind: v.day ? 'date' : 'datetime' }
+  if (typeof v === 'number') return isFinite(v) ? { value: v, kind: 'number' } : { value: undefined }
+  if (typeof v === 'boolean') return { value: v, kind: 'checkbox' }
+  if (Array.isArray(v)) {
+    const flat = v.flat(Infinity as 1) as Value[]
+    const items = flat.map((x) => toCellValue(x).value).filter((x) => x !== undefined)
+    return items.length ? { value: items, kind: 'list' } : { value: undefined }
+  }
+  return { value: v, kind: 'text' }
 }
 
 const isEmpty = (v: Value) => v === null || v === '' || (Array.isArray(v) && v.length === 0)
@@ -296,6 +330,18 @@ const nums = (args: Value[]) => args.flatMap(list).map(toNum).filter((n) => !isN
 const FNS: FnDef[] = [
   // logic
   { name: 'IF', min: 2, max: 3, group: '逻辑', sig: 'IF(条件, 真值, 假值)', desc: '条件成立时取真值，否则取假值', fn: ([c, a, b]) => (truthy(c) ? a : (b ?? null)) },
+  {
+    name: 'SWITCH',
+    min: 3,
+    max: 99,
+    group: '逻辑',
+    sig: 'SWITCH(值, 匹配1, 结果1, …, 默认值)',
+    desc: '值等于某个匹配项时取对应结果，都不匹配时取默认值',
+    fn: ([v, ...rest]) => {
+      for (let i = 0; i + 1 < rest.length; i += 2) if (equals(v, rest[i])) return rest[i + 1]
+      return rest.length % 2 ? rest[rest.length - 1] : null
+    },
+  },
   { name: 'AND', min: 1, max: 99, group: '逻辑', sig: 'AND(条件1, 条件2, …)', desc: '全部成立', fn: (a) => a.every(truthy) },
   { name: 'OR', min: 1, max: 99, group: '逻辑', sig: 'OR(条件1, 条件2, …)', desc: '任一成立', fn: (a) => a.some(truthy) },
   { name: 'NOT', min: 1, max: 1, group: '逻辑', sig: 'NOT(条件)', desc: '取反', fn: ([a]) => !truthy(a) },
@@ -333,6 +379,18 @@ const FNS: FnDef[] = [
   { name: 'RIGHT', min: 2, max: 2, group: '文本', sig: 'RIGHT(文本, n)', desc: '取后 n 个字符', fn: ([a, n]) => (toNum(n) > 0 ? [...str(a)].slice(-toNum(n)).join('') : '') },
   { name: 'CONCAT', min: 1, max: 99, group: '文本', sig: 'CONCAT(值1, 值2, …)', desc: '拼接为文本，也可用 & 运算符', fn: (a) => a.map(str).join('') },
   { name: 'TEXT', min: 1, max: 1, group: '文本', sig: 'TEXT(值)', desc: '转为文本', fn: ([a]) => str(a) },
+  { name: 'MID', min: 3, max: 3, group: '文本', sig: 'MID(文本, 起始, 长度)', desc: '从第几个字符（从 1 开始）起取若干字符', fn: ([a, i, n]) => [...str(a)].slice(Math.max(0, toNum(i) - 1), Math.max(0, toNum(i) - 1) + Math.max(0, toNum(n))).join('') },
+  { name: 'FIND', min: 2, max: 2, group: '文本', sig: 'FIND(关键词, 文本)', desc: '关键词在文本中的位置（从 1 开始），找不到为 0', fn: ([k, t]) => [...str(t)].join('').indexOf(str(k)) + 1 },
+  {
+    name: 'SUBSTITUTE',
+    min: 3,
+    max: 3,
+    group: '文本',
+    sig: 'SUBSTITUTE(文本, 旧文本, 新文本)',
+    desc: '把文本中的旧文本全部替换为新文本',
+    fn: ([t, a, b]) => (str(a) ? str(t).split(str(a)).join(str(b)) : str(t)),
+  },
+  { name: 'REPT', min: 2, max: 2, group: '文本', sig: 'REPT(文本, 次数)', desc: '重复文本，例如 REPT("★", {评分})', fn: ([t, n]) => str(t).repeat(Math.max(0, Math.min(1000, Math.floor(toNum(n) || 0)))) },
   // number
   { name: 'VALUE', min: 1, max: 1, group: '数字', sig: 'VALUE(文本)', desc: '文本转数字', fn: ([a]) => num(toNum(a)) },
   { name: 'ABS', min: 1, max: 1, group: '数字', sig: 'ABS(数字)', desc: '绝对值', fn: ([a]) => num(Math.abs(toNum(a))) },
@@ -350,6 +408,8 @@ const FNS: FnDef[] = [
   },
   { name: 'FLOOR', min: 1, max: 1, group: '数字', sig: 'FLOOR(数字)', desc: '向下取整', fn: ([a]) => num(Math.floor(toNum(a))) },
   { name: 'CEIL', min: 1, max: 1, group: '数字', sig: 'CEIL(数字)', desc: '向上取整', fn: ([a]) => num(Math.ceil(toNum(a))) },
+  { name: 'POWER', min: 2, max: 2, group: '数字', sig: 'POWER(底数, 指数)', desc: '乘方', fn: ([a, b]) => num(toNum(a) ** toNum(b)) },
+  { name: 'SQRT', min: 1, max: 1, group: '数字', sig: 'SQRT(数字)', desc: '平方根', fn: ([a]) => num(Math.sqrt(toNum(a))) },
   { name: 'MOD', min: 2, max: 2, group: '数字', sig: 'MOD(a, b)', desc: 'a 除以 b 的余数', fn: ([a, b]) => num(toNum(a) % toNum(b)) },
   { name: 'MIN', min: 1, max: 99, group: '数字', sig: 'MIN(数字1, …)', desc: '最小值', fn: (a) => (nums(a).length ? Math.min(...nums(a)) : null) },
   { name: 'MAX', min: 1, max: 99, group: '数字', sig: 'MAX(数字1, …)', desc: '最大值', fn: (a) => (nums(a).length ? Math.max(...nums(a)) : null) },
@@ -451,16 +511,19 @@ const KEYWORDS: Record<string, Value> = { TRUE: true, FALSE: false, NULL: null }
 
 type Eval = (r: Rec) => Value
 
-function fieldResolver(t: TableData) {
+type FieldSource = Pick<TableData, 'fields'>
+
+function fieldResolver(t: FieldSource) {
   const byId = new Map(t.fields.map((f) => [f.id, f]))
   const byName = new Map<string, Field>()
   for (const f of t.fields) if (!byName.has(f.name.trim())) byName.set(f.name.trim(), f)
   return (ref: string): Field | undefined => (ref.startsWith('#') && byId.get(ref.slice(1))) || byName.get(ref)
 }
 
-function compileExpr(t: TableData, src: string): Eval {
+function compileExpr(t: FieldSource, src: string, read: CellReader = defaultReader): Eval {
   const toks = tokenize(src)
   const field = fieldResolver(t)
+  const valueOf = (f: Field): Eval => (r) => toFormulaValue(f, read(f, r))
   let i = 0
   const peek = () => toks[i]
   const isOp = (...v: string[]) => {
@@ -585,7 +648,7 @@ function compileExpr(t: TableData, src: string): Eval {
         i++
         const f = field(tk.v)
         if (!f) throw new FormulaError(`找不到字段「${tk.v.startsWith('#') ? '已删除的字段' : tk.v}」`, tk.pos)
-        return (r) => fieldValue(f, r)
+        return valueOf(f)
       }
       case 'ident': {
         i++
@@ -622,7 +685,7 @@ function compileExpr(t: TableData, src: string): Eval {
         }
         const f = field(tk.v)
         if (!f) throw new FormulaError(`找不到字段「${tk.v}」，字段名请用 {} 括起来`, tk.pos)
-        return (r) => fieldValue(f, r)
+        return valueOf(f)
       }
       case 'op':
         if (tk.v === '(') {
@@ -641,6 +704,32 @@ function compileExpr(t: TableData, src: string): Eval {
   const rest = peek()
   if (rest.k !== 'eof') throw new FormulaError('表达式在这里多出了内容，是否缺少 AND / OR？', rest.pos)
   return e
+}
+
+export type CompiledFormula = { ok: true; run: (r: Rec) => Value } | { ok: false; error: string; pos: number }
+
+/** Compiles a formula field's expression; `read` supplies the values of computed fields. */
+export function compileFormula(t: FieldSource, src: string, read?: CellReader): CompiledFormula {
+  try {
+    const e = compileExpr(t, src, read)
+    return {
+      ok: true,
+      run: (r) => {
+        try {
+          return e(r)
+        } catch {
+          return null
+        }
+      },
+    }
+  } catch (err) {
+    return err instanceof FormulaError ? { ok: false, error: err.message, pos: err.pos } : { ok: false, error: String(err), pos: 0 }
+  }
+}
+
+/** Field ids a stored expression references. */
+export function formulaRefs(src: string): string[] {
+  return [...src.matchAll(/\{#([0-9a-z]+)\}/g)].map((m) => m[1])
 }
 
 export type CompiledFilter = { ok: true; test: (r: Rec) => boolean } | { ok: false; error: string; pos: number }
@@ -721,7 +810,7 @@ function rewriteRefs(src: string, map: (ref: string, braced: boolean) => string 
 }
 
 /** Expression as typed (field names) → stored form (field ids). */
-export function toStoredExpr(t: TableData, src: string): string {
+export function toStoredExpr(t: FieldSource, src: string): string {
   const field = fieldResolver(t)
   return rewriteRefs(src, (ref) => {
     const f = field(ref)
@@ -730,7 +819,7 @@ export function toStoredExpr(t: TableData, src: string): string {
 }
 
 /** Stored form → expression with field names for editing. */
-export function toDisplayExpr(t: TableData, src: string): string {
+export function toDisplayExpr(t: FieldSource, src: string): string {
   const byId = new Map(t.fields.map((f) => [f.id, f]))
   return rewriteRefs(src, (ref, braced) => {
     if (!braced || !ref.startsWith('#')) return undefined

@@ -59,7 +59,8 @@ export async function importCSV(model: TableModel, file: File, viewId?: string) 
       byName.set(name.toLowerCase(), model.field(id)!)
       return id
     })
-    const fields = cols.map((id) => model.field(id)!)
+    // fields with runtime info: link columns match record titles
+    const fields = cols.map((id) => model.dataField(id)!)
     const col = choiceCollector(model.state.fields)
     const datas = body.map((r) => {
       const data: Record<string, any> = {}

@@ -211,7 +211,7 @@ func (t *TableData) markdown(viewID string) string {
 		data := recordData(r)
 		b.WriteString("\n|")
 		for j := range fields {
-			b.WriteString(" " + esc.Replace(cellText(&fields[j], r, data, true)) + " |")
+			b.WriteString(" " + esc.Replace(t.text(&fields[j], r, data, true, 0)) + " |")
 		}
 	}
 	return b.String()
@@ -233,7 +233,7 @@ func (t *TableData) csv() string {
 		data := recordData(r)
 		row := make([]string, len(t.Fields))
 		for j := range t.Fields {
-			row[j] = cellText(&t.Fields[j], r, data, false)
+			row[j] = t.text(&t.Fields[j], r, data, false, 0)
 		}
 		w.Write(row)
 	}
@@ -253,6 +253,7 @@ func (s *Server) embedMarkdown(md string) string {
 		if err != nil {
 			return ""
 		}
+		s.withLinked(t)
 		title := nonEmpty(t.Title, "未命名表格")
 		return "**" + title + "**\n\n" + t.markdown(e.View)
 	})

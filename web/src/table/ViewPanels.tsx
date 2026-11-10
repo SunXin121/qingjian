@@ -6,7 +6,7 @@ import { DATE_PRESETS, defaultCondValue, filterOps, kanbanField, kanbanFieldOk, 
 import { openFieldEditor } from './FieldEditor'
 import { compileFilter, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from './formula'
 import { orderIds, useTable, type TableModel } from './model'
-import { fieldTypeLabel, isComputed, newId, type Field, type FilterCond, type SortRule, type View } from './types'
+import { baseField, fieldTypeLabel, isComputed, newId, type Field, type FilterCond, type SortRule, type View } from './types'
 
 function useView(model: TableModel, viewId: string): [View | undefined, Field[]] {
   const t = useTable(model)
@@ -62,7 +62,8 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
           </button>
         )
         if (c.op === 'expr') return <ExprCond key={c.id} model={model} value={c.value ?? ''} conj={conj} remove={remove} onChange={(value) => update(i, { value })} />
-        const f = fields.find((x) => x.id === c.field)
+        const f0 = fields.find((x) => x.id === c.field)
+        const f = f0 && baseField(f0)
         const ops = f ? filterOps(f.type) : []
         const op = ops.find((o) => o.op === c.op)
         return (
@@ -72,7 +73,7 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
               fields={fields}
               value={c.field}
               onChange={(id) => {
-                const nf = fields.find((x) => x.id === id)!
+                const nf = baseField(fields.find((x) => x.id === id)!)
                 update(i, { field: id, op: filterOps(nf.type)[0].op, value: defaultCondValue(nf.type) })
               }}
             />
@@ -173,11 +174,12 @@ function ExprCond({ model, value, conj, remove, onChange }: { model: TableModel;
   )
 }
 
-function FormulaHelp({ onPick }: { onPick: (name: string) => void }) {
+export function FormulaHelp({ onPick, formula }: { onPick: (name: string) => void; formula?: boolean }) {
   const groups = [...new Set(FORMULA_FUNCTIONS.map((f) => f.group))]
   return (
     <div className="bt-formula-help">
       <div className="bt-formula-syntax">
+        {formula && <div>公式对每条记录计算一次，结果可以是数字、文本、日期或真假值（显示为复选框）。</div>}
         <div>
           字段写作 <code>{'{字段名}'}</code>，文本用引号 <code>"文本"</code>
         </div>
@@ -189,7 +191,8 @@ function FormulaHelp({ onPick }: { onPick: (name: string) => void }) {
         </div>
         <div>单选取选项名；多选与某个值比较时，包含该选项即为相等；文本比较不区分大小写</div>
         <div>
-          示例：<code>{'{截止日期} < TODAY() AND {状态} != "已完成"'}</code>
+          示例：
+          {formula ? <code>{'IF({截止日期} < TODAY(), "已逾期", DAYS({截止日期}, TODAY()) & " 天后到期")'}</code> : <code>{'{截止日期} < TODAY() AND {状态} != "已完成"'}</code>}
         </div>
       </div>
       {groups.map((g) => (
@@ -325,7 +328,7 @@ export const GroupPanel = (p: { model: TableModel; viewId: string }) => <RulesPa
 export function KanbanPanel({ model, viewId }: { model: TableModel; viewId: string }) {
   const [view, fields] = useView(model, viewId)
   if (!view) return null
-  const t = model.state
+  const t = model.data
   const options = fields.filter(kanbanFieldOk)
   const cur = kanbanField(t, view)
   return (

@@ -42,7 +42,7 @@ import { openFieldEditor } from './FieldEditor'
 import { choiceOps, orderIds, type CellChange, type TableModel } from './model'
 import { palette, useGridTheme } from './theme'
 import type { Field, FieldType, Rec, TableData, View } from './types'
-import { isComputed } from './types'
+import { baseField, isComputed } from './types'
 
 // the overlay editor portal Glide expects at the document root
 if (typeof document !== 'undefined' && !document.getElementById('portal')) {
@@ -69,6 +69,10 @@ const ICONS: Record<FieldType, GridColumnIcon> = {
   progress: GridColumnIcon.HeaderNumber,
   phone: GridColumnIcon.HeaderPhone,
   email: GridColumnIcon.HeaderEmail,
+  formula: GridColumnIcon.HeaderMath,
+  link: GridColumnIcon.HeaderReference,
+  lookup: GridColumnIcon.HeaderLookup,
+  rollup: GridColumnIcon.HeaderRollup,
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 600
@@ -146,7 +150,8 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       { id: '__idx', title: '', width: INDEX_W },
       ...fields.map((f, i) => ({
         id: f.id,
-        title: f.name,
+        // a broken formula / lookup shows its problem in the header
+        title: f.rt?.error ? `${f.name} ⚠` : f.name,
         width: liveWidths[f.id] ?? cfg.widths?.[f.id] ?? defaultWidth(f, i === 0),
         icon: ICONS[f.type],
         hasMenu: !readOnly,
@@ -963,6 +968,13 @@ function makeCell(model: TableModel, f: Field, rec: Rec, readOnly: boolean): Gri
     case 'created_time':
     case 'modified_time':
       return { kind: GridCellKind.Text, data: text, displayData: text, allowOverlay: false, readonly: true, themeOverride: { textDark: palette.muted } }
+    case 'formula':
+    case 'lookup':
+    case 'rollup': {
+      const b = baseField(f)
+      if (b.type === 'checkbox') return { kind: GridCellKind.Boolean, data: !!v, allowOverlay: false, readonly: true, copyData: v ? '✓' : '' } as GridCell
+      return { kind: GridCellKind.Custom, data: { kind: 'qj-value', field: b, value: v, model }, copyData: text, allowOverlay: false, readonly: true } as ValueCell
+    }
     case 'checkbox':
       return { kind: GridCellKind.Boolean, data: !!v, allowOverlay: false, readonly: ro, copyData: v ? '✓' : '' } as GridCell
     case 'phone':

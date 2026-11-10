@@ -19,6 +19,8 @@ export interface Palette {
   searchCurrent: string
   star: string
   starOff: string
+  linkBg: string
+  linkFg: string
   success: string
 }
 
@@ -36,6 +38,8 @@ export let palette: Palette = {
   searchCurrent: '#fbd27a',
   star: '#f5b301',
   starOff: '#e3e3e0',
+  linkBg: '#e8eefc',
+  linkFg: '#2a56b0',
   success: '#2f9e5b',
 }
 
@@ -56,6 +60,8 @@ function read(): { theme: Partial<Theme>; palette: Palette } {
     searchHit: v('--bt-search-hit'),
     searchCurrent: v('--bt-search-current'),
     star: v('--bt-star') || '#f5b301',
+    linkBg: v('--tag-0-bg'),
+    linkFg: v('--tag-0-fg'),
     starOff: v('--bt-star-off') || '#e3e3e0',
     success: v('--c-success') || '#2f9e5b',
   }

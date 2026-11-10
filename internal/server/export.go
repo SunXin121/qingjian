@@ -239,7 +239,7 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 				}
 			case "table":
 				if t, err := s.loadTableData(s.db, n.ID); err == nil {
-					writeZipText(zw, dir+base+".csv", t.csv(), n.UpdatedAt)
+					writeZipText(zw, dir+base+".csv", s.withLinked(t).csv(), n.UpdatedAt)
 				}
 			}
 			if len(children[n.ID]) > 0 {
