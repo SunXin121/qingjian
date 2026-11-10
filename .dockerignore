@@ -1,0 +1,8 @@
+.git
+data
+bin
+web/node_modules
+web/dist
+web/public/excalidraw-assets
+.env
+.github

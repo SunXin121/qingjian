@@ -1,0 +1,16 @@
+services:
+  qingjian:
+    # 由 GitHub Actions 自动构建的镜像；想在本机构建可改用 `docker compose up -d --build`
+    image: ${QINGJIAN_IMAGE:-ghcr.io/sunxin121/qingjian:latest}
+    build: .
+    container_name: qingjian
+    restart: unless-stopped
+    environment:
+      QINGJIAN_ADMIN_PASSWORD: ${QINGJIAN_ADMIN_PASSWORD:?请在 .env 中设置 QINGJIAN_ADMIN_PASSWORD}
+      QINGJIAN_MAX_UPLOAD_MB: ${QINGJIAN_MAX_UPLOAD_MB:-100}
+      # 放在 Nginx / Caddy 等反向代理后面时设为 1；直接对外暴露时保持为空
+      QINGJIAN_TRUST_PROXY: ${QINGJIAN_TRUST_PROXY:-}
+    ports:
+      - "${QINGJIAN_BIND:-127.0.0.1}:${QINGJIAN_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data

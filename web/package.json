@@ -1,0 +1,29 @@
+{
+  "name": "qingjian-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "copy-assets": "rm -rf public/excalidraw-assets && mkdir -p public/excalidraw-assets && cp -r node_modules/@excalidraw/excalidraw/dist/prod/fonts public/excalidraw-assets/",
+    "build": "npm run copy-assets && tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
+    "@milkdown/crepe": "^7.23.0",
+    "@milkdown/kit": "^7.23.0",
+    "@viz-js/viz": "^3.31.0",
+    "mermaid": "^12.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^7.18.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.8"
+  }
+}

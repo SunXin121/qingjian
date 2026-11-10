@@ -1,0 +1,182 @@
+export interface Repo {
+  id: string
+  name: string
+  description: string
+  icon: string
+  sort: number
+  doc_count: number
+  created_at: number
+  updated_at: number
+}
+
+export type NodeType = 'doc' | 'group'
+
+export interface TreeNode {
+  id: string
+  repo_id: string
+  parent_id: string | null
+  type: NodeType
+  title: string
+  sort: number
+  created_at: number
+  updated_at: number
+}
+
+export interface Doc extends TreeNode {
+  markdown: string
+  content_updated_at: number
+}
+
+export interface Version {
+  id: number
+  node_id: string
+  title: string
+  markdown?: string
+  size: number
+  created_at: number
+}
+
+export interface RecentDoc {
+  id: string
+  repo_id: string
+  repo_name: string
+  title: string
+  updated_at: number
+}
+
+export interface SearchHit extends RecentDoc {
+  snippet: string
+}
+
+export interface TrashItem {
+  kind: 'repo' | 'node'
+  id: string
+  type: string
+  title: string
+  repo_id: string
+  repo_name: string
+  deleted_at: number
+}
+
+export interface Attachment {
+  id: string
+  name: string
+  mime: string
+  size: number
+  url: string
+}
+
+export class ApiError extends Error {
+  status: number
+  data: any
+  constructor(status: number, message: string, data: any) {
+    super(message)
+    this.status = status
+    this.data = data
+  }
+}
+
+/** Fired whenever the server says we are not logged in. */
+export const authEvents = new EventTarget()
+
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+  })
+  const text = await res.text()
+  let data: any = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = text
+  }
+  if (!res.ok) {
+    if (res.status === 401 && !url.startsWith('/api/auth/')) authEvents.dispatchEvent(new Event('unauthorized'))
+    throw new ApiError(res.status, data?.error || res.statusText || '请求失败', data)
+  }
+  return data as T
+}
+
+export const api = {
+  me: () => request<{ admin: boolean }>('GET', '/api/auth/me'),
+  login: (password: string) => request<{ ok: boolean }>('POST', '/api/auth/login', { password }),
+  logout: () => request('POST', '/api/auth/logout'),
+
+  repos: () => request<Repo[]>('GET', '/api/repos'),
+  repo: (id: string) => request<Repo>('GET', `/api/repos/${id}`),
+  createRepo: (name: string, description = '') => request<Repo>('POST', '/api/repos', { name, description }),
+  updateRepo: (id: string, patch: Partial<Pick<Repo, 'name' | 'description' | 'icon'>>) =>
+    request<Repo>('PATCH', `/api/repos/${id}`, patch),
+  deleteRepo: (id: string) => request('DELETE', `/api/repos/${id}`),
+  tree: (repoId: string) => request<TreeNode[]>('GET', `/api/repos/${repoId}/tree`),
+
+  createNode: (repo_id: string, parent_id: string | null, type: NodeType, title = '') =>
+    request<TreeNode>('POST', '/api/nodes', { repo_id, parent_id, type, title }),
+  renameNode: (id: string, title: string) => request<TreeNode>('PATCH', `/api/nodes/${id}`, { title }),
+  moveNode: (id: string, parent_id: string | null, sort: number) =>
+    request('POST', `/api/nodes/${id}/move`, { parent_id, sort }),
+  deleteNode: (id: string) => request('DELETE', `/api/nodes/${id}`),
+
+  doc: (id: string) => request<Doc>('GET', `/api/docs/${id}`),
+  saveDoc: (
+    id: string,
+    body: { markdown?: string; title?: string; base_updated_at?: number; force?: boolean; snapshot?: boolean },
+  ) => request<{ updated_at: number; title: string }>('PUT', `/api/docs/${id}`, body),
+  versions: (id: string) => request<Version[]>('GET', `/api/docs/${id}/versions`),
+  version: (vid: number) => request<Version>('GET', `/api/versions/${vid}`),
+  restoreVersion: (vid: number) => request<{ updated_at: number }>('POST', `/api/versions/${vid}/restore`),
+
+  recent: () => request<RecentDoc[]>('GET', '/api/recent'),
+  search: (q: string) => request<SearchHit[]>('GET', `/api/search?q=${encodeURIComponent(q)}`),
+
+  trash: () => request<TrashItem[]>('GET', '/api/trash'),
+  restoreTrash: (kind: string, id: string) => request('POST', `/api/trash/${kind}/${id}/restore`),
+  purgeTrash: (kind: string, id: string) => request('DELETE', `/api/trash/${kind}/${id}`),
+}
+
+export function uploadFile(file: Blob, name?: string, onProgress?: (ratio: number) => void): Promise<Attachment> {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData()
+    fd.append('file', file, name ?? (file instanceof File ? file.name : 'file'))
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/files')
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
+    xhr.onload = () => {
+      let data: any = null
+      try {
+        data = JSON.parse(xhr.responseText)
+      } catch {
+        /* ignore */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data)
+      else reject(new ApiError(xhr.status, data?.error || '上传失败', data))
+    }
+    xhr.onerror = () => reject(new ApiError(0, '网络错误，上传失败', null))
+    xhr.send(fd)
+  })
+}
+
+export function formatTime(ms: number): string {
+  const d = new Date(ms)
+  const diff = Date.now() - ms
+  if (diff < 60_000) return '刚刚'
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  const today = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  if (d.toDateString() === today.toDateString()) return `今天 ${hm}`
+  const y = new Date(today)
+  y.setDate(today.getDate() - 1)
+  if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`
+  const md = `${d.getMonth() + 1}月${d.getDate()}日`
+  return d.getFullYear() === today.getFullYear() ? `${md} ${hm}` : `${d.getFullYear()}年${md}`
+}
+
+export function formatSize(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
