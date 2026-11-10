@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	versionInterval = 10 * 60 * 1000 // ms between automatic snapshots
+	versionInterval = 60 * 1000 // ms between automatic snapshots
 	maxVersions     = 300
 )
 
