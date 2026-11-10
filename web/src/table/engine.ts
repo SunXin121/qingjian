@@ -3,6 +3,7 @@
 
 import type { AttachmentValue, Choice, Field, FieldType, FilterCond, FilterOp, Rec, SortRule, SummaryKind, TableData, View } from './types'
 import { isComputed, newId } from './types'
+import { compileFilter } from './formula'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -254,9 +255,13 @@ function matchCond(c: FilterCond, f: Field, r: Rec): boolean {
   }
 }
 
+const isExpr = (c: FilterCond) => c.op === 'expr'
+
 export function activeConds(t: TableData, v: View): FilterCond[] {
   const byId = new Map(t.fields.map((f) => [f.id, f]))
   return (v.config.filter?.conds ?? []).filter((c) => {
+    // an expression that does not compile is ignored (the filter panel shows the error)
+    if (isExpr(c)) return typeof c.value === 'string' && c.value.trim() !== '' && compileFilter(t, c.value).ok
     const f = byId.get(c.field)
     return f && condActive(c, f)
   })
@@ -264,10 +269,18 @@ export function activeConds(t: TableData, v: View): FilterCond[] {
 
 export function makeMatcher(t: TableData, v: View): (r: Rec) => boolean {
   const byId = new Map(t.fields.map((f) => [f.id, f]))
-  const conds = activeConds(t, v)
-  if (!conds.length) return () => true
+  const tests = activeConds(t, v).map((c): ((r: Rec) => boolean) => {
+    if (isExpr(c)) {
+      const e = compileFilter(t, c.value)
+      return e.ok ? e.test : () => true
+    }
+    const f = byId.get(c.field)!
+    return (r) => matchCond(c, f, r)
+  })
+  if (!tests.length) return () => true
+  if (tests.length === 1) return tests[0]
   const any = v.config.filter?.conj === 'or'
-  return (r) => (any ? conds.some((c) => matchCond(c, byId.get(c.field)!, r)) : conds.every((c) => matchCond(c, byId.get(c.field)!, r)))
+  return (r) => (any ? tests.some((test) => test(r)) : tests.every((test) => test(r)))
 }
 
 // ---------- sorting ----------
@@ -416,6 +429,144 @@ export function groupPaths(t: TableData, rec: Rec, rules: SortRule[]): string[] 
     out.push(prefix)
   }
   return out
+}
+
+// ---------- kanban ----------
+
+/** Fields a kanban board can be grouped by; attachments and auto numbers make no useful columns. */
+export const kanbanFieldOk = (f: Field) => f.type !== 'attachment' && f.type !== 'autonumber'
+
+/** The field a kanban view groups by: the configured one, else the first select-like field. */
+export function kanbanField(t: TableData, v: View): Field | undefined {
+  const set = t.fields.find((f) => f.id === v.config.kanbanField && kanbanFieldOk(f))
+  return set ?? t.fields.find((f) => f.type === 'select') ?? t.fields.find((f) => f.type === 'multiselect') ?? t.fields.find((f) => f.type === 'checkbox')
+}
+
+export const KANBAN_EMPTY = '__empty'
+/** columns shown at most when grouping by free-form values (text, numbers, dates) */
+export const MAX_KANBAN_COLUMNS = 200
+
+export interface KanbanColumn {
+  key: string
+  label: string
+  choice?: Choice
+  /** value stored when a card is dropped into / created in this column (free-form fields) */
+  value?: any
+}
+
+export interface KanbanLayout {
+  columns: KanbanColumn[]
+  byColumn: Map<string, Rec[]>
+  /** records whose column is beyond MAX_KANBAN_COLUMNS */
+  hiddenRecords: number
+}
+
+/**
+ * Splits records into kanban columns. Select / multi-select columns are the options (a
+ * multi-select record shows in each of its options), checkbox gives two columns, other
+ * fields one column per distinct value in ascending order.
+ */
+export function kanbanLayout(f: Field, records: Rec[], hideEmpty?: boolean): KanbanLayout {
+  const empty: KanbanColumn = { key: KANBAN_EMPTY, label: '未分组' }
+  let columns: KanbanColumn[]
+  const byColumn = new Map<string, Rec[]>()
+  const push = (key: string, r: Rec) => {
+    let l = byColumn.get(key)
+    if (!l) byColumn.set(key, (l = []))
+    l.push(r)
+  }
+  let hiddenRecords = 0
+  if (f.type === 'select' || f.type === 'multiselect') {
+    const choices = f.options.choices ?? []
+    const ids = new Set(choices.map((c) => c.id))
+    columns = choices.map((c) => ({ key: c.id, label: c.name, choice: c }))
+    for (const r of records) {
+      const v = r.data[f.id]
+      const keys = (f.type === 'select' ? [v] : Array.isArray(v) ? v : []).filter((id) => ids.has(id))
+      if (keys.length) for (const k of new Set(keys)) push(k, r)
+      else push(KANBAN_EMPTY, r)
+    }
+    if (!hideEmpty) columns.push(empty)
+  } else if (f.type === 'checkbox') {
+    columns = [
+      { key: '0', label: '未勾选' },
+      { key: '1', label: '已勾选' },
+    ]
+    for (const r of records) push(r.data[f.id] ? '1' : '0', r)
+  } else {
+    const samples = new Map<string, any>()
+    for (const r of records) {
+      const v = cellValue(r, f)
+      const key = groupKey(f, v)
+      if (key === '') push(KANBAN_EMPTY, r)
+      else {
+        if (!samples.has(key)) samples.set(key, v)
+        push(key, r)
+      }
+    }
+    const keys = [...samples.keys()].map((key) => ({ key, k: sortKey(f, samples.get(key)) }))
+    keys.sort((a, b) => compareKeys(a.k, b.k))
+    columns = keys.map(({ key }) => ({ key, label: groupLabel(f, key), value: f.type === 'date' ? key : samples.get(key) }))
+    if (columns.length > MAX_KANBAN_COLUMNS) {
+      for (const c of columns.slice(MAX_KANBAN_COLUMNS)) hiddenRecords += byColumn.get(c.key)!.length
+      columns = columns.slice(0, MAX_KANBAN_COLUMNS)
+    }
+    if (!hideEmpty) columns.push(empty)
+  }
+  for (const c of columns) if (!byColumn.has(c.key)) byColumn.set(c.key, [])
+  return { columns, byColumn, hiddenRecords }
+}
+
+/**
+ * Data that moves a record from one kanban column to another (undefined: no change).
+ * `from` matters for multi-select, where the card swaps one option for another.
+ */
+export function kanbanMoveData(f: Field, rec: Rec, from: string, to: KanbanColumn): Record<string, any> | undefined {
+  if (from === to.key || isComputed(f.type)) return undefined
+  const cur = rec.data[f.id]
+  let next: any
+  if (to.key === KANBAN_EMPTY) next = null
+  else
+    switch (f.type) {
+      case 'select':
+        next = to.key
+        break
+      case 'multiselect': {
+        const list: string[] = Array.isArray(cur) ? cur : []
+        if (list.includes(to.key)) next = list.filter((id) => id !== from)
+        else if (list.includes(from)) next = list.map((id) => (id === from ? to.key : id))
+        else next = [...list, to.key]
+        if (!next.length) next = null
+        break
+      }
+      case 'checkbox':
+        next = to.key === '1' ? true : null
+        break
+      case 'date':
+        // keep the time of day when the field has one
+        next = to.key + (f.options.time && typeof cur === 'string' ? cur.slice(10) : '')
+        break
+      default:
+        next = to.value
+    }
+  return { [f.id]: next }
+}
+
+/** Initial data of a record created in a kanban column. */
+export function kanbanNewData(f: Field, col: KanbanColumn): Record<string, any> {
+  if (col.key === KANBAN_EMPTY || isComputed(f.type)) return {}
+  switch (f.type) {
+    case 'select':
+      return { [f.id]: col.key }
+    case 'multiselect':
+      return { [f.id]: [col.key] }
+    case 'checkbox':
+      return col.key === '1' ? { [f.id]: true } : {}
+    case 'date':
+      return { [f.id]: col.key }
+    default:
+      return { [f.id]: col.value }
+  }
 }
 
 // ---------- search ----------

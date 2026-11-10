@@ -3,7 +3,7 @@
 // light: no canvas grid, a capped number of rows, and a link to the full table.
 
 import { api, type TableSummary } from '../api'
-import { cellValue, displayText, primaryField, viewRecords, visibleFields } from './engine'
+import { cellValue, displayText, KANBAN_EMPTY, kanbanField, kanbanLayout, primaryField, viewRecords, visibleFields, type KanbanColumn } from './engine'
 import type { AttachmentValue, Field, Rec, TableData } from './types'
 
 export interface EmbedRef {
@@ -96,19 +96,20 @@ export function embedHTML(t: TableData, viewId?: string): string {
   }</div>`
   let body: string
   if (view.type === 'kanban') {
-    const groupField = t.fields.find((f) => f.id === view.config.kanbanField && f.type === 'select') ?? t.fields.find((f) => f.type === 'select')
+    const groupField = kanbanField(t, view)
     const primary = primaryField(t)
-    if (!groupField) body = hint('看板缺少单选分组字段')
+    if (!groupField) body = hint('看板还没有选择分组字段')
     else {
-      const cols = [...(groupField.options.choices ?? []).map((c) => ({ key: c.id, head: `<span class="bt-tag c${c.color % 10}"><span>${esc(c.name)}</span></span>` })), { key: '', head: '<span class="muted">未分组</span>' }]
-      const byKey = new Map<string, Rec[]>(cols.map((c) => [c.key, []]))
-      for (const r of records) (byKey.get(r.data[groupField.id]) ?? byKey.get(''))!.push(r)
+      const { columns, byColumn } = kanbanLayout(groupField, records)
+      const head = (c: KanbanColumn) =>
+        c.choice ? `<span class="bt-tag c${c.choice.color % 10}"><span>${esc(c.choice.name)}</span></span>` : c.key === KANBAN_EMPTY ? '<span class="muted">未分组</span>' : `<strong>${esc(c.label)}</strong>`
       const others = fields.filter((f) => f.id !== primary.id && f.id !== groupField.id)
-      body = `<div class="bt-embed-kanban">${cols
-        .filter((c) => c.key !== '' || byKey.get('')!.length)
+      body = `<div class="bt-embed-kanban">${columns
+        .filter((c) => c.key !== KANBAN_EMPTY || byColumn.get(c.key)!.length)
+        .slice(0, 30)
         .map((c) => {
-          const list = byKey.get(c.key)!
-          return `<div class="bt-embed-col"><div class="bt-embed-col-head">${c.head}<span class="muted">${list.length}</span></div>${list
+          const list = byColumn.get(c.key)!
+          return `<div class="bt-embed-col"><div class="bt-embed-col-head">${head(c)}<span class="muted">${list.length}</span></div>${list
             .slice(0, 20)
             .map(
               (r) =>

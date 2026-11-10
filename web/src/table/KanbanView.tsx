@@ -2,10 +2,27 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent }
 import { openMenu, promptText } from '../components/dialog'
 import { IconEdit, IconMore, IconPlus, IconTrash } from '../components/icons'
 import { ValueView, Tag } from './editors'
-import { cellMatches, cellValue, displayText, isEmptyValue, primaryField, searchNeedle, viewRecords, visibleFields } from './engine'
+import {
+  cellMatches,
+  cellValue,
+  displayText,
+  isEmptyValue,
+  KANBAN_EMPTY,
+  kanbanField,
+  kanbanFieldOk,
+  kanbanLayout,
+  kanbanMoveData,
+  kanbanNewData,
+  MAX_KANBAN_COLUMNS,
+  primaryField,
+  searchNeedle,
+  viewRecords,
+  visibleFields,
+  type KanbanColumn,
+} from './engine'
 import { openFieldEditor } from './FieldEditor'
 import type { TableModel } from './model'
-import { newId, TAG_COLORS, type Choice, type Field, type Rec, type TableData, type View } from './types'
+import { isComputed, newId, TAG_COLORS, type Choice, type Field, type Rec, type TableData, type View } from './types'
 
 interface Props {
   model: TableModel
@@ -18,14 +35,12 @@ interface Props {
   onSearchCount?: (n: number) => void
 }
 
-const EMPTY = '__empty'
 /** cards rendered per column at first and added each time the column is scrolled to its end */
 const PAGE = 50
 
 export default function KanbanView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {
   const cfg = view.config
-  const selectFields = table.fields.filter((f) => f.type === 'select')
-  const groupField = selectFields.find((f) => f.id === cfg.kanbanField) ?? selectFields[0]
+  const groupField = kanbanField(table, view)
   const needle = searchNeedle(search)
   const records = useMemo(() => {
     const list = viewRecords(table, view, model.sticky)
@@ -36,17 +51,31 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
   useLayoutEffect(() => onSearchCount?.(records.length), [records.length, onSearchCount])
   const primary = primaryField(table)
   const cardFields = useMemo(() => visibleFields(table, view).filter((f) => f.id !== primary?.id && f.id !== groupField?.id), [table, view, primary, groupField])
-  const [drag, setDrag] = useState<{ id: string; over?: string; before?: string } | null>(null)
+  // `from`: the column the card was picked up in (a multi-select card shows in several)
+  const [drag, setDrag] = useState<{ id: string; from: string; over?: string; before?: string } | null>(null)
   const sorted = !!cfg.sorts?.length
   // how many cards each column shows; starts over when the view or the search changes
   const [limits, setLimits] = useState<Record<string, number>>({})
   useEffect(() => setLimits({}), [view.id, needle, groupField?.id])
   const limitOf = (key: string) => limits[key] ?? PAGE
 
-  if (!groupField) {
+  const layout = useMemo(() => (groupField ? kanbanLayout(groupField, records, cfg.hideEmptyColumn) : null), [groupField, records, cfg.hideEmptyColumn])
+
+  if (!groupField || !layout) {
+    const fields = table.fields.filter(kanbanFieldOk)
     return (
       <div className="bt-kanban-empty">
-        <p>看板按「单选」字段分组展示记录，当前表格还没有单选字段。</p>
+        <p>看板按一个字段把记录分成多列，请选择分组字段。</p>
+        {!readOnly && fields.length > 0 && (
+          <select className="bt-input" value="" onChange={(e) => e.target.value && model.updateView(view.id, { kanbanField: e.target.value })}>
+            <option value="">选择分组字段…</option>
+            {fields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        )}
         {!readOnly && (
           <button
             className="btn primary"
@@ -65,25 +94,24 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     )
   }
 
+  const { columns, byColumn, hiddenRecords } = layout
   const choices = groupField.options.choices ?? []
-  const columns: { key: string; choice?: Choice }[] = [...choices.map((c) => ({ key: c.id, choice: c })), ...(cfg.hideEmptyColumn ? [] : [{ key: EMPTY }])]
-  const byColumn = new Map<string, Rec[]>(columns.map((c) => [c.key, []]))
-  for (const r of records) {
-    const v = r.data[groupField.id]
-    const key = v && byColumn.has(v) ? v : EMPTY
-    byColumn.get(key)?.push(r)
-  }
-  const allIds = columns.flatMap((c) => byColumn.get(c.key)!.map((r) => r.id))
+  const hasChoices = groupField.type === 'select' || groupField.type === 'multiselect'
+  // computed fields (created / modified time) cannot be written: cards only reorder
+  const writable = !isComputed(groupField.type)
+  const allIds = [...new Set(columns.flatMap((c) => byColumn.get(c.key)!.map((r) => r.id)))]
+  const canDropIn = (colKey: string) => !!drag && (writable || drag.from === colKey)
 
-  const drop = (e: DragEvent, colKey: string) => {
+  const drop = (e: DragEvent, col: KanbanColumn) => {
     e.preventDefault()
-    if (!drag) return
+    if (!drag || !canDropIn(col.key)) return
+    const colKey = col.key
     const rec = model.record(drag.id)
     const before = drag.before ?? byColumn.get(colKey)!.filter((r) => r.id !== drag.id)[limitOf(colKey)]?.id
+    const from = drag.from
     setDrag(null)
     if (!rec) return
-    const value = colKey === EMPTY ? null : colKey
-    const data = (rec.data[groupField.id] ?? null) === value ? undefined : { [groupField.id]: value }
+    const data = kanbanMoveData(groupField, rec, from, col)
     let sort: number | undefined
     if (!sorted) {
       // place between neighbours in the global record order
@@ -102,8 +130,9 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     }
   }
 
-  const addCard = (colKey: string) => {
-    const data = colKey === EMPTY ? {} : { [groupField.id]: colKey }
+  const addCard = (col: KanbanColumn) => {
+    const colKey = col.key
+    const data = kanbanNewData(groupField, col)
     const list = byColumn.get(colKey)!
     const [id] = model.addRecords([data], list.at(-1)?.id)
     // make sure the new card at the end of the column is rendered
@@ -139,21 +168,31 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
             key={col.key}
             className={'bt-col' + (drag?.over === col.key ? ' over' : '')}
             onDragOver={(e) => {
-              if (!drag) return
+              if (!drag || !canDropIn(col.key)) return
               e.preventDefault()
               if (drag.over !== col.key) setDrag({ ...drag, over: col.key, before: undefined })
             }}
-            onDrop={(e) => drop(e, col.key)}
+            onDrop={(e) => drop(e, col)}
           >
             <div className="bt-col-head">
-              {col.choice ? <Tag choice={col.choice} /> : <span className="bt-col-none">未分组</span>}
+              {col.choice ? (
+                <Tag choice={col.choice} />
+              ) : col.key === KANBAN_EMPTY ? (
+                <span className="bt-col-none">未分组</span>
+              ) : (
+                <span className="bt-col-label ellipsis" title={col.label}>
+                  {col.label}
+                </span>
+              )}
               <span className="bt-col-count">{list.length}</span>
               <span className="spacer" />
               {!readOnly && (
                 <>
-                  <button className="icon-btn sm" title="新建记录" onClick={() => addCard(col.key)}>
-                    <IconPlus width={15} height={15} />
-                  </button>
+                  {writable && (
+                    <button className="icon-btn sm" title="新建记录" onClick={() => addCard(col)}>
+                      <IconPlus width={15} height={15} />
+                    </button>
+                  )}
                   {col.choice && (
                     <button className="icon-btn sm" title="更多" onClick={(e) => columnMenu(e.currentTarget, col.choice!)}>
                       <IconMore width={15} height={15} />
@@ -166,16 +205,16 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               {shown.map((r) => (
                 <div
                   key={r.id}
-                  className={'bt-card' + (drag?.id === r.id ? ' dragging' : '') + (drag?.over === col.key && drag.before === r.id ? ' drop-before' : '')}
+                  className={'bt-card' + (drag?.id === r.id && drag.from === col.key ? ' dragging' : '') + (drag?.over === col.key && drag.before === r.id ? ' drop-before' : '')}
                   draggable={!readOnly}
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = 'move'
                     e.dataTransfer.setData('text/plain', r.id)
-                    setDrag({ id: r.id })
+                    setDrag({ id: r.id, from: col.key })
                   }}
                   onDragEnd={() => setDrag(null)}
                   onDragOver={(e) => {
-                    if (!drag || drag.id === r.id) return
+                    if (!drag || drag.id === r.id || !canDropIn(col.key)) return
                     e.preventDefault()
                     e.stopPropagation()
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -185,7 +224,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
                   }}
                   onDrop={(e) => {
                     e.stopPropagation()
-                    drop(e, col.key)
+                    drop(e, col)
                   }}
                   onClick={() => onOpenRecord(r.id, allIds)}
                 >
@@ -202,8 +241,8 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
                   onLoad={() => setLimits((l) => ({ ...l, [col.key]: (l[col.key] ?? PAGE) + PAGE }))}
                 />
               )}
-              {!readOnly && shown.length === list.length && (
-                <button className="bt-col-add" onClick={() => addCard(col.key)}>
+              {!readOnly && writable && shown.length === list.length && (
+                <button className="bt-col-add" onClick={() => addCard(col)}>
                   <IconPlus width={14} height={14} /> 新建记录
                 </button>
               )}
@@ -211,7 +250,12 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
           </div>
         )
       })}
-      {!readOnly && (
+      {hiddenRecords > 0 && (
+        <div className="bt-col-overflow">
+          分组超过 {MAX_KANBAN_COLUMNS} 个，另有 {hiddenRecords} 条记录未显示，可通过筛选缩小范围
+        </div>
+      )}
+      {!readOnly && hasChoices && (
         <button
           className="bt-col-new"
           onClick={async () => {

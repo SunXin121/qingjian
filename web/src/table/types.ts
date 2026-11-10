@@ -58,6 +58,8 @@ export type FilterOp =
   | 'lte'
   | 'empty'
   | 'not_empty'
+  /** formula expression (formula.ts); `field` is empty and `value` holds the stored expression */
+  | 'expr'
 
 export interface FilterCond {
   id: string
@@ -88,7 +90,7 @@ export interface ViewConfig {
   /** collapsed group keys (grid) */
   collapsed?: string[]
   summary?: Record<string, SummaryKind>
-  /** kanban: single-select field the board is grouped by */
+  /** kanban: field the board is grouped by (any type but attachment / autonumber) */
   kanbanField?: string
   /** kanban: hide the column for records without a value */
   hideEmptyColumn?: boolean

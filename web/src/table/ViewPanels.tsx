@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react'
-import { openPopover } from '../components/dialog'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { openMenu, openPopover } from '../components/dialog'
 import { IconClose, IconEdit, IconPlus } from '../components/icons'
 import { ChoicePicker, Tags } from './editors'
-import { DATE_PRESETS, defaultCondValue, filterOps, orderedFields } from './engine'
+import { DATE_PRESETS, defaultCondValue, filterOps, kanbanField, kanbanFieldOk, orderedFields } from './engine'
 import { openFieldEditor } from './FieldEditor'
+import { compileFilter, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from './formula'
 import { orderIds, useTable, type TableModel } from './model'
-import { fieldTypeLabel, newId, type Field, type FilterCond, type SortRule, type View } from './types'
+import { fieldTypeLabel, isComputed, newId, type Field, type FilterCond, type SortRule, type View } from './types'
 
 function useView(model: TableModel, viewId: string): [View | undefined, Field[]] {
   const t = useTable(model)
@@ -39,25 +40,34 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
       <div className="bt-panel-title">筛选条件</div>
       {filter.conds.length === 0 && <div className="bt-panel-empty">还没有筛选条件，只显示符合条件的记录</div>}
       {filter.conds.map((c, i) => {
+        const conj = (
+          <span className="bt-cond-conj">
+            {i === 0 ? (
+              '当'
+            ) : i === 1 ? (
+              <select className="bt-input sm" value={filter.conj} onChange={(e) => set(filter.conds, e.target.value as 'and' | 'or')}>
+                <option value="and">且</option>
+                <option value="or">或</option>
+              </select>
+            ) : filter.conj === 'and' ? (
+              '且'
+            ) : (
+              '或'
+            )}
+          </span>
+        )
+        const remove = (
+          <button className="icon-btn sm" title="删除条件" onClick={() => set(filter.conds.filter((_, j) => j !== i))}>
+            <IconClose width={14} height={14} />
+          </button>
+        )
+        if (c.op === 'expr') return <ExprCond key={c.id} model={model} value={c.value ?? ''} conj={conj} remove={remove} onChange={(value) => update(i, { value })} />
         const f = fields.find((x) => x.id === c.field)
         const ops = f ? filterOps(f.type) : []
         const op = ops.find((o) => o.op === c.op)
         return (
           <div key={c.id} className="bt-cond">
-            <span className="bt-cond-conj">
-              {i === 0 ? (
-                '当'
-              ) : i === 1 ? (
-                <select className="bt-input sm" value={filter.conj} onChange={(e) => set(filter.conds, e.target.value as 'and' | 'or')}>
-                  <option value="and">且</option>
-                  <option value="or">或</option>
-                </select>
-              ) : filter.conj === 'and' ? (
-                '且'
-              ) : (
-                '或'
-              )}
-            </span>
+            {conj}
             <FieldSelect
               fields={fields}
               value={c.field}
@@ -74,21 +84,125 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
               ))}
             </select>
             {f && !op?.unary ? <CondValue field={f} value={c.value} onChange={(value) => update(i, { value })} /> : <span className="bt-cond-value" />}
-            <button className="icon-btn sm" title="删除条件" onClick={() => set(filter.conds.filter((_, j) => j !== i))}>
-              <IconClose width={14} height={14} />
-            </button>
+            {remove}
           </div>
         )
       })}
-      <button
-        className="btn ghost sm bt-panel-add"
-        onClick={() => {
-          const f = fields[0]
-          set([...filter.conds, { id: newId(), field: f.id, op: filterOps(f.type)[0].op, value: defaultCondValue(f.type) }])
-        }}
-      >
-        <IconPlus width={14} height={14} /> 添加条件
-      </button>
+      <div className="bt-panel-actions">
+        <button
+          className="btn ghost sm"
+          onClick={() => {
+            const f = fields[0]
+            set([...filter.conds, { id: newId(), field: f.id, op: filterOps(f.type)[0].op, value: defaultCondValue(f.type) }])
+          }}
+        >
+          <IconPlus width={14} height={14} /> 添加条件
+        </button>
+        <button className="btn ghost sm" onClick={() => set([...filter.conds, { id: newId(), field: '', op: 'expr', value: '' }])}>
+          <IconPlus width={14} height={14} /> 添加表达式
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** A filter condition written as a formula expression (formula.ts). */
+function ExprCond({ model, value, conj, remove, onChange }: { model: TableModel; value: string; conj: ReactNode; remove: ReactNode; onChange: (stored: string) => void }) {
+  const t = useTable(model)
+  // the text as typed is the source while editing; the stored form references fields by id
+  const [text, setText] = useState(() => toDisplayExpr(t, value))
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const res = text.trim() ? compileFilter(t, toStoredExpr(t, text)) : null
+  const count = useMemo(() => {
+    if (!res?.ok) return null
+    let n = 0
+    for (const r of t.records) if (res.test(r)) n++
+    return n
+  }, [res, t.records])
+  const change = (v: string) => {
+    setText(v)
+    onChange(toStoredExpr(t, v))
+  }
+  const insert = (s: string, back = 0) => {
+    const el = ref.current
+    if (!el) return
+    const a = el.selectionStart
+    const v = el.value.slice(0, a) + s + el.value.slice(el.selectionEnd)
+    change(v)
+    requestAnimationFrame(() => {
+      el.focus()
+      const p = a + s.length - back
+      el.setSelectionRange(p, p)
+    })
+  }
+  return (
+    <div className="bt-cond-expr">
+      <div className="bt-cond">
+        {conj}
+        <textarea
+          ref={ref}
+          className={'bt-input bt-expr-input' + (res && !res.ok ? ' invalid' : '')}
+          rows={2}
+          spellCheck={false}
+          value={text}
+          placeholder={'例如 {价格} > 100 AND CONTAINS({标题}, "bug")'}
+          onChange={(e) => change(e.target.value)}
+        />
+        {remove}
+      </div>
+      <div className="bt-expr-bar">
+        <button
+          className="btn ghost sm"
+          onClick={(e) =>
+            openMenu(
+              e.currentTarget,
+              t.fields.map((f) => ({ label: f.name, onClick: () => insert(`{${f.name}}`) })),
+              { align: 'left', width: 220 },
+            )
+          }
+        >
+          {'{ }'} 插入字段
+        </button>
+        <button className="btn ghost sm" onClick={(e) => openPopover(e.currentTarget, (close) => <FormulaHelp onPick={(name) => (close(), insert(name + '()', 1))} />, { width: 380, align: 'left' })}>
+          ƒ 函数与语法
+        </button>
+        <span className="spacer" />
+        {res && !res.ok ? <span className="bt-expr-error">{res.error}</span> : count !== null ? <span className="bt-expr-ok">符合 {count} 条记录</span> : null}
+      </div>
+    </div>
+  )
+}
+
+function FormulaHelp({ onPick }: { onPick: (name: string) => void }) {
+  const groups = [...new Set(FORMULA_FUNCTIONS.map((f) => f.group))]
+  return (
+    <div className="bt-formula-help">
+      <div className="bt-formula-syntax">
+        <div>
+          字段写作 <code>{'{字段名}'}</code>，文本用引号 <code>"文本"</code>
+        </div>
+        <div>
+          比较 <code>= != &gt; &gt;= &lt; &lt;=</code>，逻辑 <code>AND OR NOT</code>（或 <code>&amp;&amp; || !</code>），括号分组
+        </div>
+        <div>
+          运算 <code>+ - * / %</code>，<code>&amp;</code> 拼接文本；日期 ± 数字按天计算，日期 − 日期得到天数
+        </div>
+        <div>单选取选项名；多选与某个值比较时，包含该选项即为相等；文本比较不区分大小写</div>
+        <div>
+          示例：<code>{'{截止日期} < TODAY() AND {状态} != "已完成"'}</code>
+        </div>
+      </div>
+      {groups.map((g) => (
+        <div key={g} className="bt-formula-group">
+          <div className="bt-formula-group-title">{g}</div>
+          {FORMULA_FUNCTIONS.filter((f) => f.group === g).map((f) => (
+            <button key={f.name} className="bt-formula-fn" onClick={() => onPick(f.name)}>
+              <code>{f.sig}</code>
+              <span>{f.desc}</span>
+            </button>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -211,19 +325,38 @@ export const GroupPanel = (p: { model: TableModel; viewId: string }) => <RulesPa
 export function KanbanPanel({ model, viewId }: { model: TableModel; viewId: string }) {
   const [view, fields] = useView(model, viewId)
   if (!view) return null
-  const selects = fields.filter((f) => f.type === 'select')
-  const cur = selects.find((f) => f.id === view.config.kanbanField) ?? selects[0]
+  const t = model.state
+  const options = fields.filter(kanbanFieldOk)
+  const cur = kanbanField(t, view)
   return (
     <div className="bt-panel">
       <div className="bt-panel-title">看板分组字段</div>
-      {selects.length ? (
-        <FieldSelect fields={selects} value={cur?.id ?? ''} onChange={(id) => model.updateView(viewId, { kanbanField: id })} />
-      ) : (
-        <div className="bt-panel-empty">需要一个「单选」字段</div>
-      )}
+      <select className="bt-input sm" value={cur?.id ?? ''} onChange={(e) => model.updateView(viewId, { kanbanField: e.target.value })}>
+        {!cur && <option value="">选择分组字段…</option>}
+        {options.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}（{fieldTypeLabel(f.type)}）
+          </option>
+        ))}
+      </select>
+      <div className="bt-panel-empty">
+        {!cur
+          ? '可按除附件、自动编号外的任意字段分组'
+          : cur.type === 'select' || cur.type === 'multiselect'
+            ? cur.type === 'multiselect'
+              ? '每个选项一列，有多个选项的记录会出现在多列中'
+              : '每个选项一列，拖动卡片即可修改选项'
+            : cur.type === 'checkbox'
+              ? '分为「未勾选」「已勾选」两列'
+              : isComputed(cur.type)
+                ? '每个日期一列；该字段自动生成，卡片不能拖到其他列'
+                : '每个不同的值一列，拖动卡片会把值改成目标列的值'}
+      </div>
+      {cur?.type !== 'checkbox' && (
       <label className="bt-check-row">
         <input type="checkbox" checked={!view.config.hideEmptyColumn} onChange={(e) => model.updateView(viewId, { hideEmptyColumn: !e.target.checked || undefined })} /> 显示「未分组」列
       </label>
+      )}
     </div>
   )
 }
