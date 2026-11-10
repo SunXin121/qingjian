@@ -50,6 +50,8 @@ function fieldValue(f: Field, r: Rec): Value {
   switch (f.type) {
     case 'number':
     case 'autonumber':
+    case 'rating':
+    case 'progress':
       return typeof v === 'number' && isFinite(v) ? v : null
     case 'checkbox':
       return !!v

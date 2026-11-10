@@ -33,11 +33,10 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
     const opts: FieldOptions = { ...options }
     if (type !== 'select' && type !== 'multiselect') delete opts.choices
     else opts.choices = choices.filter((c) => c.name.trim()).map((c) => ({ ...c, name: c.name.trim() }))
-    if (type !== 'number') {
-      delete opts.precision
-      delete opts.thousands
-    }
+    if (type !== 'number' && type !== 'progress') delete opts.precision
+    if (type !== 'number') delete opts.thousands
     if (type !== 'date') delete opts.time
+    if (type !== 'rating') delete opts.max
     if (editing) {
       model.updateField(editing.id, { name: finalName, ...(type !== editing.type && { type }), options: opts })
     } else {
@@ -49,7 +48,7 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
   }
 
   // the primary field identifies a record, so it is limited to text-like types
-  const types = isPrimary ? FIELD_TYPES.filter((t) => ['text', 'number', 'date', 'url', 'autonumber'].includes(t.type)) : FIELD_TYPES
+  const types = isPrimary ? FIELD_TYPES.filter((t) => ['text', 'number', 'date', 'url', 'phone', 'email', 'autonumber'].includes(t.type)) : FIELD_TYPES
 
   return (
     <form
@@ -105,6 +104,30 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
             <input type="checkbox" checked={!!options.thousands} onChange={(e) => setOptions({ ...options, thousands: e.target.checked })} /> 千分位分隔
           </label>
         </>
+      )}
+
+      {type === 'rating' && (
+        <label className="bt-form-row">
+          <span>最高分</span>
+          <select className="bt-input" value={options.max ?? 5} onChange={(e) => setOptions({ ...options, max: Number(e.target.value) })}>
+            {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              <option key={n} value={n}>
+                {n} 星
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {type === 'progress' && (
+        <label className="bt-form-row">
+          <span>小数位数</span>
+          <select className="bt-input" value={options.precision ?? 0} onChange={(e) => setOptions({ ...options, precision: Number(e.target.value) })}>
+            <option value="0">整数 50%</option>
+            <option value="1">1 位 50.0%</option>
+            <option value="2">2 位 50.00%</option>
+          </select>
+        </label>
       )}
 
       {type === 'date' && (

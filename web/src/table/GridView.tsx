@@ -65,17 +65,21 @@ const ICONS: Record<FieldType, GridColumnIcon> = {
   autonumber: GridColumnIcon.HeaderRowID,
   created_time: GridColumnIcon.HeaderTime,
   modified_time: GridColumnIcon.HeaderTime,
+  rating: GridColumnIcon.HeaderEmoji,
+  progress: GridColumnIcon.HeaderNumber,
+  phone: GridColumnIcon.HeaderPhone,
+  email: GridColumnIcon.HeaderEmail,
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 600
-const defaultWidth = (f: Field, primary: boolean) => (primary ? (narrow() ? 150 : 220) : f.type === 'checkbox' ? 90 : f.type === 'longtext' ? 240 : f.type === 'number' || f.type === 'autonumber' ? 120 : 160)
+const defaultWidth = (f: Field, primary: boolean) => (primary ? (narrow() ? 150 : 220) : f.type === 'checkbox' ? 90 : f.type === 'longtext' ? 240 : f.type === 'number' || f.type === 'autonumber' || f.type === 'rating' ? 120 : f.type === 'progress' ? 150 : 160)
 
 const INDEX_W = 52
 const ROW_H = 34
 const HEADER_H = 36
 
 // fields our own type-to-edit box can handle (text parsed into the field's value)
-const TYPEABLE = new Set<FieldType>(['text', 'longtext', 'number', 'url', 'date', 'select', 'multiselect'])
+const TYPEABLE = new Set<FieldType>(['text', 'longtext', 'number', 'url', 'date', 'select', 'multiselect', 'rating', 'progress', 'phone', 'email'])
 
 const cellSelection = (col: number, row: number): GridSelection => ({
   columns: CompactSelection.empty(),
@@ -832,7 +836,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       e.cancel()
       e.preventDefault()
       const v = cellValue(rec, f)
-      openTyping(col, row, e.bounds, f.type === 'longtext' || f.type === 'text' || f.type === 'url' ? (v ?? '') : displayText(f, v))
+      openTyping(col, row, e.bounds, f.type === 'longtext' || f.type === 'text' || f.type === 'url' || f.type === 'phone' || f.type === 'email' ? (v ?? '') : displayText(f, v))
     }
   }
 
@@ -961,6 +965,20 @@ function makeCell(model: TableModel, f: Field, rec: Rec, readOnly: boolean): Gri
       return { kind: GridCellKind.Text, data: text, displayData: text, allowOverlay: false, readonly: true, themeOverride: { textDark: palette.muted } }
     case 'checkbox':
       return { kind: GridCellKind.Boolean, data: !!v, allowOverlay: false, readonly: ro, copyData: v ? '✓' : '' } as GridCell
+    case 'phone':
+    case 'email':
+      return {
+        kind: GridCellKind.Uri,
+        data: v ?? '',
+        allowOverlay: !ro,
+        readonly: ro,
+        hoverEffect: true,
+        onClickUri: (a) => {
+          if (!v) return
+          a.preventDefault()
+          window.open((f.type === 'phone' ? 'tel:' : 'mailto:') + String(v).replace(f.type === 'phone' ? /[^\d+]/g : /\s/g, ''), '_self')
+        },
+      } as GridCell
     case 'url':
       return {
         kind: GridCellKind.Uri,

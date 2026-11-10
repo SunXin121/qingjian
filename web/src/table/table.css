@@ -5,6 +5,8 @@
   --bt-accent-light: rgba(47, 107, 217, 0.1);
   --bt-search-hit: #fdf3c4;
   --bt-search-current: #fbd27a;
+  --bt-star: #f5b301;
+  --bt-star-off: #e3e3e0;
   /* option tag colours: soft background, readable foreground */
   --tag-0-bg: #e8eefc;
   --tag-0-fg: #2a56b0;
@@ -32,6 +34,8 @@
     --bt-accent-light: rgba(116, 166, 255, 0.16);
     --bt-search-hit: #4a4220;
     --bt-search-current: #7a5d14;
+    --bt-star: #e6a700;
+    --bt-star-off: #3d3e42;
     --tag-0-bg: #233457;
     --tag-0-fg: #a9c4ff;
     --tag-1-bg: #44331a;
@@ -1578,4 +1582,65 @@ select.bt-input {
   z-index: 4;
   background: var(--c-info);
   pointer-events: none;
+}
+
+/* ---------- rating / progress ---------- */
+.bt-rating {
+  display: inline-flex;
+  gap: 2px;
+  font-size: 18px;
+  line-height: 1;
+  user-select: none;
+}
+.bt-rating.sm {
+  font-size: 13px;
+  gap: 1px;
+}
+.bt-star {
+  color: var(--bt-star-off);
+}
+.bt-star.on {
+  color: var(--bt-star);
+}
+.bt-rating.editable .bt-star {
+  cursor: pointer;
+  padding: 4px 1px;
+}
+.bt-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+  flex: 1;
+}
+.bt-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--c-surface-low);
+  overflow: hidden;
+  min-width: 60px;
+}
+.bt-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--c-info);
+}
+.bt-progress-fill.done {
+  background: var(--c-success);
+}
+.bt-progress-text {
+  font-size: 12px;
+  color: var(--c-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.bt-progress-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bt-progress-input .bt-input {
+  width: 80px;
+  flex: none;
 }

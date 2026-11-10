@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { formatSize, uploadFile } from '../api'
 import { openPopover, toast } from '../components/dialog'
 import { IconClose, IconDoc, IconLink, IconPlus, IconUpload } from '../components/icons'
-import { cellValue, choiceCollector, displayText, parseText } from './engine'
+import { cellValue, choiceCollector, displayText, formatProgress, parseText } from './engine'
 import type { TableModel } from './model'
 import type { AttachmentValue, Choice, Field, Rec } from './types'
-import { isComputed } from './types'
+import { isComputed, ratingMax } from './types'
 
 export function Tag({ choice, onRemove }: { choice: Choice; onRemove?: () => void }) {
   return (
@@ -258,8 +258,48 @@ export const fromInputDate = (s: string, withTime: boolean) => {
   return withTime ? `${d} ${(t || '00:00').slice(0, 5)}` : d
 }
 
+export const contactHref = (type: string, v: string) => (type === 'phone' ? 'tel:' + v.replace(/[^\d+]/g, '') : 'mailto:' + v.trim())
+
+/** Stars; clicking the current score clears it. */
+export function Rating({ field, value, onChange, small }: { field: Field; value: any; onChange?: (v: number | undefined) => void; small?: boolean }) {
+  const [hover, setHover] = useState(0)
+  const n = typeof value === 'number' ? value : 0
+  const shown = hover || n
+  return (
+    <span className={'bt-rating' + (small ? ' sm' : '') + (onChange ? ' editable' : '')} onMouseLeave={() => setHover(0)}>
+      {Array.from({ length: ratingMax(field) }, (_, i) => (
+        <span
+          key={i}
+          className={'bt-star' + (i < shown ? ' on' : '')}
+          onMouseEnter={() => onChange && setHover(i + 1)}
+          onClick={(e) => {
+            if (!onChange) return
+            e.stopPropagation()
+            onChange(n === i + 1 ? undefined : i + 1)
+          }}
+        >
+          ★
+        </span>
+      ))}
+    </span>
+  )
+}
+
+export function ProgressBar({ field, value }: { field: Field; value: any }) {
+  if (typeof value !== 'number') return null
+  const pct = Math.max(0, Math.min(1, value)) * 100
+  return (
+    <span className="bt-progress">
+      <span className="bt-progress-track">
+        <span className={'bt-progress-fill' + (value >= 1 ? ' done' : '')} style={{ width: pct + '%' }} />
+      </span>
+      <span className="bt-progress-text">{formatProgress(field, value)}</span>
+    </span>
+  )
+}
+
 /** Text input that commits on blur / Enter. */
-function CommitInput({ value, onCommit, multiline, readOnly, inputMode, placeholder }: { value: string; onCommit: (s: string) => void; multiline?: boolean; readOnly?: boolean; inputMode?: 'decimal' | 'url'; placeholder?: string }) {
+function CommitInput({ value, onCommit, multiline, readOnly, inputMode, placeholder }: { value: string; onCommit: (s: string) => void; multiline?: boolean; readOnly?: boolean; inputMode?: 'decimal' | 'url' | 'tel' | 'email'; placeholder?: string }) {
   const [v, setV] = useState(value)
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => setV(value), [value])
@@ -313,6 +353,34 @@ export function FieldInput({ model, field, rec, readOnly }: { model: TableModel;
               <IconLink width={16} height={16} />
             </a>
           )}
+        </div>
+      )
+    case 'phone':
+    case 'email':
+      return (
+        <div className="bt-url">
+          <CommitInput value={v ?? ''} readOnly={ro} inputMode={field.type === 'phone' ? 'tel' : 'email'} onCommit={(s) => set(s.trim())} placeholder={ro ? '' : field.type === 'phone' ? '输入电话号码' : 'name@example.com'} />
+          {v && (
+            <a className="icon-btn" href={contactHref(field.type, v)} title={field.type === 'phone' ? '拨打' : '发送邮件'}>
+              <IconLink width={16} height={16} />
+            </a>
+          )}
+        </div>
+      )
+    case 'rating':
+      return <Rating field={field} value={v} onChange={ro ? undefined : set} />
+    case 'progress':
+      return (
+        <div className="bt-progress-input">
+          <ProgressBar field={field} value={v} />
+          <CommitInput
+            value={typeof v === 'number' ? String(Math.round(v * 1e6) / 1e4) : ''}
+            readOnly={ro}
+            inputMode="decimal"
+            onCommit={(s) => set(parse(s))}
+            placeholder={ro ? '' : '0'}
+          />
+          <span className="muted">%</span>
         </div>
       )
     case 'checkbox':
@@ -400,6 +468,17 @@ export function ValueView({ field, rec }: { field: Field; rec: Rec }): ReactNode
           {v}
         </a>
       ) : null
+    case 'phone':
+    case 'email':
+      return v ? (
+        <a href={contactHref(field.type, v)} className="bt-link" onClick={(e) => e.stopPropagation()}>
+          {v}
+        </a>
+      ) : null
+    case 'rating':
+      return v ? <Rating field={field} value={v} small /> : null
+    case 'progress':
+      return <ProgressBar field={field} value={v} />
     default:
       return displayText(field, v) || null
   }

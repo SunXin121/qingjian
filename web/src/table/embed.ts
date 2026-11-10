@@ -5,6 +5,7 @@
 import { api, type TableSummary } from '../api'
 import { cellValue, displayText, KANBAN_EMPTY, kanbanField, kanbanLayout, primaryField, viewRecords, visibleFields, type KanbanColumn } from './engine'
 import type { AttachmentValue, Field, Rec, TableData } from './types'
+import { ratingMax } from './types'
 
 export interface EmbedRef {
   table?: string
@@ -76,6 +77,15 @@ function cellHTML(f: Field, r: Rec): string {
       return ((v as AttachmentValue[] | undefined) ?? []).map((a) => `<a href="${esc(a.url)}" target="_blank" rel="noreferrer" class="bt-chip">${esc(a.name)}</a>`).join(' ')
     case 'url':
       return v ? `<a href="${esc(safeURL(v))}" target="_blank" rel="noreferrer">${esc(v)}</a>` : ''
+    case 'phone':
+    case 'email':
+      return v ? `<a href="${esc(f.type === 'phone' ? 'tel:' + String(v).replace(/[^\d+]/g, '') : 'mailto:' + String(v).trim())}">${esc(v)}</a>` : ''
+    case 'rating':
+      return typeof v === 'number' ? `<span class="bt-rating sm">${Array.from({ length: ratingMax(f) }, (_, i) => `<span class="bt-star${i < v ? ' on' : ''}">★</span>`).join('')}</span>` : ''
+    case 'progress':
+      return typeof v === 'number'
+        ? `<span class="bt-progress"><span class="bt-progress-track"><span class="bt-progress-fill${v >= 1 ? ' done' : ''}" style="width:${Math.max(0, Math.min(1, v)) * 100}%"></span></span><span class="bt-progress-text">${esc(displayText(f, v))}</span></span>`
+        : ''
     case 'longtext':
       return esc(displayText(f, v)).replace(/\n/g, '<br>')
     default:

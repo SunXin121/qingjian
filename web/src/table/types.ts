@@ -13,6 +13,10 @@ export type FieldType =
   | 'autonumber'
   | 'created_time'
   | 'modified_time'
+  | 'rating'
+  | 'progress'
+  | 'phone'
+  | 'email'
 
 export interface Choice {
   id: string
@@ -29,6 +33,8 @@ export interface FieldOptions {
   choices?: Choice[]
   /** date: also store hours and minutes */
   time?: boolean
+  /** rating: highest score (1–10, default 5) */
+  max?: number
 }
 
 export interface Field {
@@ -163,6 +169,10 @@ export const FIELD_TYPES: { type: FieldType; label: string }[] = [
   { type: 'date', label: '日期' },
   { type: 'checkbox', label: '复选框' },
   { type: 'url', label: '链接' },
+  { type: 'rating', label: '评分' },
+  { type: 'progress', label: '进度' },
+  { type: 'phone', label: '电话' },
+  { type: 'email', label: '邮箱' },
   { type: 'attachment', label: '附件' },
   { type: 'autonumber', label: '自动编号' },
   { type: 'created_time', label: '创建时间' },
@@ -173,6 +183,11 @@ export const fieldTypeLabel = (t: FieldType) => FIELD_TYPES.find((x) => x.type =
 
 /** Fields whose value is computed from the record, not stored. */
 export const isComputed = (t: FieldType) => t === 'autonumber' || t === 'created_time' || t === 'modified_time'
+
+/** Fields holding a number (sorted, filtered and summarised as numbers). */
+export const isNumeric = (t: FieldType) => t === 'number' || t === 'autonumber' || t === 'rating' || t === 'progress'
+
+export const ratingMax = (f: Field) => Math.max(1, Math.min(10, Math.round(f.options.max ?? 5)))
 
 export const TAG_COLORS = 10
 

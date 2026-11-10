@@ -2,7 +2,7 @@
 // display text, filtering, sorting, grouping, summaries, parsing pasted text and CSV.
 
 import type { AttachmentValue, Choice, Field, FieldType, FilterCond, FilterOp, Rec, SortRule, SummaryKind, TableData, View } from './types'
-import { isComputed, newId } from './types'
+import { isComputed, isNumeric, newId, ratingMax } from './types'
 import { compileFilter } from './formula'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -58,6 +58,12 @@ export function formatNumber(f: Field, v: number): string {
   return p === undefined ? String(v) : v.toFixed(p)
 }
 
+export function formatProgress(f: Field, v: number): string {
+  if (typeof v !== 'number' || !isFinite(v)) return ''
+  const p = f.options.precision ?? 0
+  return (v * 100).toFixed(p) + '%'
+}
+
 /** Plain-text rendering of a value (used for copy, CSV, search, embeds). */
 export function displayText(f: Field, v: any): string {
   if (isEmptyValue(v) && f.type !== 'autonumber') return ''
@@ -74,6 +80,10 @@ export function displayText(f: Field, v: any): string {
         .join(', ')
     case 'checkbox':
       return v ? '✓' : ''
+    case 'rating':
+      return typeof v === 'number' ? String(v) : ''
+    case 'progress':
+      return formatProgress(f, v)
     case 'attachment':
       return (Array.isArray(v) ? (v as AttachmentValue[]) : []).map((a) => a.name).join(', ')
     case 'created_time':
@@ -121,6 +131,8 @@ export function filterOps(type: FieldType): OpDef[] {
   switch (type) {
     case 'number':
     case 'autonumber':
+    case 'rating':
+    case 'progress':
       return [
         { op: 'is', label: '=' },
         { op: 'is_not', label: '≠' },
@@ -196,8 +208,11 @@ function matchCond(c: FilterCond, f: Field, r: Rec): boolean {
     case 'checkbox':
       return !!v === !!c.value
     case 'number':
-    case 'autonumber': {
-      const x = Number(c.value)
+    case 'autonumber':
+    case 'rating':
+    case 'progress': {
+      // progress conditions are entered in percent
+      const x = Number(c.value) / (f.type === 'progress' ? 100 : 1)
       if (typeof v !== 'number') return c.op === 'is_not'
       switch (c.op) {
         case 'is':
@@ -293,6 +308,8 @@ function sortKey(f: Field, v: any): number | string | undefined {
   switch (f.type) {
     case 'number':
     case 'autonumber':
+    case 'rating':
+    case 'progress':
     case 'created_time':
     case 'modified_time':
       return typeof v === 'number' ? v : undefined
@@ -608,7 +625,7 @@ export function summaryKinds(type: FieldType): { kind: SummaryKind; label: strin
     { kind: 'unique', label: '唯一值' },
     { kind: 'percent_filled', label: '已填写占比' },
   ]
-  if (type === 'number' || type === 'autonumber')
+  if (isNumeric(type))
     base.push({ kind: 'sum', label: '求和' }, { kind: 'avg', label: '平均值' }, { kind: 'min', label: '最小值' }, { kind: 'max', label: '最大值' })
   if (type === 'checkbox') return [base[0], base[1], { kind: 'checked', label: '已勾选' }, { kind: 'empty', label: '未勾选' }]
   return base
@@ -651,7 +668,10 @@ export function summarize(f: Field, kind: SummaryKind, list: Rec[]): string {
         if (x > max) max = x
       }
       const n = kind === 'sum' ? sum : kind === 'avg' ? sum / nums.length : kind === 'min' ? min : max
-      out = f.type === 'number' ? formatNumber({ ...f, options: { ...f.options, precision: kind === 'avg' ? Math.max(f.options.precision ?? 2, 2) : f.options.precision } }, n) : String(Math.round(n * 100) / 100)
+      out =
+        f.type === 'progress'
+          ? formatProgress({ ...f, options: { ...f.options, precision: kind === 'avg' ? Math.max(f.options.precision ?? 1, 1) : f.options.precision } }, n)
+          : f.type === 'number' ? formatNumber({ ...f, options: { ...f.options, precision: kind === 'avg' ? Math.max(f.options.precision ?? 2, 2) : f.options.precision } }, n) : String(Math.round(n * 100) / 100)
     }
   }
   return `${label} ${out}`
@@ -691,7 +711,24 @@ export function parseText(f: Field, text: string, resolve: ChoiceResolver): any 
     case 'longtext':
       return s.trim() ? s : undefined
     case 'url':
-      return s.trim() || undefined
+    case 'phone':
+    case 'email':
+      return s.replace(/\n+/g, ' ').trim() || undefined
+    case 'rating': {
+      const t = s.trim()
+      // "★★★" counts stars
+      const n = /^[★⭐☆]+$/.test(t) ? [...t].filter((c) => c !== '☆').length : parseFloat(t)
+      if (!isFinite(n)) return undefined
+      const r = Math.max(0, Math.min(ratingMax(f), Math.round(n)))
+      return r || undefined
+    }
+    case 'progress': {
+      // typed as a percentage: "50" and "50%" both mean half done
+      const t = s.replace(/[,\s，%]/g, '')
+      if (!t) return undefined
+      const n = parseFloat(t)
+      return isFinite(n) ? n / 100 : undefined
+    }
     case 'number': {
       const t = s.replace(/[,\s，¥$€£]/g, '')
       if (!t) return undefined
@@ -727,6 +764,10 @@ export function convertValue(from: Field, to: Field, v: any, resolve: ChoiceReso
   if (from.type === 'select' && to.type === 'multiselect') return choiceOf(to, v) ? [v] : undefined
   if (from.type === 'multiselect' && to.type === 'select') return (v as string[]).find((id) => choiceOf(to, id))
   if (to.type === 'attachment' || isComputed(to.type)) return undefined
+  if (isNumeric(from.type) && isNumeric(to.type) && typeof v === 'number') {
+    if (to.type === 'rating') return Math.max(0, Math.min(ratingMax(to), Math.round(v))) || undefined
+    return v
+  }
   if (from.type === 'checkbox' && to.type !== 'checkbox') return to.type === 'number' ? 1 : parseText(to, '✓', resolve)
   return parseText(to, displayText(from, v), resolve)
 }

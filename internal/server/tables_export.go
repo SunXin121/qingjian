@@ -114,6 +114,22 @@ func cellText(f *Field, r *Record, data map[string]json.RawMessage, markdown boo
 		return ""
 	}
 	switch f.Type {
+	case "rating":
+		var v float64
+		if json.Unmarshal(raw, &v) != nil {
+			return ""
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case "progress":
+		var v float64
+		if json.Unmarshal(raw, &v) != nil {
+			return ""
+		}
+		prec := 0
+		if opts.Precision != nil {
+			prec = *opts.Precision
+		}
+		return strconv.FormatFloat(v*100, 'f', prec, 64) + "%"
 	case "number":
 		var v float64
 		if json.Unmarshal(raw, &v) != nil {

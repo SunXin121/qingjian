@@ -8,6 +8,7 @@ import { displayText, parseText } from './engine'
 import type { TableModel } from './model'
 import { palette } from './theme'
 import type { AttachmentValue, Field } from './types'
+import { ratingMax } from './types'
 
 export interface ValueData {
   kind: 'qj-value'
@@ -101,6 +102,39 @@ export const valueRenderer: CustomRenderer<ValueCell> = {
       case 'number':
         drawTextCell(args, displayText(field, value), 'right')
         return true
+      case 'rating': {
+        const n = typeof value === 'number' ? value : 0
+        const max = ratingMax(field)
+        for (let i = 0; i < max; i++) {
+          const x = left + i * STAR_W + STAR_W / 2
+          if (x + STAR_W / 2 > right) break
+          drawStar(ctx, x, cy, 6.5, i < n ? palette.star : palette.starOff)
+        }
+        return true
+      }
+      case 'progress': {
+        if (typeof value !== 'number') return true
+        const text = displayText(field, value)
+        const tw = 44
+        const w = Math.max(0, right - left - tw - 6)
+        const h = 6
+        ctx.fillStyle = palette.chipBg
+        ctx.beginPath()
+        roundedRect(ctx, left, cy - h / 2, w, h, 3)
+        ctx.fill()
+        const fw = Math.max(0, Math.min(1, value)) * w
+        if (fw > 0) {
+          ctx.fillStyle = value >= 1 ? palette.success : palette.link
+          ctx.beginPath()
+          roundedRect(ctx, left, cy - h / 2, Math.max(fw, h), h, 3)
+          ctx.fill()
+        }
+        ctx.fillStyle = theme.textMedium
+        ctx.textAlign = 'right'
+        ctx.fillText(text, right, cy)
+        ctx.textAlign = 'start'
+        return true
+      }
       default:
         drawTextCell(args, displayText(field, value))
         return true
@@ -110,11 +144,38 @@ export const valueRenderer: CustomRenderer<ValueCell> = {
     const { field } = cell.data
     if (field.type === 'select' || field.type === 'multiselect') return { editor: ChoiceEditor, disablePadding: true, disableStyling: false } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'date') return { editor: DateEditor } as ProvideEditorCallbackResult<ValueCell>
-    if (field.type === 'number') return { editor: NumberEditor } as ProvideEditorCallbackResult<ValueCell>
+    if (field.type === 'number' || field.type === 'progress' || field.type === 'rating') return { editor: NumberEditor } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'attachment') return { editor: FilesEditor, disablePadding: true } as ProvideEditorCallbackResult<ValueCell>
     return undefined
   },
   onPaste: () => undefined,
+  onClick: (a) => {
+    const { field, value } = a.cell.data
+    if (field.type !== 'rating' || a.cell.readonly) return undefined
+    const pad = a.theme.cellHorizontalPadding
+    const i = Math.floor((a.posX - pad) / STAR_W)
+    if (i < 0 || i >= ratingMax(field)) return undefined
+    a.preventDefault()
+    // clicking the current score clears it
+    const next = value === i + 1 ? undefined : i + 1
+    return withValue(a.cell, next)
+  },
+}
+
+const STAR_W = 18
+
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string) {
+  ctx.fillStyle = color
+  ctx.beginPath()
+  for (let k = 0; k < 10; k++) {
+    const rad = k % 2 ? r * 0.45 : r
+    const a = -Math.PI / 2 + (k * Math.PI) / 5
+    const x = cx + Math.cos(a) * rad
+    const y = cy + Math.sin(a) * rad
+    k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)
+  }
+  ctx.closePath()
+  ctx.fill()
 }
 
 type EditorProps = {
@@ -150,7 +211,13 @@ function ChoiceEditor({ value: cell, onChange, onFinishedEditing, initialValue }
 function NumberEditor({ value: cell, onChange, onFinishedEditing, initialValue }: EditorProps) {
   const { field } = cell.data
   const cur = useRef(cell)
-  const [text, setText] = useState(() => (initialValue !== undefined ? initialValue : typeof cell.data.value === 'number' ? String(cell.data.value) : ''))
+  const [text, setText] = useState(() => {
+    if (initialValue !== undefined) return initialValue
+    const v = cell.data.value
+    if (typeof v !== 'number') return ''
+    // progress is edited as a percentage
+    return field.type === 'progress' ? String(Math.round(v * 1e6) / 1e4) : String(v)
+  })
   const apply = (s: string) => {
     setText(s)
     cur.current = withValue(cell, parseText(field, s, () => ''))
