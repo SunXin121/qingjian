@@ -3,6 +3,7 @@ import { api, type TableSummary } from '../api'
 import { Modal, mount } from '../components/dialog'
 import { IconTable } from '../components/icons'
 import { viewIcon } from './TableView'
+import type { ViewType } from './types'
 
 /** Lets the user pick a table view to embed into a document. */
 export function pickTableView(): Promise<{ table: string; view: string } | null> {
@@ -47,7 +48,7 @@ function TablePicker({ onDone }: { onDone: (v: { table: string; view: string } |
               <div className="bt-picker-views">
                 {t.views.map((v) => (
                   <button key={v.id} className="btn sm" onClick={() => onDone({ table: t.id, view: v.id })}>
-                    {viewIcon(v.type as 'grid' | 'kanban')} {v.name}
+                    {viewIcon(v.type as ViewType)} {v.name}
                   </button>
                 ))}
               </div>

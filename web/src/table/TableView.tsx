@@ -2,11 +2,13 @@ import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffe
 import { confirmDialog, openMenu, openPopover, promptText, toast } from '../components/dialog'
 import { IconClose, IconCopy, IconDown, IconEdit, IconPlus, IconSearch, IconTrash, IconUp } from '../components/icons'
 import { activeConds, viewRecords } from './engine'
-import { IconBoard, IconEyeOff, IconFilter, IconGroup, IconGrid, IconRedo, IconSort, IconUndo } from './icons'
+import { IconBoard, IconCalendar, IconEyeOff, IconFilter, IconGallery, IconGroup, IconGrid, IconRedo, IconSort, IconUndo } from './icons'
 import KanbanView from './KanbanView'
+import GalleryView from './GalleryView'
+import CalendarView from './CalendarView'
 import { useTable, type TableModel } from './model'
 import RecordCard from './RecordCard'
-import { FieldsPanel, FilterPanel, GroupPanel, KanbanPanel, SortPanel } from './ViewPanels'
+import { CalendarPanel, FieldsPanel, FilterPanel, GalleryPanel, GroupPanel, KanbanPanel, SortPanel } from './ViewPanels'
 import type { View, ViewType } from './types'
 
 const GridView = lazy(() => import('./GridView'))
@@ -18,7 +20,16 @@ interface Props {
   onViewChange?: (id: string) => void
 }
 
-export const viewIcon = (t: ViewType) => (t === 'kanban' ? <IconBoard width={15} height={15} /> : <IconGrid width={15} height={15} />)
+export const viewIcon = (t: ViewType) =>
+  t === 'kanban' ? (
+    <IconBoard width={15} height={15} />
+  ) : t === 'gallery' ? (
+    <IconGallery width={15} height={15} />
+  ) : t === 'calendar' ? (
+    <IconCalendar width={15} height={15} />
+  ) : (
+    <IconGrid width={15} height={15} />
+  )
 
 export default function TableView({ model, readOnly, viewId, onViewChange }: Props) {
   const table = useTable(model)
@@ -125,6 +136,8 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
       [
         { label: '表格视图', icon: <IconGrid />, onClick: () => selectView(model.addView(uniqueName(table.views, '表格视图'), 'grid')) },
         { label: '看板视图', icon: <IconBoard />, onClick: () => selectView(model.addView(uniqueName(table.views, '看板视图'), 'kanban')) },
+        { label: '画册视图', icon: <IconGallery />, onClick: () => selectView(model.addView(uniqueName(table.views, '画册视图'), 'gallery')) },
+        { label: '日历视图', icon: <IconCalendar />, onClick: () => selectView(model.addView(uniqueName(table.views, '日历视图'), 'calendar')) },
       ],
       { align: 'left', width: 160 },
     )
@@ -227,6 +240,16 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
             <IconBoard width={15} height={15} /> <span className="bt-tool-label">看板设置</span>
           </button>
         )}
+        {active.type === 'gallery' && (
+          <button className="bt-tool" onClick={(e) => panel(e.currentTarget, () => <GalleryPanel model={model} viewId={active.id} />, 300)}>
+            <IconGallery width={15} height={15} /> <span className="bt-tool-label">画册设置</span>
+          </button>
+        )}
+        {active.type === 'calendar' && (
+          <button className="bt-tool" onClick={(e) => panel(e.currentTarget, () => <CalendarPanel model={model} viewId={active.id} />, 300)}>
+            <IconCalendar width={15} height={15} /> <span className="bt-tool-label">日历设置</span>
+          </button>
+        )}
         <button className={'bt-tool' + (nSort ? ' on' : '')} onClick={(e) => panel(e.currentTarget, () => <SortPanel model={model} viewId={active.id} />)}>
           <IconSort width={15} height={15} /> <span className="bt-tool-label">{nSort ? `${nSort} 个排序` : '排序'}</span>
         </button>
@@ -301,6 +324,10 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
               onSearchCount={setHits}
             />
           </Suspense>
+        ) : active.type === 'gallery' ? (
+          <GalleryView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
+        ) : active.type === 'calendar' ? (
+          <CalendarView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
         ) : (
           <KanbanView model={model} table={table} view={active} readOnly={readOnly} onOpenRecord={openRecord} search={search} onSearchCount={setHits} />
         )}

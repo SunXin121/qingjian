@@ -140,9 +140,16 @@ export interface ViewConfig {
   kanbanField?: string
   /** kanban: hide the column for records without a value */
   hideEmptyColumn?: boolean
+  /** gallery: attachment field shown as the card cover ('' = no cover) */
+  coverField?: string
+  /** gallery: crop the cover to fill, or fit it whole */
+  coverFit?: 'cover' | 'contain'
+  /** calendar: date field records are placed by, and an optional end date */
+  dateField?: string
+  endField?: string
 }
 
-export type ViewType = 'grid' | 'kanban'
+export type ViewType = 'grid' | 'kanban' | 'gallery' | 'calendar'
 
 export interface View {
   id: string

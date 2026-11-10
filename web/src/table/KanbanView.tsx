@@ -271,7 +271,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
 }
 
 /** Placeholder at the end of a partly rendered column: loads the next page once it scrolls into view. */
-function LoadMore({ rest, onLoad }: { rest: number; onLoad: () => void }) {
+export function LoadMore({ rest, onLoad }: { rest: number; onLoad: () => void }) {
   const ref = useRef<HTMLButtonElement>(null)
   const load = useRef(onLoad)
   load.current = onLoad
@@ -290,7 +290,7 @@ function LoadMore({ rest, onLoad }: { rest: number; onLoad: () => void }) {
   )
 }
 
-function CardLine({ field, rec }: { field: Field; rec: Rec }) {
+export function CardLine({ field, rec }: { field: Field; rec: Rec }) {
   if (isEmptyValue(cellValue(rec, field))) return null
   const content = ValueView({ field, rec })
   return (

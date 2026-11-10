@@ -6,6 +6,8 @@ import { DATE_PRESETS, defaultCondValue, filterOps, kanbanField, kanbanFieldOk, 
 import { openFieldEditor } from './FieldEditor'
 import { compileFilter, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from './formula'
 import { orderIds, useTable, type TableModel } from './model'
+import { coverField } from './GalleryView'
+import { calendarEndField, calendarField, calendarFieldOk } from './CalendarView'
 import { baseField, fieldTypeLabel, isComputed, newId, type Field, type FilterCond, type SortRule, type View } from './types'
 
 function useView(model: TableModel, viewId: string): [View | undefined, Field[]] {
@@ -439,6 +441,68 @@ export function FieldsPanel({ model, viewId, readOnly }: { model: TableModel; vi
           <IconPlus width={14} height={14} /> 新建字段
         </button>
       )}
+    </div>
+  )
+}
+
+// ---------- gallery / calendar ----------
+
+export function GalleryPanel({ model, viewId }: { model: TableModel; viewId: string }) {
+  const [view, fields] = useView(model, viewId)
+  if (!view) return null
+  const files = fields.filter((f) => f.type === 'attachment')
+  const cur = coverField(model.data, view)
+  return (
+    <div className="bt-panel">
+      <div className="bt-panel-title">封面</div>
+      <select className="bt-input sm" value={cur?.id ?? ''} onChange={(e) => model.updateView(viewId, { coverField: e.target.value })}>
+        <option value="">不显示封面</option>
+        {files.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+      {!files.length && <div className="bt-panel-empty">添加一个附件字段后，可把其中的第一张图片作为封面</div>}
+      {cur && (
+        <label className="bt-check-row">
+          <input type="checkbox" checked={view.config.coverFit === 'contain'} onChange={(e) => model.updateView(viewId, { coverFit: e.target.checked ? 'contain' : undefined })} /> 完整显示图片（不裁剪）
+        </label>
+      )}
+      <div className="bt-panel-empty">卡片上显示的字段可在「字段」中设置</div>
+    </div>
+  )
+}
+
+export function CalendarPanel({ model, viewId }: { model: TableModel; viewId: string }) {
+  const [view, fields] = useView(model, viewId)
+  if (!view) return null
+  const options = fields.filter(calendarFieldOk)
+  const cur = calendarField(model.data, view)
+  const end = calendarEndField(model.data, view)
+  return (
+    <div className="bt-panel">
+      <div className="bt-panel-title">开始日期</div>
+      <select className="bt-input sm" value={cur?.id ?? ''} onChange={(e) => model.updateView(viewId, { dateField: e.target.value })}>
+        {!cur && <option value="">选择日期字段…</option>}
+        {options.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}（{fieldTypeLabel(f.type)}）
+          </option>
+        ))}
+      </select>
+      <div className="bt-panel-title">结束日期</div>
+      <select className="bt-input sm" value={end?.id ?? ''} onChange={(e) => model.updateView(viewId, { endField: e.target.value || undefined })}>
+        <option value="">无（只显示在开始日期）</option>
+        {options
+          .filter((f) => f.id !== cur?.id)
+          .map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+      </select>
+      <div className="bt-panel-empty">{cur?.type === 'date' ? '拖动记录可修改日期，双击空白处新建记录' : '该字段自动计算，记录不能拖动'}</div>
     </div>
   )
 }
