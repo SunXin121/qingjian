@@ -46,6 +46,7 @@
 | 跨知识库移动 / 复制文档 | P1 |
 | 收藏、标签 | P1 |
 | 文档模板 | P2 |
+| 双链：`[[` 链接文档 / 表格、反向链接 | M5 ✅ |
 
 ### 3.3 编辑器
 - 所见即所得 + Markdown 快捷输入；`/` 斜杠菜单；块拖拽（桌面）；选中浮动工具栏
@@ -71,7 +72,7 @@
 | 手绘画板 | Excalidraw | 场景 JSON + SVG 预览均为附件，正文 ```` ```excalidraw ```` 引用块 | P0 |
 | 流程图 / 架构图 | draw.io 嵌入（默认 embed.diagrams.net，可配置自托管静态资源） | 同上 | P1 |
 | 思维导图 | simple-mind-map（原生 SVG 导出） | 同上 | P1 |
-| PlantUML | 可选 plantuml-server 容器 | 代码块 | P2 |
+| PlantUML | 可选 plantuml-server 容器，经服务端转发渲染 | 正文 ```` ```plantuml ```` 代码块 | M5 ✅ |
 | ECharts 图表 | 前端 | JSON 代码块 | P2 |
 
 ### 3.5 附件
@@ -138,7 +139,7 @@
 | 表格（冻结列、列宽、隐藏字段、统计栏） | P0 |
 | 看板（按单选分组，拖拽） | P0 |
 | 画册、日历 | P1 ✅ |
-| 甘特 | P2 |
+| 甘特（拖动改期 / 调整起止、分组、进度、前置任务依赖） | M5 ✅ |
 | 表单 | ✗ |
 
 | 通用能力 | 优先级 |
@@ -197,6 +198,7 @@ docs_fts      FTS5(node_id, title, body) tokenize=trigram
 attachments   id, sha256, name, mime, size, created_at
 backup_blobs  target, sha256                                    (已上传到各备份目标的附件，M2)
 shares        token, target_type(node|repo), target_id, view_id, password_hash, expires_at, enabled, options, view_count, created_at   (M2)
+doc_links     src, dst                                         (文档中指向其他文档 / 表格的链接，保存时更新，用于反向链接，M5)
 bt_fields     id, table_node_id, name, type, options(json), sort                                                                    (M3)
 bt_views      id, table_node_id, name, type, config(json), sort                                                                     (M3)
 bt_records    id, table_node_id, seq(自动编号), data(json), sort, created_at, updated_at                                            (M3)
@@ -211,4 +213,4 @@ bt_record_history  id, table_node_id, record_id, action(create|update|delete|res
 | **M2 分享与增强** ✅ | 分享（密码 / 有效期 / 管理）、draw.io、思维导图、提示块 / 折叠块、版本 diff、自动备份、深色模式、附件清理 |
 | **M3 多维表格基础** ✅ | 表格 + 看板视图、P0 字段、筛选排序分组、复制粘贴、CSV、分享、嵌入文档 |
 | **M4 多维表格进阶** ✅ | 关联 / 查找 / 汇总 / 公式、评分 / 进度 / 电话 / 邮箱、画册 / 日历、Excel |
-| **M5** | 甘特、PlantUML、双链、AI 等 |
+| **M5** | 甘特视图 ✅、PlantUML ✅、双链 ✅；AI 暂缓 |

@@ -17,8 +17,12 @@ const (
 	ftsQuietPeriod = 10 * time.Second
 )
 
-// indexDoc updates the search index for a saved document, now or later depending on size.
+// indexDoc records the links of a saved document and updates its search index, now or
+// later depending on size.
 func indexDoc(tx *sql.Tx, id, title, md string, t int64) error {
+	if err := updateLinks(tx, id, md); err != nil {
+		return err
+	}
 	if len(md) <= ftsInlineBytes {
 		if _, err := tx.Exec(`DELETE FROM fts_pending WHERE node_id = ?`, id); err != nil {
 			return err

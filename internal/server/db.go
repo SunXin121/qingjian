@@ -141,6 +141,15 @@ CREATE TABLE fts_pending (
   due_at  INTEGER NOT NULL
 ) WITHOUT ROWID;
 `,
+	// links between documents (links.go); filled for existing documents by backfillLinks
+	`
+CREATE TABLE doc_links (
+  src TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  dst TEXT NOT NULL,
+  PRIMARY KEY (src, dst)
+) WITHOUT ROWID;
+CREATE INDEX doc_links_dst ON doc_links(dst);
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

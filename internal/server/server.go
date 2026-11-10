@@ -63,6 +63,10 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 	if err := s.initAuth(); err != nil {
 		return nil, err
 	}
+	if err := s.backfillLinks(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if s.backup, err = newBackupRunner(s, cfg.Backup); err != nil {
 		db.Close()
 		return nil, err
@@ -107,6 +111,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PATCH /api/nodes/{id}", a(s.updateNode))
 	mux.Handle("POST /api/nodes/{id}/move", a(s.moveNode))
 	mux.Handle("DELETE /api/nodes/{id}", a(s.deleteNode))
+	mux.Handle("GET /api/nodes/{id}/backlinks", a(s.backlinks))
+	mux.Handle("GET /api/nodes/find", a(s.findNodes))
 
 	mux.Handle("GET /api/docs/{id}", a(s.getDoc))
 	mux.Handle("PUT /api/docs/{id}", a(s.saveDoc))

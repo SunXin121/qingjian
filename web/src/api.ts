@@ -149,6 +149,26 @@ export interface BackupStatus {
   }
 }
 
+/** A document or table found by title (for links between documents). */
+export interface NodeRef {
+  id: string
+  repo_id: string
+  repo_name: string
+  type: 'doc' | 'table'
+  title: string
+  updated_at: number
+}
+
+/** A document linking to a node, with the text around the link. */
+export interface Backlink {
+  id: string
+  repo_id: string
+  repo_name: string
+  title: string
+  updated_at: number
+  snippet: string
+}
+
 export interface ClientConfig {
   version: string
   drawio_url: string
@@ -211,6 +231,8 @@ export const api = {
   moveNode: (id: string, parent_id: string | null, sort: number) =>
     request('POST', `/api/nodes/${id}/move`, { parent_id, sort }),
   deleteNode: (id: string) => request('DELETE', `/api/nodes/${id}`),
+  findNodes: (q: string) => request<NodeRef[]>('GET', `/api/nodes/find?q=${encodeURIComponent(q)}`),
+  backlinks: (id: string) => request<Backlink[]>('GET', `/api/nodes/${id}/backlinks`),
 
   doc: (id: string) => request<Doc>('GET', `/api/docs/${id}`),
   saveDoc: (

@@ -12,6 +12,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { uploadFile } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
+import { docLinkTrigger, nodeLinkPath, openDocLinkPicker } from './docLinks'
 import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
 import { previewBlockKeys } from './previewBlocks'
 import { textDiagramView } from './textDiagram'
@@ -37,6 +38,7 @@ const ICONS = {
   error: icon('<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>'),
   table: icon('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
   fold: icon('<path d="M4 6h16M4 12h10M4 18h10"/><path d="M17 14l2 2 2-2"/>'),
+  docLink: icon('<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M10.5 15.5l3-3M11 12.5h2.5V15"/>'),
 }
 
 /** documents at least this long skip layout of off-screen blocks (see .ink-editor.large) */
@@ -230,6 +232,15 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
                 icon: ICONS.mindmap,
                 onRun: (ctx: Ctx) => newDrawing(ctx, 'mindmap'),
               })
+            builder.getGroup('advanced').addItem('doc-link', {
+              label: '链接到文档 [[',
+              icon: ICONS.docLink,
+              onRun: (ctx: Ctx) => {
+                ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)
+                const view = ctx.get(editorViewCtx)
+                requestAnimationFrame(() => openDocLinkPicker(view))
+              },
+            })
             builder.addGroup('data', '数据').addItem('table-embed', {
               label: '多维表格 Table view',
               icon: ICONS.table,
@@ -270,6 +281,7 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     // after Crepe's own code-block view: wraps it to give mermaid / dot blocks their own UI
     crepe.editor.use(textDiagramView)
     crepe.editor.use(previewBlockKeys)
+    crepe.editor.use(docLinkTrigger)
 
     // Upload pasted / dropped files to the server instead of inlining base64.
     const uploader: Uploader = async (files, schema) => {
@@ -370,6 +382,15 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
         return
       }
       if (crepe.readonly) return
+      // links to other documents / tables open them (the editor would only place the caret)
+      const a = (e.target as Element).closest?.('a[href]')
+      const path = a && !e.shiftKey && !e.altKey ? nodeLinkPath(a.getAttribute('href')) : null
+      if (path) {
+        e.preventDefault()
+        if (e.ctrlKey || e.metaKey) window.open(path, '_blank')
+        else window.dispatchEvent(new CustomEvent('qj-nav', { detail: path }))
+        return
+      }
       const el = (e.target as Element).closest?.('[data-ink-drawing]')
       const kind = el?.getAttribute('data-ink-kind') ?? 'excalidraw'
       if (el && isDrawingKind(kind)) {

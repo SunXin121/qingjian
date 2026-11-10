@@ -93,6 +93,7 @@ type exportBundle struct {
 	paths map[string]string // attachment id → zip path
 	used  map[string]bool   // zip paths taken
 	order []string          // attachment ids in first-seen order
+	nodes map[string]string // exported node id → zip path (links between them become relative)
 }
 
 func (s *Server) newExportBundle() *exportBundle {
@@ -122,12 +123,23 @@ func (b *exportBundle) assetPath(a *Attachment) string {
 // at its copy under assets/.
 func (b *exportBundle) markdown(md string, depth int) string {
 	md = b.s.portableMarkdown(md)
-	return reFileRef.ReplaceAllStringFunc(md, func(ref string) string {
+	md = reFileRef.ReplaceAllStringFunc(md, func(ref string) string {
 		a, err := b.s.loadAttachment(reFileRef.FindStringSubmatch(ref)[1])
 		if err != nil {
 			return ref
 		}
 		return strings.Repeat("../", depth) + mdPathEscape(b.assetPath(a))
+	})
+	if len(b.nodes) == 0 {
+		return md
+	}
+	// links to documents / tables exported alongside point at their files
+	return reNodeLink.ReplaceAllStringFunc(md, func(link string) string {
+		p, ok := b.nodes[reNodeLink.FindStringSubmatch(link)[1]]
+		if !ok {
+			return link
+		}
+		return "](" + strings.Repeat("../", depth) + mdPathEscape(p) + ")"
 	})
 }
 
@@ -218,6 +230,13 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 	defer zw.Close()
 
 	b := s.newExportBundle()
+	// file names first, so links between the exported documents can be made relative
+	type entry struct {
+		n    Node
+		path string
+	}
+	var entries []entry
+	b.nodes = map[string]string{}
 	// "assets" is reserved at the root for attachments
 	reserved := map[string]bool{"assets": true}
 	var walk func(parent, dir string)
@@ -234,13 +253,12 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 			used[base]++
 			switch n.Type {
 			case "doc":
-				if d, err := s.loadDoc(n.ID); err == nil {
-					writeZipText(zw, dir+base+".md", b.markdown(d.Markdown, strings.Count(dir, "/")), n.UpdatedAt)
-				}
+				entries = append(entries, entry{n, dir + base + ".md"})
 			case "table":
-				if t, err := s.loadTableData(s.db, n.ID); err == nil {
-					writeZipText(zw, dir+base+".csv", s.withLinked(t).csv(), n.UpdatedAt)
-				}
+				entries = append(entries, entry{n, dir + base + ".csv"})
+			}
+			if p := len(entries); p > 0 && entries[p-1].n.ID == n.ID {
+				b.nodes[n.ID] = entries[p-1].path
 			}
 			if len(children[n.ID]) > 0 {
 				walk(n.ID, dir+base+"/")
@@ -248,5 +266,17 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	walk("", "")
+	for _, e := range entries {
+		switch e.n.Type {
+		case "doc":
+			if d, err := s.loadDoc(e.n.ID); err == nil {
+				writeZipText(zw, e.path, b.markdown(d.Markdown, strings.Count(e.path, "/")), e.n.UpdatedAt)
+			}
+		case "table":
+			if t, err := s.loadTableData(s.db, e.n.ID); err == nil {
+				writeZipText(zw, e.path, s.withLinked(t).csv(), e.n.UpdatedAt)
+			}
+		}
+	}
 	b.writeAssets(zw)
 }

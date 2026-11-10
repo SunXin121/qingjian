@@ -1088,6 +1088,153 @@ a.toc-row:hover > .ellipsis {
 .ink-editor .milkdown .ProseMirror a:hover {
   text-decoration-color: var(--c-primary);
 }
+/* links to other documents / tables (双链) */
+.ink-editor .milkdown .ProseMirror a[href^='/r/'] {
+  color: var(--c-info);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-info) 30%, transparent);
+  cursor: pointer;
+}
+.ink-editor .milkdown .ProseMirror a[href^='/r/']::before {
+  content: '';
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 2px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z'/%3E%3Cpath d='M14 3v5h5M9 13h6M9 17h4'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z'/%3E%3Cpath d='M14 3v5h5M9 13h6M9 17h4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.ink-editor .milkdown .ProseMirror a[href^='/r/']:hover {
+  background: var(--c-info-bg);
+  border-bottom-color: var(--c-info);
+}
+
+/* [[ picker */
+.doc-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.doc-link-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.doc-link-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.doc-link-item > svg {
+  flex: none;
+  color: var(--c-text-3);
+}
+.doc-link-item.active {
+  background: var(--c-hover-strong);
+}
+.doc-link-repo {
+  flex: none;
+  max-width: 40%;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+.doc-link-empty {
+  padding: 12px 8px;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+/* backlinks below a document */
+.backlinks {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-border);
+}
+.backlinks-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+.backlinks-count {
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+.backlinks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.backlink {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius);
+  color: var(--c-text);
+  text-decoration: none;
+}
+.backlink:hover {
+  background: var(--c-hover);
+}
+.backlink-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.backlink-title > svg {
+  flex: none;
+  color: var(--c-text-3);
+}
+.backlink-repo {
+  flex: none;
+  max-width: 30%;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--c-surface);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+.backlink-time {
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+.backlink-snippet {
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .ink-editor .milkdown .ProseMirror code {
   color: var(--c-inline-code);
   background: var(--c-inline-code-bg);

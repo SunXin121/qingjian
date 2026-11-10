@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api, ApiError, formatTime, type Doc } from '../api'
 import { confirmDialog, openMenu, toast } from '../components/dialog'
 import { IconCamera, IconChevron, IconDownload, IconHistory, IconList, IconMore, IconShare, IconTrash, RepoMark } from '../components/icons'
+import Backlinks from '../components/Backlinks'
 import Outline, { parseHeadings, type Heading } from '../components/Outline'
 import PageHeader from '../components/PageHeader'
 import { openShareDialog } from '../components/ShareDialog'
@@ -288,6 +289,7 @@ export default function DocPage() {
               }}
             />
             <Editor key={doc.id + ':' + mountKey} value={doc.markdown} onChange={onChange} />
+            <Backlinks nodeId={doc.id} repoId={repoId} />
           </div>
         </main>
         <Outline headings={headings} open={outlineOpen} onClose={() => setOutlineOpen(false)} />
