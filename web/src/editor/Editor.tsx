@@ -13,6 +13,8 @@ import { uploadFile } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
 import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
+import { previewBlockKeys } from './previewBlocks'
+import { textDiagramView } from './textDiagram'
 
 const ExcalidrawModal = lazy(() => import('./ExcalidrawModal'))
 const DrawioModal = lazy(() => import('./DrawioModal'))
@@ -23,8 +25,7 @@ const MODALS = { excalidraw: ExcalidrawModal, drawio: DrawioModal, mindmap: Mind
 const icon = (path: string) =>
   `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`
 const ICONS = {
-  mermaid: icon('<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="16" width="7" height="5" rx="1"/><path d="M6.5 8v4h11v4"/>'),
-  graphviz: icon('<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7.5l3 8M16 7.5l-3 8M8.5 6h7"/>'),
+  textDiagram: icon('<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="16" width="7" height="5" rx="1"/><path d="M6.5 8v4h11v4"/>'),
   board: icon('<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>'),
   math: icon('<path d="M5 5h14M5 5l7 7-7 7h14"/>'),
   file: icon('<path d="M20 11.5l-8.2 8.2a5 5 0 01-7.1-7.1l8.5-8.5a3.3 3.3 0 014.7 4.7l-8.5 8.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/>'),
@@ -77,7 +78,7 @@ function insertCodeBlock(ctx: Ctx, language: string, content: string) {
   view.focus()
   if (isDrawingKind(language) || language === 'table') return
   // Freshly inserted diagram/math blocks open in "code + live preview" mode.
-  // Retry for a moment: async previews (mermaid/graphviz) render the toggle button late.
+  // Retry for a moment: async previews (and lazily set up code blocks) render the toggle button late.
   let tries = 0
   const openEditor = () => {
     const dom = view.nodeDOM(start) as HTMLElement | null
@@ -209,15 +210,10 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
             })
             builder
               .addGroup('drawing', '绘图')
-              .addItem('mermaid', {
-                label: '文本绘图 Mermaid',
-                icon: ICONS.mermaid,
-                onRun: (ctx) => insertCodeBlock(ctx, 'mermaid', DIAGRAM_TEMPLATES.mermaid),
-              })
-              .addItem('graphviz', {
-                label: '文本绘图 Graphviz DOT',
-                icon: ICONS.graphviz,
-                onRun: (ctx: Ctx) => insertCodeBlock(ctx, 'dot', DIAGRAM_TEMPLATES.dot),
+              .addItem('text-diagram', {
+                label: '文本绘图 Mermaid / Graphviz',
+                icon: ICONS.textDiagram,
+                onRun: (ctx: Ctx) => insertCodeBlock(ctx, 'mermaid', DIAGRAM_TEMPLATES.mermaid),
               })
               .addItem('excalidraw', {
                 label: '画板 Excalidraw 手绘',
@@ -271,6 +267,9 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     }
 
     crepe.editor.use(calloutPlugin)
+    // after Crepe's own code-block view: wraps it to give mermaid / dot blocks their own UI
+    crepe.editor.use(textDiagramView)
+    crepe.editor.use(previewBlockKeys)
 
     // Upload pasted / dropped files to the server instead of inlining base64.
     const uploader: Uploader = async (files, schema) => {

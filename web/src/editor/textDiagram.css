@@ -1,0 +1,197 @@
+/* Text diagram blocks (textDiagram.ts). Overrides the generic code-block chrome. */
+.ink-editor .milkdown .milkdown-code-block.ink-textdiagram {
+  position: relative;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.ink-editor .milkdown .milkdown-code-block.ink-textdiagram:not(.editing):hover {
+  border-color: var(--c-border);
+}
+.ink-editor.readonly .milkdown .milkdown-code-block.ink-textdiagram:hover {
+  border-color: transparent;
+}
+.ink-editor .milkdown .milkdown-code-block.ink-textdiagram.selected:not(.editing) {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-ring);
+}
+.ink-editor .milkdown .milkdown-code-block.ink-textdiagram.editing {
+  border-color: var(--c-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.ink-textdiagram-placeholder pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  color: var(--c-text-3);
+}
+
+/* toolbar: only while editing */
+.ink-textdiagram .td-toolbar {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+  border-radius: 10px 10px 0 0;
+}
+.ink-textdiagram.editing .td-toolbar {
+  display: flex;
+}
+.ink-textdiagram .td-spacer {
+  flex: 1;
+}
+.ink-textdiagram .td-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--c-hover);
+}
+.ink-textdiagram .td-switch-item,
+.ink-textdiagram .td-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ink-textdiagram .td-switch-item:hover {
+  color: var(--c-text);
+}
+.ink-textdiagram .td-switch-item.active {
+  background: var(--c-panel);
+  color: var(--c-text);
+  box-shadow: var(--shadow-sm);
+}
+.ink-textdiagram .td-btn {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-panel);
+}
+.ink-textdiagram .td-btn:hover {
+  background: var(--c-hover-strong);
+}
+.ink-textdiagram .td-btn.danger {
+  color: var(--c-danger);
+}
+.ink-textdiagram .td-btn.danger:hover {
+  background: color-mix(in srgb, var(--c-danger) 8%, var(--c-panel));
+}
+.ink-textdiagram .td-btn.primary {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-panel);
+}
+.ink-textdiagram .td-btn.primary:hover {
+  background: var(--c-primary-hover);
+}
+
+/* body: code | preview side by side while editing, preview alone otherwise */
+.ink-textdiagram .td-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.ink-textdiagram.editing .td-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.ink-textdiagram .td-code.hidden {
+  display: none;
+}
+.ink-textdiagram .td-code {
+  min-width: 0;
+  min-height: 220px;
+  max-height: 560px;
+  overflow: auto;
+  border-right: 1px solid var(--c-border);
+  background: var(--c-code-bg);
+  border-bottom-left-radius: 10px;
+}
+.ink-textdiagram .td-code .cm-editor {
+  min-height: 220px;
+}
+.ink-textdiagram .td-code .cm-editor.cm-focused {
+  outline: none;
+}
+.ink-textdiagram .td-preview {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+.ink-editor.readonly .ink-textdiagram .td-preview,
+.ink-textdiagram.editing .td-preview {
+  cursor: default;
+}
+.ink-textdiagram.editing .td-preview {
+  max-height: 560px;
+  overflow: auto;
+}
+.ink-textdiagram .td-preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+}
+.ink-textdiagram .td-preview-content .ink-diagram {
+  padding: 16px 12px;
+}
+.ink-textdiagram.editing .td-preview-content {
+  min-height: 220px;
+}
+.ink-textdiagram .td-error {
+  margin: 0 12px 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--c-danger) 8%, transparent);
+  color: var(--c-danger);
+  font-size: 12.5px;
+}
+.ink-textdiagram .td-error[hidden] {
+  display: none;
+}
+.ink-textdiagram .td-error pre {
+  margin: 4px 0 0;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+/* a stale diagram under an error is shown dimmed */
+.ink-textdiagram.has-error .td-preview-content .ink-diagram {
+  opacity: 0.45;
+}
+
+@media (max-width: 767px) {
+  .ink-textdiagram.editing .td-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ink-textdiagram .td-code {
+    border-right: 0;
+    border-bottom: 1px solid var(--c-border);
+    border-bottom-left-radius: 0;
+    min-height: 160px;
+  }
+  .ink-textdiagram .td-code .cm-editor {
+    min-height: 160px;
+  }
+}
+
+/* other preview-only blocks (drawings, table embeds, formulas) selected as a whole */
+.ink-editor .milkdown .milkdown-code-block.selected:has(> .codemirror-host.hidden) {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-ring);
+}

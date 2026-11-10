@@ -1,4 +1,5 @@
-// Rendering of "diagram" code blocks (mermaid / graphviz / excalidraw / drawio / mindmap) into previews.
+// Rendering of diagram code blocks into previews: text diagrams (mermaid / graphviz, used by
+// textDiagram.ts) and drawing blocks (excalidraw / drawio / mindmap, via Crepe's renderPreview).
 // Heavy libraries are loaded lazily the first time they are needed.
 
 export interface DrawingRef {
@@ -38,14 +39,6 @@ export const DIAGRAM_TEMPLATES: Record<string, string> = {
   dot: 'digraph G {\n  rankdir=LR\n  node [shape=box, style=rounded]\n  浏览器 -> 服务端 -> 数据库\n  服务端 -> 文件存储\n}',
 }
 
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-
-const errorBox = (title: string, msg: string) =>
-  `<div class="ink-preview-error"><strong>${escapeHtml(title)}</strong><pre>${escapeHtml(msg)}</pre></div>`
-
-const hint = (text: string) => `<div class="ink-preview-hint">${escapeHtml(text)}</div>`
-
 // ---------- mermaid ----------
 let mermaidP: Promise<typeof import('mermaid').default> | null = null
 function getMermaid() {
@@ -69,18 +62,28 @@ function remember(key: string, value: string) {
   return value
 }
 
+export type TextDiagramLang = 'mermaid' | 'dot'
+
+/** Code-block languages shown as text diagrams ("graphviz" is an alias of "dot"). */
+export function textDiagramLang(language: string | null | undefined): TextDiagramLang | null {
+  const l = (language || '').toLowerCase()
+  if (l === 'mermaid') return 'mermaid'
+  if (l === 'dot' || l === 'graphviz') return 'dot'
+  return null
+}
+
 async function renderMermaid(code: string): Promise<string> {
-  const key = 'mermaid:' + (prefersDark() ? 'dark:' : '') + code
-  if (cache.has(key)) return cache.get(key)!
   const mermaid = await getMermaid()
   const id = `ink-mmd-${++seq}`
   try {
     const { svg } = await mermaid.render(id, code)
-    return remember(key, `<div class="ink-diagram">${svg}</div>`)
+    return `<div class="ink-diagram">${svg}</div>`
   } catch (e: any) {
+    throw new Error(String(e?.message ?? e))
+  } finally {
+    // mermaid leaves its scratch element behind when parsing fails
     document.getElementById(id)?.remove()
     document.getElementById('d' + id)?.remove()
-    return errorBox('Mermaid 语法错误', String(e?.message ?? e))
   }
 }
 
@@ -92,15 +95,21 @@ function getViz() {
 }
 
 async function renderDot(code: string): Promise<string> {
-  const key = 'dot:' + code
-  if (cache.has(key)) return cache.get(key)!
   const viz = await getViz()
-  try {
-    const svg: string = viz.renderString(code, { format: 'svg', engine: 'dot' })
-    return remember(key, `<div class="ink-diagram dot">${svg.replace(/^<\?xml[^>]*>\s*(<!DOCTYPE[^>]*>)?/, '')}</div>`)
-  } catch (e: any) {
-    return errorBox('Graphviz 语法错误', String(e?.message ?? e))
+  const result = viz.render(code, { format: 'svg', engine: 'dot' })
+  if (result.status !== 'success') {
+    throw new Error(result.errors.map((e: { message: string }) => e.message).join('\n') || 'syntax error')
   }
+  const svg: string = result.output
+  return `<div class="ink-diagram dot">${svg.replace(/^<\?xml[^>]*>\s*(<!DOCTYPE[^>]*>)?/, '')}</div>`
+}
+
+/** Render a text diagram to (unsanitised) HTML; rejects with the syntax error. */
+export async function renderTextDiagram(lang: TextDiagramLang, code: string): Promise<string> {
+  const key = lang + ':' + (lang === 'mermaid' && prefersDark() ? 'dark:' : '') + code
+  if (cache.has(key)) return cache.get(key)!
+  const html = await (lang === 'mermaid' ? renderMermaid(code) : renderDot(code))
+  return remember(key, html)
 }
 
 // ---------- excalidraw ----------
@@ -142,15 +151,6 @@ export function renderPreview(
 ): void | null | string | HTMLElement {
   const lang = (language || '').toLowerCase()
   switch (lang) {
-    case 'mermaid':
-      if (!content.trim()) return hint('空白 Mermaid 图 · 点击右上角「编辑」输入代码')
-      renderMermaid(content).then(apply)
-      return undefined
-    case 'dot':
-    case 'graphviz':
-      if (!content.trim()) return hint('空白 Graphviz 图 · 点击右上角「编辑」输入 DOT 代码')
-      renderDot(content).then(apply)
-      return undefined
     case 'excalidraw':
     case 'drawio':
     case 'mindmap':

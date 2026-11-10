@@ -53,6 +53,7 @@ export default function DrawioModal({ content, onSave, onClose }: Props) {
       ? fetch(`/files/${ref.scene}/${DRAWINGS.drawio.sceneName}`).then((r) => (r.ok ? r.text() : ''))
       : Promise.resolve('')
     let exitAfterSave = false
+    let templateShown = false
     let pendingXml = ''
     const post = (msg: object) => frame.current?.contentWindow?.postMessage(JSON.stringify(msg), origin)
 
@@ -68,6 +69,14 @@ export default function DrawioModal({ content, onSave, onClose }: Props) {
         case 'init':
           setReady(true)
           post({ action: 'load', xml: await xmlP, autosave: 0, title: DRAWINGS.drawio.label })
+          break
+        case 'load':
+          // a new diagram starts from draw.io's template library (flowchart, UML, ER, ...);
+          // cancelling it leaves a blank canvas instead of closing the editor
+          if (!ref.scene && !templateShown) {
+            templateShown = true
+            post({ action: 'template', noExitOnCancel: 1 })
+          }
           break
         case 'save':
           exitAfterSave = !!msg.exit
