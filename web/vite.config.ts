@@ -21,11 +21,13 @@ export default defineConfig({
   plugins: [react(), lazyImagesPlugin],
   server: {
     port: 5173,
+    // Keep the browser's Host header (the string shorthand would rewrite it to the target):
+    // the server rejects writes whose Origin does not match the Host it sees.
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/files': 'http://localhost:8080',
+      '/api': { target: 'http://localhost:8080', changeOrigin: false },
+      '/files': { target: 'http://localhost:8080', changeOrigin: false },
       // single icons rendered by the server; the icon set files themselves come from public/
-      '^/icons/[^/]+/[^/]+\\.svg$': 'http://localhost:8080',
+      '^/icons/[^/]+/[^/]+\\.svg$': { target: 'http://localhost:8080', changeOrigin: false },
     },
   },
   build: {
