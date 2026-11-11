@@ -20,6 +20,7 @@ import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type Draw
 import { previewBlockKeys } from './previewBlocks'
 import { imageRatioRemark } from './imageRatio'
 import { htmlImagesRemark } from './htmlImages'
+import { Prec } from '@codemirror/state'
 import { codeThemeDark, codeThemeLight } from './codeTheme'
 import { textDiagramView } from './textDiagram'
 import { PROGRESSIVE_MIN, splitMarkdown } from './progressive'
@@ -188,7 +189,11 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: '输入 / 唤起菜单，支持 Markdown 语法', mode: 'block' },
         [Crepe.Feature.CodeMirror]: {
-          theme: prefersDark() ? codeThemeDark : codeThemeLight,
+          // Crepe fills in its defaults with lodash defaultsDeep, which merges its oneDark theme
+          // *into* the value given here, in place. Handing it the shared theme objects grew them
+          // on every editor created, until opening a document took seconds. A fresh wrapper
+          // per editor only gets oneDark's two entries attached as unused keys.
+          theme: Prec.default(prefersDark() ? codeThemeDark : codeThemeLight),
           renderPreview,
           previewOnlyByDefault: true,
           searchPlaceholder: '搜索语言',
