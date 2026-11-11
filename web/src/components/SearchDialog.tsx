@@ -140,7 +140,7 @@ export default function SearchDialog() {
     if (it.kind === 'cmd')
       return (
         <button key={it.cmd.id} data-sel={on || undefined} className={cn(cls, 'h-10 md:h-9')} onMouseEnter={() => setSel(i)} onClick={() => go(it)}>
-          <span className={cn('shrink-0 [&_svg]:size-[15px]', on ? 'text-accent' : 'text-ink-3')}>{it.cmd.icon}</span>
+          <span className={cn('flex shrink-0 [&_svg]:size-[15px]', on ? 'text-accent' : 'text-ink-3')}>{it.cmd.icon}</span>
           <span className={cn('min-w-0 flex-1 truncate text-[13px]', on ? 'text-accent' : 'text-ink')}>{it.cmd.label}</span>
         </button>
       )
@@ -148,7 +148,7 @@ export default function SearchDialog() {
     if (!h.snippet)
       return (
         <button key={h.id} data-sel={on || undefined} className={cn(cls, 'h-10 md:h-9')} onMouseEnter={() => setSel(i)} onClick={() => go(it)}>
-          <span className={cn('shrink-0 [&_svg]:size-[15px]', on ? 'text-accent' : 'text-ink-3')}>{h.type === 'table' ? <IconTable /> : <IconDoc />}</span>
+          <span className={cn('flex shrink-0 [&_svg]:size-[15px]', on ? 'text-accent' : 'text-ink-3')}>{h.type === 'table' ? <IconTable /> : <IconDoc />}</span>
           <span className={cn('min-w-0 flex-1 truncate text-[13px]', on ? 'text-accent' : 'text-ink')}>{nodeTitle(h)}</span>
           <span className="max-w-28 shrink-0 truncate text-[11px] text-ink-4 max-sm:hidden">{h.repo_name}</span>
           <span className="tabular w-20 shrink-0 text-right text-[11px] text-ink-4">{formatTime(h.updated_at)}</span>

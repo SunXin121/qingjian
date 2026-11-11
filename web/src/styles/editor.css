@@ -27,7 +27,8 @@
   min-height: 40vh;
   font-family: var(--prose-font);
   font-size: var(--prose-size);
-  line-height: 1.75;
+  line-height: var(--prose-line);
+  letter-spacing: var(--prose-tracking);
   word-break: break-word;
   color: var(--c-text);
 }
@@ -42,7 +43,8 @@
   min-height: 0;
 }
 .ink-editor .milkdown .ProseMirror p {
-  line-height: 1.75;
+  line-height: var(--prose-line);
+  text-wrap: pretty;
   padding: 3px 0;
 }
 .ink-editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
@@ -246,6 +248,9 @@
   -webkit-box-orient: vertical;
 }
 .ink-editor .milkdown .ProseMirror code {
+  font-family: var(--font-mono);
+  letter-spacing: -0.012em;
+  font-variant-ligatures: none;
   color: var(--c-inline-code);
   background: var(--c-inline-code-bg);
   padding: 0 5px;
@@ -337,8 +342,12 @@
 }
 .ink-editor .milkdown .milkdown-code-block .cm-content,
 .ink-editor .milkdown .milkdown-code-block .cm-scroller {
-  font-size: 13.5px;
-  line-height: 1.65;
+  /* CodeMirror's base theme sets plain `monospace` */
+  font-family: var(--font-mono);
+  font-size: calc(var(--prose-size) * 0.86);
+  line-height: 1.6;
+  letter-spacing: -0.012em;
+  font-variant-ligatures: none;
 }
 .ink-editor .milkdown .milkdown-code-block .tools .tools-button-group button {
   background: var(--c-panel);

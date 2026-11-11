@@ -16,7 +16,8 @@ import { uploadFile, type NodeRenamed } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
 import { docLinkTrigger, followRename, nodeLinkPath, openDocLinkPicker } from './docLinks'
-import { DIAGRAM_TEMPLATES, isDrawingKind, renderPreview, type DrawingKind } from './previews'
+import { codeHighlightDark } from './codeDark'
+import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
 import { previewBlockKeys } from './previewBlocks'
 import { imageRatioRemark } from './imageRatio'
 import { htmlImagesRemark } from './htmlImages'
@@ -188,11 +189,12 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: '输入 / 唤起菜单，支持 Markdown 语法', mode: 'block' },
         [Crepe.Feature.CodeMirror]: {
-          // No code theme of our own: CodeMirror's default highlighting. Crepe fills in its
-          // defaults with lodash defaultsDeep, which would merge its oneDark theme *into* an
-          // empty value given here; a fresh wrapper only gets oneDark's entries attached as
-          // unused keys (and never the shared objects, which made each new editor slower).
-          theme: Prec.default([]),
+          // Light: CodeMirror's default highlighting. Dark: the same colour groups, lifted (codeDark.ts).
+          // Crepe fills in its defaults with lodash defaultsDeep, which merges its oneDark theme
+          // *into* the value given here, in place. A fresh wrapper per editor only gets oneDark's
+          // entries attached as unused keys, never the shared highlight objects (merging into
+          // shared objects grew them with every editor created, making documents slow to open).
+          theme: Prec.default(prefersDark() ? codeHighlightDark : []),
           renderPreview,
           previewOnlyByDefault: true,
           searchPlaceholder: '搜索语言',

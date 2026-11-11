@@ -106,8 +106,8 @@ function AppearancePanel() {
             }}
           />
         </Row>
-        <Row label="强调色" hint="按钮、选中项和链接使用的颜色。">
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="强调色">
+        <Row label="强调色" hint="按钮、选中项和链接使用的颜色。最后一个可以自定义。">
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="强调色">
             {ACCENTS.map((x) => (
               <button
                 key={x.id}
@@ -125,6 +125,33 @@ function AppearancePanel() {
                 {a.accent === x.id && <IconCheck width={13} height={13} strokeWidth={2.5} />}
               </button>
             ))}
+            <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
+            {/* the label opens the native colour picker; picking a colour also selects it */}
+            <label
+              role="radio"
+              aria-checked={a.accent === 'custom'}
+              title="自定义颜色"
+              className={cn(
+                'relative grid size-7 cursor-pointer place-items-center rounded-full transition-[box-shadow,transform] duration-(--dur-fast) ease-spring hover:scale-110 md:size-6',
+                a.accent === 'custom' && 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_4px_var(--accent)]',
+              )}
+              style={{
+                background:
+                  a.accent === 'custom' ? a.customAccent : 'conic-gradient(from 90deg, #e5484d, #f5a524, #46a758, #0d9488, #3e63dd, #8e4ec6, #e5484d)',
+                color: 'var(--accent-contrast)',
+              }}
+              onClick={() => a.accent !== 'custom' && update({ accent: 'custom' })}
+            >
+              {a.accent === 'custom' && <IconCheck width={13} height={13} strokeWidth={2.5} />}
+              <input
+                type="color"
+                aria-label="自定义强调色"
+                className="absolute inset-0 size-full cursor-pointer opacity-0"
+                value={a.customAccent}
+                onChange={(e) => update({ accent: 'custom', customAccent: e.target.value })}
+              />
+            </label>
+            {a.accent === 'custom' && <span className="font-mono text-[11.5px] text-ink-3 uppercase">{a.customAccent}</span>}
           </div>
         </Row>
         <Row label="背景" hint="暖纸色更柔和，纯白更干净。">
@@ -171,6 +198,19 @@ function AppearancePanel() {
           />
           <span className="tabular w-10 text-right text-[12px] text-ink-3">{a.proseSize}px</span>
         </Row>
+        <Row label="行高">
+          <input
+            type="range"
+            min={1.4}
+            max={2}
+            step={0.05}
+            value={a.proseLine}
+            aria-label="行高"
+            onChange={(e) => update({ proseLine: +e.target.value })}
+            className="w-40 accent-(--accent)"
+          />
+          <span className="tabular w-10 text-right text-[12px] text-ink-3">{a.proseLine.toFixed(2)}</span>
+        </Row>
         <Row label="内容宽度">
           <Segmented
             label="内容宽度"
@@ -181,7 +221,7 @@ function AppearancePanel() {
         </Row>
         <div className="border-t border-line-subtle py-4">
           <div className="mb-2 text-[11.5px] font-medium text-ink-4">效果预览</div>
-          <div className="rounded-lg border border-line-subtle bg-editor px-5 py-4 text-ink" style={{ fontFamily: 'var(--prose-font)', fontSize: 'var(--prose-size)', lineHeight: 1.75 }}>
+          <div className="rounded-lg border border-line-subtle bg-editor px-5 py-4 text-ink" style={{ fontFamily: 'var(--prose-font)', fontSize: 'var(--prose-size)', lineHeight: 'var(--prose-line)', letterSpacing: 'var(--prose-tracking)' }}>
             <div className="mb-1 text-[1.25em] font-semibold">山中问答</div>
             问余何意栖碧山，笑而不答心自闲。桃花流水窅然去，别有天地非人间。中英文与
             <code className="mx-1 rounded-[4px] bg-active px-1.5 py-0.5 font-mono text-[0.86em] text-[color-mix(in_oklab,var(--accent)_80%,var(--text-primary))]">inline code</code>

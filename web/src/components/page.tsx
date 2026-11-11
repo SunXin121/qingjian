@@ -25,9 +25,10 @@ export function PageTitle({ children, sub, className }: { children: ReactNode; s
 export function Section({ title, icon, count, action, children, className }: { title: ReactNode; icon?: ReactNode; count?: number; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn('mt-9 first:mt-0', className)}>
-      <div className="mb-3 flex items-center gap-2">
-        {icon && <span className="text-ink-3 [&_svg]:size-4">{icon}</span>}
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">{title}</h2>
+      <div className="mb-3 flex h-6 items-center gap-2">
+        {/* a flex box, not an inline span: an inline icon sits on the text baseline, below centre */}
+        {icon && <span className="flex shrink-0 text-ink-3 [&_svg]:size-4">{icon}</span>}
+        <h2 className="m-0 text-[13.5px] leading-6 font-semibold text-ink">{title}</h2>
         {!!count && <span className="tabular rounded-full bg-active px-1.5 py-px text-[11px] font-medium text-ink-3">{count}</span>}
         <span className="flex-1" />
         {action}

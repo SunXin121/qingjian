@@ -6,7 +6,7 @@
 
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
-@import '@fontsource-variable/inter/index.css';
+@import './styles/inter.css';
 
 @import './styles/tokens.css';
 @import './styles/app.css';
