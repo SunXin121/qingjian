@@ -8,6 +8,8 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8080',
       '/files': 'http://localhost:8080',
+      // single icons rendered by the server; the icon set files themselves come from public/
+      '^/icons/[^/]+/[^/]+\\.svg$': 'http://localhost:8080',
     },
   },
   build: {

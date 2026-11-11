@@ -134,16 +134,27 @@ export function repoTone(id: string) {
   return h % 6
 }
 
-/** Repo badge: uploaded image, chosen glyph, or the initial on a tinted tile. */
+const reIconValue = /^([a-z0-9]+(?:-[a-z0-9]+)*):([a-z0-9]+(?:-[a-z0-9]+)*)$/
+
+/** URL of a library icon ("tabler:book" → /icons/tabler/book.svg), or null for other values. */
+export function iconSrc(value: string) {
+  const m = reIconValue.exec(value)
+  return m ? `/icons/${m[1]}/${m[2]}.svg` : null
+}
+
+/** Repo badge: uploaded image, library icon, emoji, or the initial on a tinted tile. */
 export function RepoMark({ repo, className }: { repo: { id: string; name: string; icon?: string }; className: string }) {
   const [failedImage, setFailedImage] = useState('')
   const icon = repo.icon?.trim() ?? ''
   const isImage = icon.startsWith('/files/')
-  const glyph = (!isImage && icon) || Array.from(repo.name.trim())[0]?.toUpperCase() || '库'
+  const src = isImage ? null : iconSrc(icon)
+  const glyph = (!isImage && !src && icon) || Array.from(repo.name.trim())[0]?.toUpperCase() || '库'
   return (
     <span className={className} style={{ '--tone': `var(--tone-${repoTone(repo.id)})` } as React.CSSProperties} aria-hidden>
       {isImage && failedImage !== icon ? (
         <img className="repo-mark-image" src={icon} alt="" onError={() => setFailedImage(icon)} />
+      ) : src ? (
+        <span className="repo-mark-icon" style={{ '--icon': `url("${src}")` } as React.CSSProperties} />
       ) : glyph}
     </span>
   )

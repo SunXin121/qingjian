@@ -5,8 +5,8 @@ import { IconDownload, IconEdit, IconFolder, IconShare, IconTrash, IconUpload, R
 import { canPickFolder } from './ImportDialog'
 import { openShareDialog } from './ShareDialog'
 import { exportMarkdown } from './ExportDialog'
+import IconPicker from './IconPicker'
 
-const icons = ['📚', '📝', '📖', '💡', '🧠', '💻', '🎨', '🔬', '🌱', '🏠', '🗂️', '📌', '🎯', '🚀', '⭐', '❤️']
 const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 type RepoDetails = Pick<Repo, 'name' | 'description' | 'icon'>
 
@@ -101,19 +101,7 @@ function RepoForm({ repo, onDone }: { repo?: Repo; onDone: (value: RepoDetails |
               />
             </div>
             {error && <p className="repo-icon-error" role="alert">{error}</p>}
-            <div className="repo-icon-options" role="group" aria-label="常用图标">
-              {icons.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={'repo-icon-option' + (icon === value ? ' selected' : '')}
-                  aria-label={`使用 ${value} 图标`}
-                  aria-pressed={icon === value}
-                  disabled={uploading}
-                  onClick={() => selectIcon(value)}
-                >{value}</button>
-              ))}
-            </div>
+            <IconPicker value={icon} disabled={uploading} onSelect={selectIcon} />
           </div>
           <label className="field">
             <span>简介</span>

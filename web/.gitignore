@@ -2,3 +2,4 @@ node_modules
 dist/*
 !dist/.gitkeep
 public/excalidraw-assets
+public/icons

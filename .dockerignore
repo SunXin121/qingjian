@@ -6,3 +6,4 @@ web/dist
 web/public/excalidraw-assets
 .env
 .github
+web/public/icons

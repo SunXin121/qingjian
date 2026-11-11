@@ -41,6 +41,7 @@ type Server struct {
 	limiter       *loginLimiter
 	blobMu        sync.Mutex // serialises blob creation against attachment cleanup
 	puml          pumlCache
+	icons         iconSets
 	stop          chan struct{}  // closed by Close: background workers return
 	workers       sync.WaitGroup // workers that use the database (Close waits for them)
 	indexDone     chan struct{}
@@ -136,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/files/stats", a(s.storageStats))
 	mux.Handle("POST /api/files/cleanup", a(s.cleanupFiles))
 	mux.HandleFunc("GET /files/{id}/{name...}", s.serveFile)
+	mux.HandleFunc("GET /icons/{set}/{name}", s.serveIcon)
 
 	mux.Handle("GET /api/shares", a(s.listShares))
 	mux.Handle("POST /api/shares", a(s.createShare))
@@ -194,6 +196,8 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 			if st != nil && !st.IsDir() {
 				if strings.HasPrefix(p, "assets/") {
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else if strings.HasPrefix(p, "icons/") {
+					w.Header().Set("Cache-Control", "public, max-age=86400")
 				}
 				serveStaticFile(w, r, s.static, p)
 				return

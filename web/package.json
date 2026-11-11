@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "copy-assets": "rm -rf public/excalidraw-assets && mkdir -p public/excalidraw-assets && cp -r node_modules/@excalidraw/excalidraw/dist/prod/fonts public/excalidraw-assets/",
+    "copy-assets": "rm -rf public/excalidraw-assets && mkdir -p public/excalidraw-assets && cp -r node_modules/@excalidraw/excalidraw/dist/prod/fonts public/excalidraw-assets/ && node scripts/build-icons.mjs",
     "build": "npm run copy-assets && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -33,9 +33,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@iconify-json/lucide": "^1.2.153",
+    "@iconify-json/ri": "^1.2.10",
+    "@iconify-json/tabler": "^1.2.44",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "emojibase-data": "^18.0.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",

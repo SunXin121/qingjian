@@ -364,32 +364,169 @@
   object-fit: cover;
   border-radius: inherit;
 }
-.repo-icon-option:disabled {
-  opacity: 0.5;
-  cursor: wait;
+.repo-mark-icon {
+  display: block;
+  width: 62%;
+  height: 62%;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
 }
-.repo-icon-options {
+
+/* icon picker (knowledge base icon) */
+.icon-picker {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg);
+  overflow: hidden;
+}
+.icon-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.icon-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  color: var(--c-text-3);
+}
+.icon-search:focus-within {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-ring);
+}
+.icon-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--c-text);
+  font-size: 13px;
+}
+.icon-picker-sets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.icon-picker-sets .chip {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.icon-picker-sets .chip.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-soft);
+  color: var(--c-text);
+}
+.icon-picker-sets select {
+  margin-left: auto;
+  max-width: 45%;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  color: var(--c-text-2);
+  font-size: 12px;
+}
+.emoji-nav {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 0;
+  padding: 2px 6px;
+}
+.emoji-nav .icon-pick {
+  height: 30px;
+  font-size: 17px;
+}
+.icon-picker-body {
+  position: relative;
+  height: 236px;
+  padding: 4px 8px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.icon-picker-body h4 {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 2px 4px;
+  background: var(--c-bg);
+  color: var(--c-text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.icon-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 2px;
 }
-.repo-icon-option {
+.icon-pick {
   display: grid;
   place-items: center;
   min-width: 0;
-  height: 34px;
+  height: 36px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--c-surface);
-  font-size: 20px;
-  line-height: 1;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text-2);
   cursor: pointer;
 }
-.repo-icon-option:hover {
-  background: var(--c-hover-strong);
+.icon-pick.emoji {
+  font-size: 21px;
+  line-height: 1;
 }
-.repo-icon-option.selected {
+.icon-pick .repo-mark-icon {
+  width: 20px;
+  height: 20px;
+}
+.icon-pick:hover {
+  background: var(--c-hover-strong);
+  color: var(--c-text);
+}
+.icon-pick.selected {
   border-color: var(--c-primary);
   background: var(--c-primary-soft);
+  color: var(--c-text);
+}
+.icon-pick:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.icon-picker-empty {
+  padding: 40px 0;
+  color: var(--c-text-3);
+  font-size: 13px;
+  text-align: center;
+}
+.icon-picker-empty.error {
+  color: var(--c-danger);
+}
+.icon-picker-foot {
+  padding: 5px 10px;
+  border-top: 1px solid var(--c-border);
+  color: var(--c-text-3);
+  font-size: 11px;
+}
+.icon-picker-foot a {
+  color: inherit;
 }
