@@ -11,6 +11,7 @@ import VersionsPanel from '../components/VersionsPanel'
 import Editor from '../editor/Editor'
 import { useStore } from '../store'
 import { onThemeChange } from '../theme'
+import { exportMarkdown } from '../components/ExportDialog'
 
 const DiffView = lazy(() => import('../components/DiffView'))
 
@@ -224,11 +225,11 @@ export default function DocPage() {
     openMenu(el, [
       { label: '分享', icon: <IconShare />, onClick: share },
       {
-        label: '导出 Markdown (zip)',
+        label: '导出 Markdown',
         icon: <IconDownload />,
         onClick: async () => {
           await save()
-          location.href = `/api/docs/${docId}/export`
+          await exportMarkdown('doc', docId)
         },
       },
       { label: '保存版本快照', icon: <IconCamera />, onClick: () => save({ snapshot: true }).then(() => toast('已保存快照')) },

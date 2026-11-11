@@ -3,15 +3,12 @@ package server
 import (
 	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -267,83 +264,6 @@ func TestAttachmentCleanup(t *testing.T) {
 		if code, _ := e.raw(newClient(), "GET", "/files/"+id+"/x", nil); code != 404 {
 			t.Fatalf("orphan %s still served: %d", id, code)
 		}
-	}
-}
-
-func TestLocalBackup(t *testing.T) {
-	dir := t.TempDir()
-	e := newEnv(t, func(c *Config) { c.Backup = BackupConfig{Dir: dir, Keep: 2} })
-	att := e.upload("a.txt", "hello backup")
-	e.repoWithDoc("[a](/files/" + att + "/a.txt)")
-
-	var snaps []string
-	for i := 0; i < 3; i++ {
-		rep := e.srv.backup.run(t.Context())
-		if !rep.OK {
-			t.Fatalf("backup failed: %+v", rep)
-		}
-		snaps = append(snaps, rep.Results[0].Snapshot)
-		if i == 0 && rep.Results[0].Files != 1 {
-			t.Fatalf("first run should upload 1 blob, got %d", rep.Results[0].Files)
-		}
-		if i > 0 && rep.Results[0].Files != 0 {
-			t.Fatalf("blobs must upload only once, got %d", rep.Results[0].Files)
-		}
-		time.Sleep(1100 * time.Millisecond) // snapshot names have second resolution
-	}
-	if _, err := os.Stat(filepath.Join(dir, snaps[0])); !os.IsNotExist(err) {
-		t.Fatalf("oldest snapshot should be rotated away")
-	}
-	f, err := os.Open(filepath.Join(dir, snaps[2]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	zr, err := gzip.NewReader(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	head := make([]byte, 16)
-	io.ReadFull(zr, head)
-	if string(head) != "SQLite format 3\x00" {
-		t.Fatalf("snapshot is not a sqlite db: %q", head)
-	}
-	sum, _ := e.srv.loadAttachment(att)
-	if b, err := os.ReadFile(filepath.Join(dir, "files", sum.SHA256[:2], sum.SHA256[2:4], sum.SHA256)); err != nil || string(b) != "hello backup" {
-		t.Fatalf("blob not backed up: %v", err)
-	}
-	_, status := e.do(e.admin, "GET", "/api/backup", nil)
-	if status["enabled"] != true || status["last"].(map[string]any)["ok"] != true {
-		t.Fatalf("status: %v", status)
-	}
-}
-
-func TestS3Signing(t *testing.T) {
-	// Requests must reach the server with the exact path/headers that were signed.
-	var got *http.Request
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r
-		io.Copy(io.Discard, r.Body)
-	}))
-	defer ts.Close()
-	e := newEnv(t, func(c *Config) {
-		c.Backup = BackupConfig{S3Endpoint: ts.URL, S3Bucket: "bk", S3Prefix: "my notes/", S3AccessKey: "AK", S3SecretKey: "SK"}
-	})
-	tgt := e.srv.backup.targets[0]
-	tmp := filepath.Join(t.TempDir(), "x")
-	os.WriteFile(tmp, []byte("data"), 0o644)
-	if err := putFile(t.Context(), tgt, "db/a b.gz", tmp, "abc"); err != nil {
-		t.Fatal(err)
-	}
-	if got.URL.EscapedPath() != "/bk/my%20notes/db/a%20b.gz" {
-		t.Fatalf("path: %s", got.URL.EscapedPath())
-	}
-	auth := got.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 Credential=AK/") || !strings.Contains(auth, "SignedHeaders=host;x-amz-content-sha256;x-amz-date") {
-		t.Fatalf("auth header: %s", auth)
-	}
-	if got.Header.Get("X-Amz-Content-Sha256") != "abc" {
-		t.Fatalf("payload hash header missing")
 	}
 }
 

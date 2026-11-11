@@ -134,19 +134,18 @@ export interface StorageStats {
   grace_hours: number
 }
 
-export interface BackupStatus {
-  enabled: boolean
-  interval_hours: number
-  keep: number
-  targets: string[]
-  running: boolean
-  last: null | {
-    started_at: number
-    finished_at: number
-    ok: boolean
-    error?: string
-    results: { target: string; ok: boolean; error?: string; snapshot?: string; files: number }[]
-  }
+export type ImgbedChannel = '' | 'telegram' | 'cfr2' | 's3' | 'discord' | 'huggingface' | 'webdav'
+export type ImgbedNameType = '' | 'default' | 'index' | 'origin' | 'short'
+
+/** CloudFlare ImgBed settings; exports can upload their images there. */
+export interface ImgbedConfig {
+  url: string
+  auth_code: string
+  token: string
+  channel: ImgbedChannel
+  channel_name: string
+  folder: string
+  name_type: ImgbedNameType
 }
 
 /** A document or table found by title (for links between documents). */
@@ -184,6 +183,8 @@ export interface ClientConfig {
   trash_days: number
   /** a PlantUML server is configured */
   plantuml: boolean
+  /** an image host is configured (exports may upload to it) */
+  imgbed: boolean
 }
 
 export class ApiError extends Error {
@@ -281,8 +282,9 @@ export const api = {
 
   storageStats: () => request<StorageStats>('GET', '/api/files/stats'),
   cleanupFiles: () => request<{ removed: number; freed_bytes: number }>('POST', '/api/files/cleanup'),
-  backupStatus: () => request<BackupStatus>('GET', '/api/backup'),
-  runBackup: () => request('POST', '/api/backup/run'),
+  imgbed: () => request<{ config: ImgbedConfig; uploaded: number }>('GET', '/api/imgbed'),
+  saveImgbed: (c: ImgbedConfig) => request<ImgbedConfig>('PUT', '/api/imgbed', c),
+  forgetImgbed: () => request<{ removed: number }>('POST', '/api/imgbed/forget'),
   config: () => request<ClientConfig>('GET', '/api/config'),
 }
 
@@ -312,6 +314,11 @@ export function getConfig() {
     throw e
   })
   return configP
+}
+
+/** Drops the cached client config (after changing a setting it reports). */
+export function resetConfig() {
+  configP = null
 }
 
 export const shareURL = (token: string) => `${location.origin}/s/${token}`

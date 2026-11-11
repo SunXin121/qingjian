@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,13 +88,15 @@ func stripEmptyParagraphs(md string) string {
 }
 
 // exportBundle collects attachments referenced by exported documents so they can be
-// written into the zip under assets/ with readable, unique file names.
+// written into the zip under assets/ with readable, unique file names — or, when
+// exporting to the image host, links them to their uploaded copies instead.
 type exportBundle struct {
-	s     *Server
-	paths map[string]string // attachment id → zip path
-	used  map[string]bool   // zip paths taken
-	order []string          // attachment ids in first-seen order
-	nodes map[string]string // exported node id → zip path (links between them become relative)
+	s      *Server
+	paths  map[string]string // attachment id → zip path
+	used   map[string]bool   // zip paths taken
+	order  []string          // attachment ids in first-seen order
+	nodes  map[string]string // exported node id → zip path (links between them become relative)
+	remote map[string]string // attachment id → image host URL (set by uploadRemote)
 }
 
 func (s *Server) newExportBundle() *exportBundle {
@@ -124,7 +127,14 @@ func (b *exportBundle) assetPath(a *Attachment) string {
 func (b *exportBundle) markdown(md string, depth int) string {
 	md = b.s.portableMarkdown(md)
 	md = reFileRef.ReplaceAllStringFunc(md, func(ref string) string {
-		a, err := b.s.loadAttachment(reFileRef.FindStringSubmatch(ref)[1])
+		id := reFileRef.FindStringSubmatch(ref)[1]
+		if b.remote != nil {
+			if link, ok := b.remote[id]; ok {
+				return urlEscaper.Replace(link)
+			}
+			return ref
+		}
+		a, err := b.s.loadAttachment(id)
 		if err != nil {
 			return ref
 		}
@@ -141,6 +151,30 @@ func (b *exportBundle) markdown(md string, depth int) string {
 		}
 		return "](" + strings.Repeat("../", depth) + mdPathEscape(p) + ")"
 	})
+}
+
+// uploadRemote uploads every attachment the documents reference to the image host;
+// markdown then links to the uploaded copies and nothing is written under assets/.
+func (b *exportBundle) uploadRemote(ctx context.Context, docs []string) error {
+	up, err := b.s.newImgbedUploader()
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	var atts []*Attachment
+	for _, md := range docs {
+		for _, m := range reFileRef.FindAllStringSubmatch(b.s.portableMarkdown(md), -1) {
+			if seen[m[1]] {
+				continue
+			}
+			seen[m[1]] = true
+			if a, err := b.s.loadAttachment(m[1]); err == nil {
+				atts = append(atts, a)
+			}
+		}
+	}
+	b.remote, err = up.uploadAll(ctx, atts)
+	return err
 }
 
 // writeAssets copies every collected attachment into the zip.
@@ -161,6 +195,9 @@ func (b *exportBundle) writeAssets(zw *zip.Writer) {
 	}
 }
 
+// urlEscaper makes an absolute URL safe as a markdown link target.
+var urlEscaper = strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29", "<", "%3C", ">", "%3E")
+
 // mdPathEscape escapes only what breaks a markdown link target, keeping CJK names readable.
 func mdPathEscape(p string) string {
 	return strings.NewReplacer("%", "%25", " ", "%20", "(", "%28", ")", "%29", "<", "%3C", ">", "%3E").Replace(p)
@@ -179,6 +216,7 @@ func attachmentHeader(w http.ResponseWriter, filename string) {
 
 // exportDoc streams a zip holding the document as markdown plus its images and
 // attachments under assets/, linked relatively so it opens in any markdown editor.
+// With ?imgbed=1 the files go to the image host and the response is the bare .md file.
 func (s *Server) exportDoc(w http.ResponseWriter, r *http.Request) {
 	d, err := s.loadDoc(r.PathValue("id"))
 	if err != nil {
@@ -187,6 +225,16 @@ func (s *Server) exportDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	base := sanitizeName(nonEmpty(d.Title, "未命名文档"))
 	b := s.newExportBundle()
+	if r.URL.Query().Get("imgbed") == "1" {
+		if err := b.uploadRemote(r.Context(), []string{d.Markdown}); err != nil {
+			httpError(w, 502, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": base + ".md"}))
+		io.WriteString(w, b.markdown(d.Markdown, 0))
+		return
+	}
 	md := b.markdown(d.Markdown, 0)
 
 	attachmentHeader(w, base+".zip")
@@ -204,7 +252,7 @@ func nonEmpty(s, def string) string {
 }
 
 // exportRepo streams a zip: folders mirror the tree, attachments go to assets/ with
-// links rewritten to relative paths.
+// links rewritten to relative paths (with ?imgbed=1: to the image host, no assets/).
 func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 	repo, err := s.loadRepo(r.PathValue("id"))
 	if err != nil {
@@ -224,10 +272,6 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 		}
 		children[key] = append(children[key], n)
 	}
-
-	attachmentHeader(w, sanitizeName(repo.Name)+".zip")
-	zw := zip.NewWriter(w)
-	defer zw.Close()
 
 	b := s.newExportBundle()
 	// file names first, so links between the exported documents can be made relative
@@ -266,12 +310,39 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	walk("", "")
+
+	docs := map[string]string{} // node id → markdown, loaded up front when uploading
+	if r.URL.Query().Get("imgbed") == "1" {
+		var mds []string
+		for _, e := range entries {
+			if e.n.Type == "doc" {
+				if d, err := s.loadDoc(e.n.ID); err == nil {
+					docs[e.n.ID] = d.Markdown
+					mds = append(mds, d.Markdown)
+				}
+			}
+		}
+		if err := b.uploadRemote(r.Context(), mds); err != nil {
+			httpError(w, 502, err.Error())
+			return
+		}
+	}
+
+	attachmentHeader(w, sanitizeName(repo.Name)+".zip")
+	zw := zip.NewWriter(w)
+	defer zw.Close()
 	for _, e := range entries {
 		switch e.n.Type {
 		case "doc":
-			if d, err := s.loadDoc(e.n.ID); err == nil {
-				writeZipText(zw, e.path, b.markdown(d.Markdown, strings.Count(e.path, "/")), e.n.UpdatedAt)
+			md, ok := docs[e.n.ID]
+			if !ok {
+				d, err := s.loadDoc(e.n.ID)
+				if err != nil {
+					continue
+				}
+				md = d.Markdown
 			}
+			writeZipText(zw, e.path, b.markdown(md, strings.Count(e.path, "/")), e.n.UpdatedAt)
 		case "table":
 			if t, err := s.loadTableData(s.db, e.n.ID); err == nil {
 				writeZipText(zw, e.path, s.withLinked(t).csv(), e.n.UpdatedAt)

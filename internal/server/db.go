@@ -150,6 +150,19 @@ CREATE TABLE doc_links (
 ) WITHOUT ROWID;
 CREATE INDEX doc_links_dst ON doc_links(dst);
 `,
+	// scheduled backups were replaced by the image host (imgbed.go): attachments already
+	// uploaded there, so exports don't upload the same file twice
+	`
+DROP TABLE backup_blobs;
+DELETE FROM settings WHERE key = 'backup_last' OR key LIKE 'backup_snapshots:%';
+CREATE TABLE imgbed_uploads (
+  target     TEXT NOT NULL,
+  sha256     TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (target, sha256)
+) WITHOUT ROWID;
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

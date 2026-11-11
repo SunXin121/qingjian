@@ -114,7 +114,7 @@
 | 历史版本（10 分钟一个快照 + 手动保存快照） | P0 |
 | 版本预览与恢复 | P0 |
 | 版本 diff | P1 |
-| 定时备份（数据库 + 附件 → 本地 / WebDAV / S3） | P1 |
+| 图床（导出时把图片上传到 CloudFlare ImgBed） | P1 |
 
 ### 3.9 导入导出
 | 功能 | 优先级 |
@@ -181,7 +181,7 @@
   Milkdown(Crepe) 编辑器 │ Excalidraw │ Mermaid │ Graphviz(WASM) │ 多维表格
         │ HTTPS（外部反向代理：Nginx / Caddy 等）
 Go 单二进制（内嵌前端静态资源）
-  ├─ REST API：auth / repos / nodes / docs / files / search / trash / export / shares / backup / tables
+  ├─ REST API：auth / repos / nodes / docs / files / search / trash / export / shares / imgbed / tables
   ├─ SQLite（WAL）+ FTS5 trigram
   └─ /data/files（按 sha256 分目录存储）
 ```
@@ -196,7 +196,7 @@ doc_contents  node_id, markdown, updated_at
 doc_versions  id, node_id, title, markdown, created_at
 docs_fts      FTS5(node_id, title, body) tokenize=trigram
 attachments   id, sha256, name, mime, size, created_at
-backup_blobs  target, sha256                                    (已上传到各备份目标的附件，M2)
+imgbed_uploads target, sha256, url                              (已上传到图床的附件，导出时复用)
 shares        token, target_type(node|repo), target_id, view_id, password_hash, expires_at, enabled, options, view_count, created_at   (M2)
 doc_links     src, dst                                         (文档中指向其他文档 / 表格的链接，保存时更新，用于反向链接，M5)
 bt_fields     id, table_node_id, name, type, options(json), sort                                                                    (M3)
@@ -210,7 +210,7 @@ bt_record_history  id, table_node_id, record_id, action(create|update|delete|res
 | 阶段 | 内容 |
 |---|---|
 | **M1 文档核心** ✅ | 管理密码、知识库与目录树、Crepe 编辑器、代码 / 公式 / Mermaid / Graphviz / Excalidraw、图片附件、全文搜索、回收站、历史版本、Markdown 导出、响应式布局、Docker 部署 |
-| **M2 分享与增强** ✅ | 分享（密码 / 有效期 / 管理）、draw.io、思维导图、提示块 / 折叠块、版本 diff、自动备份、深色模式、附件清理 |
+| **M2 分享与增强** ✅ | 分享（密码 / 有效期 / 管理）、draw.io、思维导图、提示块 / 折叠块、版本 diff、深色模式、附件清理 |
 | **M3 多维表格基础** ✅ | 表格 + 看板视图、P0 字段、筛选排序分组、复制粘贴、CSV、分享、嵌入文档 |
 | **M4 多维表格进阶** ✅ | 关联 / 查找 / 汇总 / 公式、评分 / 进度 / 电话 / 邮箱、画册 / 日历、Excel |
 | **M5** | 甘特视图 ✅、PlantUML ✅、双链 ✅；AI 暂缓 |

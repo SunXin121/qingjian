@@ -4,6 +4,7 @@ import { confirmDialog, Modal, mount, openMenu, toast } from './dialog'
 import { IconDownload, IconEdit, IconFolder, IconShare, IconTrash, IconUpload, RepoMark } from './icons'
 import { canPickFolder } from './ImportDialog'
 import { openShareDialog } from './ShareDialog'
+import { exportMarkdown } from './ExportDialog'
 
 const icons = ['📚', '📝', '📖', '💡', '🧠', '💻', '🎨', '🔬', '🌱', '🏠', '🗂️', '📌', '🎯', '🚀', '⭐', '❤️']
 const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
@@ -156,7 +157,7 @@ export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?
     { label: '分享知识库', icon: <IconShare />, onClick: () => openShareDialog({ target_type: 'repo', target_id: r.id, title: r.name }) },
     { label: '导入 Markdown / zip', icon: <IconUpload />, divider: true, hidden: !onImport, onClick: () => onImport?.(false) },
     { label: '导入文件夹', icon: <IconFolder />, hidden: !onImport || !canPickFolder, onClick: () => onImport?.(true) },
-    { label: '导出为 Markdown (zip)', icon: <IconDownload />, onClick: () => (location.href = `/api/repos/${r.id}/export`) },
+    { label: '导出为 Markdown', icon: <IconDownload />, onClick: () => exportMarkdown('repo', r.id) },
     {
       label: '删除知识库',
       icon: <IconTrash />,

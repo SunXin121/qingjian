@@ -28,7 +28,6 @@ type Config struct {
 	DrawioDir string
 	// PlantUML: base URL of a plantuml-server (e.g. http://plantuml:8080); empty disables it.
 	PlantUMLURL string
-	Backup      BackupConfig
 }
 
 type Server struct {
@@ -41,7 +40,6 @@ type Server struct {
 	storedHash    string
 	limiter       *loginLimiter
 	blobMu        sync.Mutex // serialises blob creation against attachment cleanup
-	backup        *backupRunner
 	puml          pumlCache
 	stop          chan struct{}  // closed by Close: background workers return
 	workers       sync.WaitGroup // workers that use the database (Close waits for them)
@@ -72,12 +70,7 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
-	if s.backup, err = newBackupRunner(s, cfg.Backup); err != nil {
-		db.Close()
-		return nil, err
-	}
 	go s.housekeeping()
-	go s.backup.loop()
 	s.workers.Add(2)
 	go func() {
 		defer s.workers.Done()
@@ -158,8 +151,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/s/{token}/tables/{id}", s.shareTable)
 	mux.HandleFunc("POST /api/s/{token}/plantuml", s.sharePlantUML)
 
-	mux.Handle("GET /api/backup", a(s.backupStatus))
-	mux.Handle("POST /api/backup/run", a(s.backupRun))
+	mux.Handle("GET /api/imgbed", a(s.getImgbed))
+	mux.Handle("PUT /api/imgbed", a(s.putImgbed))
+	mux.Handle("POST /api/imgbed/forget", a(s.forgetImgbed))
 	mux.Handle("GET /api/config", a(s.clientConfig))
 	mux.Handle("POST /api/plantuml", a(s.plantUML))
 
@@ -264,6 +258,7 @@ func (s *Server) clientConfig(w http.ResponseWriter, r *http.Request) {
 		"max_upload_mb": s.cfg.MaxUploadMB,
 		"trash_days":    s.cfg.TrashDays,
 		"plantuml":      s.cfg.PlantUMLURL != "",
+		"imgbed":        s.imgbedConfig().enabled(),
 	})
 }
 

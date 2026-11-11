@@ -80,13 +80,87 @@ code {
   border-radius: 4px;
   background: var(--c-surface);
 }
-.backup-results {
-  margin-top: 12px;
+.settings-desc {
+  margin: 0 0 16px;
   font-size: 13px;
-  color: var(--c-text-2);
-  line-height: 1.8;
-  word-break: break-all;
+  line-height: 1.7;
 }
-.backup-results .error {
-  color: var(--c-danger);
+.settings-desc a {
+  color: var(--c-primary);
+}
+.imgbed-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+.imgbed-form .wide {
+  grid-column: 1 / -1;
+}
+.field select {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  outline: none;
+  background: var(--c-bg);
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.field select:focus {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-ring);
+}
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .imgbed-form {
+    grid-template-columns: 1fr;
+  }
+  .settings-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .settings-actions {
+    justify-content: flex-end;
+  }
+}
+/* export dialog: how to handle images */
+.export-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.export-choice label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.export-choice label.active {
+  border-color: var(--c-primary);
+  background: var(--c-surface);
+}
+.export-choice input {
+  margin-top: 3px;
+  accent-color: var(--c-primary);
+}
+.export-choice strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-text);
+}
+.export-choice small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--c-text-3);
 }

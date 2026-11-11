@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, formatSize, formatTime, getConfig, type BackupStatus, type ClientConfig, type StorageStats } from '../api'
+import { api, formatSize, getConfig, resetConfig, type ClientConfig, type ImgbedConfig, type StorageStats } from '../api'
 import { confirmDialog, toast } from '../components/dialog'
-import { IconArchive, IconCloud, IconDatabase, IconDisk, IconDoc, IconInfo, IconRefresh, IconSparkles, IconTrash } from '../components/icons'
+import { IconArchive, IconCloud, IconDatabase, IconDisk, IconDoc, IconInfo, IconSparkles, IconTrash } from '../components/icons'
 import PageHeader from '../components/PageHeader'
 import { getThemeMode, setThemeMode, type ThemeMode } from '../theme'
 
@@ -13,26 +13,16 @@ const THEMES: { mode: ThemeMode; label: string }[] = [
 
 export default function Settings() {
   const [stats, setStats] = useState<StorageStats | null>(null)
-  const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [config, setConfig] = useState<ClientConfig | null>(null)
   const [cleaning, setCleaning] = useState(false)
   const [theme, setTheme] = useState(getThemeMode)
 
   const loadStats = useCallback(() => api.storageStats().then(setStats).catch((e) => toast(e.message)), [])
-  const loadBackup = useCallback(() => api.backupStatus().then(setBackup).catch((e) => toast(e.message)), [])
 
   useEffect(() => {
     loadStats()
-    loadBackup()
     getConfig().then(setConfig).catch(() => {})
-  }, [loadStats, loadBackup])
-
-  // poll while a backup is running
-  useEffect(() => {
-    if (!backup?.running) return
-    const t = window.setInterval(loadBackup, 2000)
-    return () => clearInterval(t)
-  }, [backup?.running, loadBackup])
+  }, [loadStats])
 
   const cleanup = async () => {
     if (!stats) return
@@ -53,17 +43,6 @@ export default function Settings() {
     }
   }
 
-  const runBackup = async () => {
-    try {
-      await api.runBackup()
-      toast('备份已开始')
-    } catch (e: any) {
-      toast(e.message)
-    }
-    loadBackup()
-  }
-
-  const last = backup?.last
   return (
     <div className="page">
       <PageHeader>
@@ -130,76 +109,7 @@ export default function Settings() {
           )}
         </section>
 
-        <section className="settings-card">
-          <h2>
-            <span className="card-icon">
-              <IconCloud width={16} height={16} />
-            </span>
-            自动备份
-          </h2>
-          {!backup ? (
-            <div className="muted">加载中…</div>
-          ) : !backup.enabled ? (
-            <div className="settings-hint">
-              <p>尚未配置备份目标。在环境变量中设置以下任意一项即可开启定时备份（数据库快照 + 附件增量）：</p>
-              <ul>
-                <li>
-                  <code>QINGJIAN_BACKUP_DIR</code> — 本地目录（例如挂载的另一块硬盘）
-                </li>
-                <li>
-                  <code>QINGJIAN_BACKUP_WEBDAV_URL</code> / <code>_USER</code> / <code>_PASSWORD</code> — WebDAV（坚果云、Nextcloud 等）
-                </li>
-                <li>
-                  <code>QINGJIAN_BACKUP_S3_BUCKET</code> / <code>_ENDPOINT</code> / <code>_ACCESS_KEY</code> / <code>_SECRET_KEY</code> — S3 / MinIO / R2
-                </li>
-              </ul>
-            </div>
-          ) : (
-            <>
-              <div className="settings-kv">
-                <span>备份目标</span>
-                <span>
-                  {backup.targets.map((t) => (
-                    <div key={t}>{t}</div>
-                  ))}
-                </span>
-                <span>频率</span>
-                <span>
-                  每 {backup.interval_hours} 小时，保留最近 {backup.keep} 份数据库快照
-                </span>
-                <span>上次备份</span>
-                <span>
-                  {backup.running ? (
-                    '正在备份…'
-                  ) : last ? (
-                    <>
-                      <span className={'share-badge ' + (last.ok ? 'on' : 'off')}>{last.ok ? '成功' : '失败'}</span> {formatTime(last.started_at)}，耗时{' '}
-                      {Math.max(1, Math.round((last.finished_at - last.started_at) / 1000))} 秒
-                    </>
-                  ) : (
-                    '尚未备份'
-                  )}
-                </span>
-              </div>
-              {last && !backup.running && (
-                <div className="backup-results">
-                  {last.results?.map((r) => (
-                    <div key={r.target} className={r.ok ? '' : 'error'}>
-                      {r.target}：{r.ok ? `完成，新增 ${r.files} 个附件` : r.error}
-                    </div>
-                  ))}
-                  {!last.ok && !last.results?.length && <div className="error">{last.error}</div>}
-                </div>
-              )}
-              <div className="settings-row end">
-                <button className="btn primary" disabled={backup.running} onClick={runBackup}>
-                  <IconRefresh width={15} height={15} className={backup.running ? 'spin' : ''} />
-                  {backup.running ? '备份中…' : '立即备份'}
-                </button>
-              </div>
-            </>
-          )}
-        </section>
+        <ImgbedCard />
 
         <section className="settings-card">
           <h2>
@@ -234,5 +144,157 @@ function Stat({ icon, label, value, sub }: { icon: React.ReactNode; label: strin
       <div className="stat-value">{value}</div>
       {sub && <div className="stat-sub">{sub}</div>}
     </div>
+  )
+}
+
+const CHANNELS: { value: ImgbedConfig['channel']; label: string }[] = [
+  { value: '', label: '图床默认' },
+  { value: 'telegram', label: 'Telegram' },
+  { value: 'cfr2', label: 'Cloudflare R2' },
+  { value: 's3', label: 'S3' },
+  { value: 'discord', label: 'Discord' },
+  { value: 'huggingface', label: 'Hugging Face' },
+  { value: 'webdav', label: 'WebDAV' },
+]
+
+const NAME_TYPES: { value: ImgbedConfig['name_type']; label: string }[] = [
+  { value: '', label: '图床默认' },
+  { value: 'default', label: '前缀_原文件名' },
+  { value: 'index', label: '仅前缀' },
+  { value: 'origin', label: '仅原文件名' },
+  { value: 'short', label: '短链接' },
+]
+
+const EMPTY_IMGBED: ImgbedConfig = { url: '', auth_code: '', token: '', channel: '', channel_name: '', folder: '', name_type: '' }
+
+/** CloudFlare ImgBed settings: where exports upload their images. */
+function ImgbedCard() {
+  const [saved, setSaved] = useState<ImgbedConfig | null>(null)
+  const [form, setForm] = useState<ImgbedConfig>(EMPTY_IMGBED)
+  const [uploaded, setUploaded] = useState(0)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(
+    () =>
+      api
+        .imgbed()
+        .then((r) => {
+          setSaved(r.config)
+          setForm(r.config)
+          setUploaded(r.uploaded)
+        })
+        .catch((e) => toast(e.message)),
+    [],
+  )
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const set = <K extends keyof ImgbedConfig>(k: K, v: ImgbedConfig[K]) => setForm((f) => ({ ...f, [k]: v }))
+  const dirty = !!saved && (Object.keys(form) as (keyof ImgbedConfig)[]).some((k) => form[k] !== saved[k])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const c = await api.saveImgbed(form)
+      setSaved(c)
+      setForm(c)
+      resetConfig()
+      toast(c.url ? '图床设置已保存' : '已关闭图床')
+    } catch (err: any) {
+      toast(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const forget = async () => {
+    const ok = await confirmDialog(`将清除 ${uploaded} 条上传记录，下次导出时会重新上传所有图片。适用于图床上的文件已被删除的情况。`, { okText: '清除' })
+    if (!ok) return
+    try {
+      await api.forgetImgbed()
+      toast('已清除上传记录')
+      load()
+    } catch (err: any) {
+      toast(err.message)
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <h2>
+        <span className="card-icon">
+          <IconCloud width={16} height={16} />
+        </span>
+        图床
+      </h2>
+      {!saved ? (
+        <div className="muted">加载中…</div>
+      ) : (
+        <form onSubmit={save}>
+          <p className="muted settings-desc">
+            配置{' '}
+            <a href="https://cfbed.sanyue.de/" target="_blank" rel="noreferrer">
+              CloudFlare ImgBed
+            </a>{' '}
+            后，导出 Markdown 时可以选择把图片和附件上传到图床，导出的文档直接引用图床链接，无需再打包压缩包。
+          </p>
+          <div className="imgbed-form">
+            <label className="field wide">
+              <span>图床地址</span>
+              <input value={form.url} placeholder="https://img.example.com（留空则关闭）" onChange={(e) => set('url', e.target.value)} />
+            </label>
+            <label className="field">
+              <span>上传认证码</span>
+              <input type="password" autoComplete="off" value={form.auth_code} placeholder="未设置可留空" onChange={(e) => set('auth_code', e.target.value)} />
+            </label>
+            <label className="field">
+              <span>API Token</span>
+              <input type="password" autoComplete="off" value={form.token} placeholder="需要 upload 权限，可留空" onChange={(e) => set('token', e.target.value)} />
+            </label>
+            <label className="field">
+              <span>上传渠道</span>
+              <select value={form.channel} onChange={(e) => set('channel', e.target.value as ImgbedConfig['channel'])}>
+                {CHANNELS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>渠道名称</span>
+              <input value={form.channel_name} placeholder="同类渠道有多个时填写" onChange={(e) => set('channel_name', e.target.value)} />
+            </label>
+            <label className="field">
+              <span>上传目录</span>
+              <input value={form.folder} placeholder="如 qingjian/img" onChange={(e) => set('folder', e.target.value)} />
+            </label>
+            <label className="field">
+              <span>文件命名</span>
+              <select value={form.name_type} onChange={(e) => set('name_type', e.target.value as ImgbedConfig['name_type'])}>
+                {NAME_TYPES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="settings-row">
+            <p className="muted">已上传过的文件会被记住，重复导出不会重复上传（已记录 {uploaded} 个）。</p>
+            <div className="settings-actions">
+              <button type="button" className="btn" disabled={uploaded === 0} onClick={forget}>
+                清除上传记录
+              </button>
+              <button type="submit" className="btn primary" disabled={busy || !dirty}>
+                {busy ? '保存中…' : '保存'}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+    </section>
   )
 }
