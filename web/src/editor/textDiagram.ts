@@ -335,6 +335,31 @@ class TextDiagramView extends Base {
  * Takes over code_block node views: text diagram languages get TextDiagramView, everything
  * else goes to Crepe's stock view. Use after Crepe's CodeMirror feature has been added.
  */
+// Milkdown's code-block view starts as a bare <pre> and builds CodeMirror and its tool row
+// (language, copy) only once an IntersectionObserver reports it on screen, which happens
+// after the first paint: blocks in view would show up bare and grow their tool row a beat
+// later. Those already in view are built right away instead, before the browser paints.
+type LazyView = { dom: HTMLElement; initializeCodeMirror?: () => void }
+const toBuild = new Set<LazyView>()
+function buildIfOnScreen(nv: LazyView) {
+  if (typeof nv.initializeCodeMirror !== 'function') return
+  // a microtask: by then ProseMirror has put the block's DOM in the page
+  if (!toBuild.size) queueMicrotask(buildOnScreen)
+  toBuild.add(nv)
+}
+function buildOnScreen() {
+  const views = [...toBuild]
+  toBuild.clear()
+  const h = window.innerHeight
+  // measure all first (one layout), then build; same 200px margin as Milkdown's observer
+  const visible = views.filter(({ dom }) => {
+    if (!dom.isConnected) return false
+    const r = dom.getBoundingClientRect()
+    return (r.width > 0 || r.height > 0) && r.bottom > -200 && r.top < h + 200
+  })
+  for (const nv of visible) nv.initializeCodeMirror!()
+}
+
 export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
   await ctx.wait(SchemaReady)
   // let the stock code-block view (registered synchronously after SchemaReady) land first
@@ -344,7 +369,11 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
   const watch = (w: (c: any) => unknown) => config.on(w)
   if (!stock) console.warn('textDiagramView: stock code-block view not found; code blocks lose highlighting')
   const factory: NodeViewConstructor = (node, view, getPos, decorations, innerDecorations) => {
-    if (textDiagramLang(node.attrs.language)) return new TextDiagramView(node, view, getPos, config.get(), watch) as any
+    if (textDiagramLang(node.attrs.language)) {
+      const tv = new TextDiagramView(node, view, getPos, config.get(), watch)
+      buildIfOnScreen(tv as any)
+      return tv as any
+    }
     const nv = stock
       ? stock(node, view, getPos, decorations, innerDecorations)
       : (new CodeMirrorBlock(node, view, getPos, noLanguages as any, config.get(), watch) as any)
@@ -366,6 +395,7 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
       if (ok) syncLang()
       return ok
     }
+    buildIfOnScreen(nv as any)
     return nv
   }
   return factory
