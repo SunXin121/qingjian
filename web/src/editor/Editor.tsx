@@ -45,7 +45,33 @@ const ICONS = {
   docLink: icon('<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M10.5 15.5l3-3M11 12.5h2.5V15"/>'),
 }
 
-const cjkFriendlyRemark = $remark('qj-cjk-friendly', () => remarkCjkFriendly)
+interface MdNode {
+  type: string
+  value?: unknown
+  children?: MdNode[]
+}
+/** Milkdown writes empty table cells without a children list: give them an empty one. */
+function fillChildren(node: MdNode) {
+  if (node.children) node.children.forEach(fillChildren)
+  else if (node.value === undefined && node.type === 'tableCell') node.children = []
+  return node
+}
+// Two fixes to its serialiser:
+// - it reads the children of every cell unguarded (the stock one falls back to an empty
+//   list), so a table with an empty cell threw and the document could not open;
+// - its paragraph handler replaces GFM's, which is what writes task list checkboxes, so
+//   saving dropped every `[ ]` / `[x]`. It only sets up its phrasing, which its root
+//   handler already did for the whole document.
+const cjkFriendlyRemark = $remark('qj-cjk-friendly', () =>
+  function (this: any) {
+    remarkCjkFriendly.call(this)
+    const exts = this.data().toMarkdownExtensions
+    const own = exts?.[exts.length - 1]
+    if (own?.handlers?.strong) delete own.handlers.paragraph
+    const compile = this.compiler
+    if (compile) this.compiler = (tree: MdNode, file: unknown) => compile(fillChildren(tree), file)
+  },
+)
 
 /** documents at least this long skip layout of off-screen blocks (see .ink-editor.large) */
 const LARGE_DOC = 50_000
