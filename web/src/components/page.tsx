@@ -13,11 +13,14 @@ export function PageBody({ children, className, wide }: { children: ReactNode; c
   )
 }
 
-export function PageTitle({ children, sub, className }: { children: ReactNode; sub?: ReactNode; className?: string }) {
+export function PageTitle({ children, sub, action, className }: { children: ReactNode; sub?: ReactNode; action?: ReactNode; className?: string }) {
   return (
-    <div className={cn('mb-6', className)}>
-      <h1 className="m-0 text-[22px] leading-tight font-semibold tracking-[-0.01em] text-ink md:text-[24px]">{children}</h1>
-      {sub && <p className="mt-1.5 mb-0 text-[13px] text-ink-3">{sub}</p>}
+    <div className={cn('mb-6 flex items-start gap-3', className)}>
+      <div className="min-w-0 flex-1">
+        <h1 className="m-0 text-[22px] leading-tight font-semibold tracking-[-0.01em] text-ink md:text-[24px]">{children}</h1>
+        {sub && <p className="mt-1.5 mb-0 text-[13px] text-ink-3">{sub}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   )
 }

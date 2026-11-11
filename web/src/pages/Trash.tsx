@@ -26,6 +26,13 @@ export default function Trash() {
     await api.purgeTrash(it.kind, it.id)
     load()
   }
+  const emptyAll = async () => {
+    if (!items?.length) return
+    if (!(await confirmDialog(`彻底删除回收站中的全部 ${items.length} 项？此操作不可撤销。`, { danger: true, okText: '清空回收站' }))) return
+    await api.emptyTrash()
+    toast('回收站已清空')
+    load()
+  }
 
   return (
     <div>
@@ -35,7 +42,18 @@ export default function Trash() {
         </Crumbs>
       </PageHeader>
       <PageBody>
-        <PageTitle sub="删除的内容会在这里保留 30 天，之后自动清除。">回收站</PageTitle>
+        <PageTitle
+          sub="删除的内容会在这里保留 30 天，之后自动清除。"
+          action={
+            !!items?.length && (
+              <Button variant="danger-ghost" icon={<IconTrash width={14} height={14} />} onClick={emptyAll}>
+                清空回收站
+              </Button>
+            )
+          }
+        >
+          回收站
+        </PageTitle>
         {!items ? (
           <Loading />
         ) : items.length === 0 ? (

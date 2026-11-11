@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"math"
 	"net/http"
 	"time"
 )
@@ -160,6 +161,26 @@ func purgeItem(tx *sql.Tx, kind, id string) error {
 	return nil
 }
 
+// emptyTrash deletes everything in the trash for good.
+func (s *Server) emptyTrash(w http.ResponseWriter, r *http.Request) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	defer tx.Rollback()
+	n, err := purgeTrashedBefore(tx, math.MaxInt64)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]int{"purged": n})
+}
+
 func (s *Server) purgeExpiredTrash(age time.Duration) (int, error) {
 	cutoff := time.Now().Add(-age).UnixMilli()
 	tx, err := s.db.Begin()
@@ -167,6 +188,19 @@ func (s *Server) purgeExpiredTrash(age time.Duration) (int, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
+	n, err := purgeTrashedBefore(tx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	// deleted records stay restorable through undo only briefly; their log goes with the trash
+	if err := purgeDeletedRecordHistory(tx, cutoff); err != nil {
+		return 0, err
+	}
+	return n, tx.Commit()
+}
+
+// purgeTrashedBefore deletes the repos and trashed nodes deleted before cutoff (unix ms).
+func purgeTrashedBefore(tx *sql.Tx, cutoff int64) (int, error) {
 	type item struct{ kind, id string }
 	var items []item
 	rows, err := tx.Query(`SELECT 'repo', id FROM repos WHERE deleted_at < ? UNION ALL SELECT 'node', id FROM nodes WHERE trash_root = 1 AND deleted_at < ?`, cutoff, cutoff)
@@ -184,9 +218,5 @@ func (s *Server) purgeExpiredTrash(age time.Duration) (int, error) {
 			return 0, err
 		}
 	}
-	// deleted records stay restorable through undo only briefly; their log goes with the trash
-	if err := purgeDeletedRecordHistory(tx, cutoff); err != nil {
-		return 0, err
-	}
-	return len(items), tx.Commit()
+	return len(items), nil
 }

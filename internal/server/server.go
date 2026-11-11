@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /api/trash", a(s.listTrash))
 	mux.Handle("POST /api/trash/{kind}/{id}/restore", a(s.restoreTrash))
+	mux.Handle("DELETE /api/trash", a(s.emptyTrash))
 	mux.Handle("DELETE /api/trash/{kind}/{id}", a(s.purgeTrash))
 
 	mux.Handle("POST /api/files", a(s.uploadFile))

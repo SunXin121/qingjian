@@ -270,6 +270,7 @@ export const api = {
   trash: () => request<TrashItem[]>('GET', '/api/trash'),
   restoreTrash: (kind: string, id: string) => request('POST', `/api/trash/${kind}/${id}/restore`),
   purgeTrash: (kind: string, id: string) => request('DELETE', `/api/trash/${kind}/${id}`),
+  emptyTrash: () => request<{ purged: number }>('DELETE', '/api/trash'),
 
   shares: (target?: { target_type: string; target_id: string }) =>
     request<Share[]>('GET', '/api/shares' + (target ? `?target_type=${target.target_type}&target_id=${target.target_id}` : '')),
