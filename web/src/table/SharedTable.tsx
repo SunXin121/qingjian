@@ -26,7 +26,7 @@ export default function SharedTable({ token, tableId, header }: { token: string;
   const title = model?.state.title.trim() || (model ? '未命名表格' : '')
   return (
     <>
-      {header(<span className="crumb ellipsis">{title}</span>)}
+      {header(<span className="min-w-0 flex-1 truncate px-0.5 text-[13px] font-semibold text-ink">{title}</span>)}
       {error ? (
         <div className="empty-state">{error}</div>
       ) : !model ? (

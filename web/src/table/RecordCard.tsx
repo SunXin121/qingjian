@@ -38,7 +38,7 @@ export default function RecordCard({ model, viewId, recordId, list, readOnly, on
       const t = e.target as HTMLElement
       const typing = t.closest?.('input, textarea, select, [contenteditable]')
       if (e.key === 'Escape') {
-        if (document.querySelector('.popover, .modal-backdrop')) return
+        if (document.querySelector('.popover, .modal-backdrop, [data-modal]')) return
         e.stopPropagation()
         if (typing) (t as HTMLElement).blur()
         else onClose()

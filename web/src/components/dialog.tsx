@@ -64,13 +64,14 @@ export function Modal({ title, children, onClose, wide, className }: { title?: R
   return (
     // no backdrop-filter: re-blurring the viewport on every frame of the fade made dialogs stutter
     <div
+      data-modal
       className="fixed inset-0 z-[200] flex animate-fade items-end justify-center bg-scrim p-0 sm:items-center sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         ref={ref}
         className={cn(
-          'modal relative flex max-h-[calc(100dvh-24px)] w-full animate-modal flex-col overflow-hidden rounded-t-2xl bg-overlay shadow-modal sm:max-h-[calc(100dvh-48px)] sm:rounded-xl',
+          'relative flex max-h-[calc(100dvh-24px)] w-full animate-modal flex-col overflow-hidden rounded-t-2xl bg-overlay shadow-modal sm:max-h-[calc(100dvh-48px)] sm:rounded-xl',
           wide ? 'sm:max-w-[640px]' : 'sm:max-w-[420px]',
           className,
         )}
@@ -78,6 +79,8 @@ export function Modal({ title, children, onClose, wide, className }: { title?: R
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
+        // focus lands on the panel itself when nothing inside asks for it
+        style={{ outline: 'none' }}
       >
         {title && (
           <div className="flex shrink-0 items-center gap-3 px-5 pt-4 pb-1">

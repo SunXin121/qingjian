@@ -79,7 +79,7 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f') return
       const t = e.target as HTMLElement
       if (!(t === document.body || rootRef.current?.contains(t))) return
-      if (document.querySelector('.bt-sheet, .modal-backdrop')) return
+      if (document.querySelector('.bt-sheet, .modal-backdrop, [data-modal]')) return
       e.preventDefault()
       openSearch()
     }

@@ -107,18 +107,8 @@ kbd {
 .spacer {
   flex: 1;
 }
-.mobile-only {
-  display: none !important;
-}
 
-
-/* Compact controls center a single text line, independent of body leading. */
-.btn,
-.icon-btn,
-.search-trigger,
-.side-link,
-.side-empty-btn,
-.tree-toggle,
-.menu-item {
+/* Compact controls center a single text line,independent of body leading. */
+.btn,.icon-btn{
   line-height: 1;
 }

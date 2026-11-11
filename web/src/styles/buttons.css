@@ -1,100 +1,117 @@
-/* ---------- buttons ---------- */
+/* ---------- legacy buttons (tables, drawing editors) ----------
+   Same look as the Button / IconButton primitives in components/ui.tsx. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   height: 32px;
-  padding: 0 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--c-border-strong);
-  background: var(--c-panel);
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .btn:hover:not(:disabled) {
-  background: var(--c-surface);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 .btn:active:not(:disabled) {
-  transform: translateY(0.5px);
+  transform: translateY(1px);
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 .btn.primary {
-  background: var(--c-primary);
+  background: var(--accent);
   border-color: transparent;
-  color: var(--c-on-primary);
-  box-shadow: 0 1px 2px var(--c-primary-shadow), 0 2px 8px -2px var(--c-primary-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: var(--accent-contrast);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.14);
 }
 .btn.primary:hover:not(:disabled) {
-  background: var(--c-primary-hover);
+  background: var(--accent-hover);
 }
 .btn.danger {
-  color: var(--c-danger);
+  color: var(--danger);
+}
+.btn.danger:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 .btn.primary.danger,
 .modal-actions .btn.danger {
-  background: var(--c-danger);
+  background: var(--danger);
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 1px 2px rgba(209, 67, 67, 0.25);
-}
-.modal-actions .btn.danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--c-danger) 88%, #000);
 }
 .btn.ghost {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+  color: var(--text-secondary);
 }
 .btn.ghost:hover:not(:disabled) {
-  background: var(--c-hover);
+  background: var(--bg-hover);
+  border-color: transparent;
+  color: var(--text-primary);
 }
 .btn.sm {
   height: 28px;
   padding: 0 10px;
-  font-size: 13px;
-  border-radius: var(--radius-sm);
+  font-size: 12px;
+  border-radius: var(--r-sm);
 }
-/* On 1x screens 12–13px CJK text centred in an even-height row lands on a half pixel
-   and is rounded down, a visible pixel below its icon. An even line box rounds it up
-   instead. High-DPI screens place the half pixel exactly, so they keep line-height: 1. */
-@media (max-resolution: 1.49dppx) {
-  .btn.sm,
-  .search-trigger > span,
-  .sidebar-settings > span,
-  .stat-label {
-    line-height: 14px;
-  }
-}
-.btn.block {
+.btn.w-full {
   width: 100%;
 }
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   flex: none;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-md);
   background: transparent;
-  color: var(--c-text-3);
+  color: var(--text-tertiary);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
 .icon-btn:hover {
-  background: var(--c-hover);
-  color: var(--c-text);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.icon-btn:active {
+  transform: scale(0.94);
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 .icon-btn.sm {
   width: 22px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
+}
+.icon-btn.sm svg {
+  width: 14px;
+  height: 14px;
+}
+@media (hover: none) {
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .btn {
+    height: 36px;
+  }
 }

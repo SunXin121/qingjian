@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { api, ApiError, formatTime } from '../api'
 import { BacklinkList, useBacklinks } from '../components/Backlinks'
 import { confirmDialog, openMenu, openPopover, toast } from '../components/dialog'
-import { IconChevron, IconDownload, IconLink, IconMore, IconShare, IconTrash, IconUpload, RepoMark } from '../components/icons'
-import PageHeader from '../components/PageHeader'
+import { IconDownload, IconLink, IconMore, IconShare, IconTrash, IconUpload, RepoMark } from '../components/icons'
+import { Crumb } from '../components/page'
+import PageHeader, { Crumbs } from '../components/PageHeader'
+import { Button, cn, IconButton } from '../components/ui'
 import { openShareDialog } from '../components/ShareDialog'
 import { useStore } from '../store'
 import { exportCSV, importCSV } from '../table/csv'
@@ -177,37 +179,40 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
   return (
     <div className="page table-page">
       <PageHeader>
-        <nav className="crumbs">
-          <Link to={`/r/${repoId}`} className="crumb-link">
-            {repo && <RepoMark repo={repo} className="side-dot sm" />}
-            <span className="ellipsis">{repo?.name}</span>
-          </Link>
-          <IconChevron className="crumb-sep" width={14} height={14} />
+        <Crumbs>
+          <Crumb to={`/r/${repoId}`} icon={repo && <RepoMark repo={repo} size={18} />}>
+            {repo?.name}
+          </Crumb>
           <input
-            className="bt-title-input"
+            className="h-8 min-w-0 rounded-sm border border-transparent bg-transparent px-1.5 text-[13px] font-semibold text-ink transition-colors outline-none placeholder:text-ink-4 hover:bg-hover focus:border-line focus:bg-surface focus-visible:outline-none"
             value={title}
+            aria-label="表格名称"
             placeholder="未命名表格"
             size={Math.max(6, Math.min(40, [...(title || '未命名表格')].length * 2))}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={saveTitle}
             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (e.target as HTMLInputElement).blur()}
           />
-        </nav>
-        <span className={'save-status ' + (sync === 'saving' ? 'saving' : sync === 'error' ? 'error' : '')}>{status}</span>
-        <span className="spacer" />
+          <span className="ml-1 inline-flex shrink-0 items-center gap-1.5 text-[11.5px] whitespace-nowrap text-ink-4" role="status">
+            <span className={cn('size-1.5 rounded-full', sync === 'saving' ? 'animate-pulse bg-accent' : sync === 'error' ? 'bg-danger' : 'bg-success')} />
+            <span className="max-sm:hidden">{status}</span>
+          </span>
+        </Crumbs>
         {backlinks.length > 0 && (
-          <button
-            className="btn ghost sm backlinks-btn"
-            title="链接到这个表格的文档" aria-label="链接到这个表格的文档"
+          <Button
+            size="sm"
+            variant="ghost"
+            title="链接到这个表格的文档"
+            icon={<IconLink width={14} height={14} />}
             onClick={(e) =>
               openPopover(
                 e.currentTarget,
                 (close) => (
-                  <div className="backlinks-pop">
-                    <div className="backlinks-head">
-                      <IconLink width={15} height={15} />
+                  <div className="p-3">
+                    <div className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-ink-2">
+                      <IconLink width={14} height={14} className="text-ink-3" />
                       <span>反向链接</span>
-                      <span className="backlinks-count">{backlinks.length}</span>
+                      <span className="tabular rounded-full bg-active px-1.5 py-px text-[11px] font-medium text-ink-3">{backlinks.length}</span>
                     </div>
                     <BacklinkList list={backlinks} repoId={repoId} onOpen={close} />
                   </div>
@@ -216,15 +221,15 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
               )
             }
           >
-            <IconLink width={15} height={15} /> {backlinks.length}
-          </button>
+            {backlinks.length}
+          </Button>
         )}
-        <button className="icon-btn hide-mobile" title="分享" aria-label="分享" onClick={share}>
-          <IconShare />
-        </button>
-        <button className="icon-btn" title="更多" aria-label="更多" onClick={(e) => more(e.currentTarget)}>
-          <IconMore />
-        </button>
+        <IconButton label="分享" className="max-md:hidden" onClick={share}>
+          <IconShare width={16} height={16} />
+        </IconButton>
+        <IconButton label="更多" onClick={(e) => more(e.currentTarget)}>
+          <IconMore width={16} height={16} />
+        </IconButton>
       </PageHeader>
       <TableView model={model} readOnly={false} viewId={active?.id} onViewChange={changeView} />
     </div>

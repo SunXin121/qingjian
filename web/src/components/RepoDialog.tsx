@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { api, uploadFile, type Repo } from '../api'
-import { confirmDialog, Modal, mount, openMenu, toast } from './dialog'
+import { confirmDialog, Modal, ModalActions, ModalBody, mount, openMenu, toast } from './dialog'
+import { Button, Field, Input, Textarea } from './ui'
 import { IconDownload, IconEdit, IconFolder, IconShare, IconTrash, IconUpload, RepoMark } from './icons'
 import { canPickFolder } from './ImportDialog'
 import { openShareDialog } from './ShareDialog'
@@ -64,27 +65,33 @@ function RepoForm({ repo, onDone }: { repo?: Repo; onDone: (value: RepoDetails |
 
   return (
     <Modal title={repo ? '编辑知识库' : '新建知识库'} onClose={() => onDone(null)}>
-      <form onSubmit={(e) => {
-        e.preventDefault()
-        if (valid) onDone({ name: name.trim(), description, icon })
-      }}>
-        <div className="modal-body form">
-          <label className="field">
-            <span>名称</span>
-            <input autoFocus required value={name} placeholder="例如：读书笔记" onChange={(e) => setName(e.target.value)} />
-          </label>
-          <div className="repo-icon-field" role="group" aria-labelledby={`${id}-icon-label`} aria-busy={uploading}>
-            <div id={`${id}-icon-label`} className="repo-icon-label">知识库图标</div>
-            <div className="repo-icon-upload">
-              <RepoMark repo={{ id: repo?.id ?? '', name, icon }} className="repo-icon-preview" />
-              <div className="repo-icon-upload-main">
-                <div className="repo-icon-upload-actions">
-                  <button type="button" className="btn sm" disabled={uploading} onClick={() => fileInput.current?.click()}>
-                    <IconUpload width={14} height={14} /> {uploading ? '上传中…' : '上传图片'}
-                  </button>
-                  <button type="button" className="btn sm ghost" disabled={uploading || !icon} onClick={() => selectIcon('')}>恢复默认</button>
+      <form
+        className="flex min-h-0 flex-1 flex-col"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (valid) onDone({ name: name.trim(), description, icon })
+        }}
+      >
+        <ModalBody className="flex flex-col gap-4">
+          <Field label="名称">
+            <Input autoFocus required value={name} placeholder="例如：读书笔记" onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <div className="flex flex-col gap-2" role="group" aria-labelledby={`${id}-icon-label`} aria-busy={uploading}>
+            <div id={`${id}-icon-label`} className="text-[12px] font-medium text-ink-2">
+              知识库图标
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-line-subtle bg-inset p-3">
+              <RepoMark repo={{ id: repo?.id ?? '', name, icon }} size={48} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="sm" disabled={uploading} loading={uploading} icon={<IconUpload width={13} height={13} />} onClick={() => fileInput.current?.click()}>
+                    {uploading ? '上传中…' : '上传图片'}
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={uploading || !icon} onClick={() => selectIcon('')}>
+                    恢复默认
+                  </Button>
                 </div>
-                <p className="repo-icon-hint">PNG、JPG、WebP、GIF，最大 5MB；居中裁切，动图使用首帧。</p>
+                <p className="mt-1.5 mb-0 text-[11.5px] leading-relaxed text-ink-4">PNG、JPG、WebP、GIF，最大 5MB；居中裁切，动图使用首帧。</p>
               </div>
               <input
                 ref={fileInput}
@@ -100,18 +107,23 @@ function RepoForm({ repo, onDone }: { repo?: Repo; onDone: (value: RepoDetails |
                 }}
               />
             </div>
-            {error && <p className="repo-icon-error" role="alert">{error}</p>}
+            {error && (
+              <p className="m-0 text-[12px] text-danger" role="alert">
+                {error}
+              </p>
+            )}
             <IconPicker value={icon} disabled={uploading} onSelect={selectIcon} />
           </div>
-          <label className="field">
-            <span>简介</span>
-            <textarea rows={3} value={description} placeholder="可选" onChange={(e) => setDescription(e.target.value)} />
-          </label>
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={() => onDone(null)}>取消</button>
-          <button type="submit" className="btn primary" disabled={!valid}>{repo ? '保存' : '创建'}</button>
-        </div>
+          <Field label="简介">
+            <Textarea rows={3} value={description} placeholder="可选" onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+        </ModalBody>
+        <ModalActions>
+          <Button onClick={() => onDone(null)}>取消</Button>
+          <Button type="submit" variant="primary" disabled={!valid}>
+            {repo ? '保存' : '创建'}
+          </Button>
+        </ModalActions>
       </form>
     </Modal>
   )

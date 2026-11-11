@@ -14,16 +14,10 @@
 /* legacy, split by area; the order below is the cascade order inside the layer */
 @import './styles/base.css' layer(legacy);
 @import './styles/buttons.css' layer(legacy);
-@import './styles/shell.css' layer(legacy);
-@import './styles/tree.css' layer(legacy);
 @import './styles/page.css' layer(legacy);
-@import './styles/document.css' layer(legacy);
 @import './styles/overlays.css' layer(legacy);
-@import './styles/search.css' layer(legacy);
-@import './styles/login.css' layer(legacy);
 @import './styles/responsive.css' layer(legacy);
 @import './styles/m2.css' layer(legacy);
-@import './styles/share.css' layer(legacy);
 @import './styles/settings.css' layer(legacy);
 @import './styles/diff.css' layer(legacy);
 @import './styles/refresh.css' layer(legacy);

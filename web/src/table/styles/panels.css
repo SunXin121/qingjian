@@ -2,11 +2,11 @@
 .popover {
   position: fixed;
   overflow-y: auto;
-  background: var(--c-panel);
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  animation: pop 0.12s var(--ease);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  animation: qj-pop var(--dur-fast) var(--ease-out) both;
 }
 .menu-check {
   margin-left: auto;

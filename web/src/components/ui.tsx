@@ -181,7 +181,7 @@ export function Switch({ checked, onChange, label, disabled, className }: { chec
 export const inputClass = cn(
   'w-full rounded-md border border-line bg-surface px-3 text-[13px] text-ink shadow-[inset_0_1px_1px_rgb(0_0_0/0.02)]',
   'transition-[border-color,box-shadow] duration-(--dur-fast) ease-out placeholder:text-ink-4',
-  'hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)] focus:outline-none',
+  'hover:border-line-strong focus:border-[color-mix(in_oklab,var(--accent)_50%,var(--border-strong))] focus:shadow-[0_0_0_3px_var(--accent-softer)] focus:outline-none',
   'disabled:opacity-60',
 )
 

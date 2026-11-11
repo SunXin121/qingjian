@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { api, formatSize, formatTime, type Version } from '../api'
 import { confirmDialog, toast } from './dialog'
+import { IconClose, IconHistory } from './icons'
+import { Button, cn, EmptyState, IconButton, Loading, Segmented } from './ui'
 
 const Editor = lazy(() => import('../editor/Editor'))
 const DiffView = lazy(() => import('./DiffView'))
@@ -58,22 +60,24 @@ export default function VersionsPanel({
     const md = selected.markdown ?? ''
     if (mode === 'preview') {
       content = (
-        <div className="doc-body">
-          <h1 className="version-title">{selected.title || '无标题文档'}</h1>
+        <div className="mx-auto w-full max-w-[calc(var(--prose-width)+128px)] px-5 pt-8 pb-[20vh] md:px-16 md:pt-12">
+          <h1 className="mt-0 mb-5 text-[28px] leading-tight font-bold tracking-[-0.015em] text-ink md:text-[32px]" style={{ fontFamily: 'var(--prose-font)' }}>
+            {selected.title || '无标题文档'}
+          </h1>
           <Suspense fallback={null}>
             <Editor key={selected.id} value={md} readonly />
           </Suspense>
         </div>
       )
     } else if (mode === 'prev' && !prev) {
-      content = <div className="side-empty">这是最早的版本，没有可对比的上一版本</div>
+      content = <EmptyState title="没有上一版本">这是最早的版本，没有可对比的上一版本。</EmptyState>
     } else {
       const [oldText, newText, oldLabel, newLabel] =
         mode === 'prev'
           ? [withTitle(prev!.title, prev!.markdown ?? ''), withTitle(selected.title, md), `上一版本 · ${formatTime(prev!.created_at)}`, `此版本 · ${formatTime(selected.created_at)}`]
           : [withTitle(selected.title, md), withTitle(current.title, current.markdown), `此版本 · ${formatTime(selected.created_at)}`, '当前内容']
       content = (
-        <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+        <Suspense fallback={<Loading />}>
           <DiffView oldText={oldText} newText={newText} oldLabel={oldLabel} newLabel={newLabel} />
         </Suspense>
       )
@@ -81,42 +85,50 @@ export default function VersionsPanel({
   }
 
   return (
-    <div className="versions-overlay">
-      <div className="versions-bar">
-        <strong className="versions-heading">历史版本</strong>
-        <div className="seg">
-          {(
-            [
-              ['preview', '预览'],
-              ['prev', '对比上一版'],
-              ['current', '对比当前'],
-            ] as [Mode, string][]
-          ).map(([m, label]) => (
-            <button key={m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <span className="spacer" />
-        <button className="btn" onClick={onClose}>
-          关闭
-        </button>
-        <button className="btn primary" disabled={!selected} onClick={restore}>
-          恢复
-        </button>
+    <div className="fixed inset-0 z-60 flex animate-fade flex-col bg-editor">
+      <div className="flex h-[calc(var(--header-h)+var(--safe-t))] shrink-0 items-center gap-2 border-b border-line-subtle px-3 pt-(--safe-t) md:px-4">
+        <IconHistory width={16} height={16} className="shrink-0 text-ink-3 max-sm:hidden" />
+        <strong className="mr-2 text-[13.5px] font-semibold text-ink max-sm:hidden">历史版本</strong>
+        <Segmented
+          label="查看方式"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'preview', label: '预览' },
+            { value: 'prev', label: '对比上一版' },
+            { value: 'current', label: '对比当前' },
+          ]}
+        />
+        <span className="flex-1" />
+        <Button variant="primary" disabled={!selected} onClick={restore}>
+          恢复此版本
+        </Button>
+        <IconButton label="关闭" onClick={onClose}>
+          <IconClose width={17} height={17} />
+        </IconButton>
       </div>
-      <div className="versions-body">
-        <div className="versions-list">
-          {loading && <div className="side-empty">加载中…</div>}
-          {!loading && list.length === 0 && <div className="side-empty">暂无历史版本</div>}
-          {list.map((v) => (
-            <button key={v.id} className={'version-item' + (selected?.id === v.id ? ' active' : '')} onClick={() => select(v)}>
-              <span>{formatTime(v.created_at)}</span>
-              <small>{formatSize(v.size)}</small>
-            </button>
-          ))}
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
+        <div className="no-scrollbar shrink-0 overflow-y-auto border-line-subtle bg-sunken p-2 max-md:flex max-md:gap-1 max-md:overflow-x-auto max-md:border-b md:w-60 md:border-r">
+          {loading && <Loading className="py-10" />}
+          {!loading && list.length === 0 && <div className="px-3 py-8 text-center text-[12.5px] text-ink-3">暂无历史版本</div>}
+          {list.map((v) => {
+            const on = selected?.id === v.id
+            return (
+              <button
+                key={v.id}
+                className={cn(
+                  'mb-px flex h-10 w-full shrink-0 items-center justify-between gap-3 rounded-md px-3 text-[12.5px] transition-colors duration-(--dur-fast) max-md:h-12 max-md:w-auto max-md:flex-col max-md:justify-center max-md:gap-0',
+                  on ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-hover hover:text-ink',
+                )}
+                onClick={() => select(v)}
+              >
+                <span className="whitespace-nowrap">{formatTime(v.created_at)}</span>
+                <small className={cn('tabular text-[11px] font-normal', on ? 'text-accent/70' : 'text-ink-4')}>{formatSize(v.size)}</small>
+              </button>
+            )
+          })}
         </div>
-        <div className="versions-preview">{content}</div>
+        <div className="min-w-0 flex-1 overflow-y-auto">{content}</div>
       </div>
     </div>
   )

@@ -1,100 +1,10 @@
-/* ---------- settings ---------- */
-.settings-card {
-  margin-bottom: 20px;
-  padding: 22px 24px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-lg);
-  background: var(--c-panel);
-  box-shadow: var(--shadow-sm);
-}
-.settings-card h2 {
-  margin: 0 0 16px;
-  font-size: 15px;
-  font-weight: 600;
-}
-.settings .page-title {
-  margin-bottom: 24px;
-}
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-}
-.stat {
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--c-border);
-  background: var(--c-surface);
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--c-text-3);
-}
-.stat-value {
-  margin-top: 2px;
-  font-size: 20px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.stat-sub {
-  font-size: 12px;
-  color: var(--c-text-3);
-}
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 16px;
-}
-.settings-row p {
-  margin: 0;
-  font-size: 13px;
-}
-.settings-row.end {
-  justify-content: flex-end;
-}
-.settings-kv {
-  display: grid;
-  grid-template-columns: 100px 1fr;
-  gap: 10px 16px;
-  font-size: 14px;
-  min-width: 0;
-}
-.settings-kv > span:nth-child(odd) {
-  color: var(--c-text-3);
-}
-.settings-hint p {
-  margin: 0 0 8px;
-}
-.settings-hint ul {
-  margin: 0;
-  padding-left: 20px;
-  line-height: 2;
-  color: var(--c-text-2);
-}
+
 code {
   font-family: var(--font-mono);
   font-size: 12px;
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--c-surface);
-}
-.settings-desc {
-  margin: 0 0 16px;
-  font-size: 13px;
-  line-height: 1.7;
-}
-.settings-desc a {
-  color: var(--c-primary);
-}
-.imgbed-form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 16px;
-}
-.imgbed-form .wide {
-  grid-column: 1 / -1;
 }
 .field select {
   width: 100%;
@@ -110,23 +20,6 @@ code {
 .field select:focus {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px var(--c-primary-ring);
-}
-.settings-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-@media (max-width: 640px) {
-  .imgbed-form {
-    grid-template-columns: 1fr;
-  }
-  .settings-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .settings-actions {
-    justify-content: flex-end;
-  }
 }
 /* export dialog: how to handle images */
 .export-choice {
