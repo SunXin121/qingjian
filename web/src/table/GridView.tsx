@@ -821,7 +821,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const rightElement = readOnly ? undefined : (
     <button
       className="bt-add-col"
-      title="添加字段"
+      title="添加字段" aria-label="添加字段"
       onClick={(e) => openFieldEditor(e.currentTarget, model, { viewId: view.id, after: fields.at(-1)?.id })}
     >
       <IconPlus width={16} height={16} />

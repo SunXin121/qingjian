@@ -1,0 +1,41 @@
+/* ---------- page layout: the table fills the viewport below the header ---------- */
+.page.table-page,
+.share-page.table-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+.share-shell .table-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+.bt {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.bt-title-input {
+  min-width: 4em;
+  max-width: 100%;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-weight: 600;
+  color: var(--c-text);
+  outline: none;
+  text-overflow: ellipsis;
+}
+.bt-title-input:hover {
+  background: var(--c-hover);
+}
+.bt-title-input:focus {
+  border-color: var(--c-border-strong);
+  background: var(--c-panel);
+}

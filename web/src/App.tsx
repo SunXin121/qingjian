@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { api, authEvents } from './api'
+import ErrorBoundary from './components/ErrorBoundary'
 import SearchDialog from './components/SearchDialog'
 import Sidebar from './components/Sidebar'
 import Home from './pages/Home'
@@ -39,6 +40,10 @@ function Shell() {
   const location = useLocation()
   const navigate = useNavigate()
   useEffect(() => setSidebarOpen(false), [location.pathname, setSidebarOpen])
+  // documents and tables name the tab themselves; every other page gets the app name back
+  useEffect(() => {
+    if (!/^\/r\/[^/]+\/[dt]\//.test(location.pathname)) document.title = '青简 Qingjian'
+  }, [location.pathname])
   useEffect(preloadHeavyPages, [])
   // in-app links rendered outside React (e.g. table embeds inside the editor)
   useEffect(() => {
@@ -61,9 +66,11 @@ function Shell() {
       <Sidebar />
       <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
       <div className="content">
-        <Suspense fallback={<div className="ink-loading">加载中…</div>}>
-          <Outlet />
-        </Suspense>
+        <ErrorBoundary resetKey={location.pathname}>
+          <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </div>
       <SearchDialog />
     </div>
@@ -125,9 +132,11 @@ export default function App() {
         <Route
           path="s/:token/:docId?"
           element={
-            <Suspense fallback={<div className="ink-loading">加载中…</div>}>
-              <SharePage />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+                <SharePage />
+              </Suspense>
+            </ErrorBoundary>
           }
         />
         <Route path="*" element={<AuthGate />} />

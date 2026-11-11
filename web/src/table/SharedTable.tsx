@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router'
 import { shareApi } from '../api'
 import { TableModel } from './model'
 import TableView from './TableView'
+import './table.css'
 
 /** Read-only table for share links; view settings (filters etc.) change only locally. */
 export default function SharedTable({ token, tableId, header }: { token: string; tableId: string; header: (extra: ReactNode) => ReactNode }) {

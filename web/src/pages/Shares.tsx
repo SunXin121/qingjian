@@ -87,7 +87,7 @@ export default function Shares() {
                     <span>创建于 {formatTime(sh.created_at)}</span>
                   </div>
                 </div>
-                <button className="icon-btn" title="操作" onClick={(e) => menu(e.currentTarget, sh)}>
+                <button className="icon-btn" title="操作" aria-label="操作" onClick={(e) => menu(e.currentTarget, sh)}>
                   <IconMore />
                 </button>
               </div>

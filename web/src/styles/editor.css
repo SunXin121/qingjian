@@ -1,0 +1,748 @@
+/* ---------- editor (Crepe overrides) ---------- */
+.ink-editor .milkdown {
+  --crepe-color-background: var(--c-bg);
+  --crepe-color-on-background: var(--c-text);
+  --crepe-color-surface: var(--c-panel);
+  --crepe-color-surface-low: var(--c-surface);
+  --crepe-color-on-surface: var(--c-text);
+  --crepe-color-on-surface-variant: var(--c-text-2);
+  --crepe-color-outline: var(--c-text-3);
+  --crepe-color-primary: var(--c-primary);
+  --crepe-color-secondary: var(--c-primary-soft);
+  --crepe-color-on-secondary: var(--c-primary);
+  --crepe-color-hover: var(--c-hover);
+  --crepe-color-selected: var(--c-selected);
+  --crepe-color-inline-code: var(--c-inline-code);
+  --crepe-color-inline-area: var(--c-surface-low);
+  --crepe-font-title: var(--font);
+  --crepe-font-default: var(--font);
+  --crepe-font-code: var(--font-mono);
+  --crepe-base-font-size: 16px;
+  --crepe-shadow-1: var(--shadow-md);
+  --crepe-shadow-2: var(--shadow);
+  background: transparent;
+}
+.ink-editor .milkdown .ProseMirror {
+  padding: 0;
+  min-height: 40vh;
+  line-height: 1.75;
+  word-break: break-word;
+  color: var(--c-text);
+}
+/* long documents: the browser skips style / layout / paint of top-level blocks that are
+   off screen, which otherwise dominates every keystroke once the DOM has ~100k nodes.
+   The size placeholder is replaced by the real height once a block has been rendered. */
+.ink-editor.large .milkdown .ProseMirror > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3em;
+}
+.ink-editor.readonly .milkdown .ProseMirror {
+  min-height: 0;
+}
+.ink-editor .milkdown .ProseMirror p {
+  line-height: 1.75;
+  padding: 3px 0;
+}
+.ink-editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  padding: 0;
+  margin-bottom: 4px;
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+.ink-editor .milkdown .ProseMirror h1 { font-size: 30px; line-height: 1.3; margin-top: 36px; font-weight: 700; }
+.ink-editor .milkdown .ProseMirror h2 { font-size: 24px; line-height: 1.35; margin-top: 32px; }
+.ink-editor .milkdown .ProseMirror h3 { font-size: 20px; line-height: 1.4; margin-top: 26px; }
+.ink-editor .milkdown .ProseMirror h4 { font-size: 17px; line-height: 1.5; margin-top: 22px; }
+.ink-editor .milkdown .ProseMirror h5 { font-size: 16px; line-height: 1.5; margin-top: 18px; }
+.ink-editor .milkdown .ProseMirror h6 { font-size: 15px; line-height: 1.5; margin-top: 18px; color: var(--c-text-2); }
+.ink-editor .milkdown .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+.ink-editor .milkdown .ProseMirror strong {
+  font-weight: 650;
+}
+.ink-editor .milkdown .ProseMirror a {
+  color: var(--c-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--c-primary) 35%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 0.15s;
+}
+.ink-editor .milkdown .ProseMirror a:hover {
+  text-decoration-color: var(--c-primary);
+}
+/* links to other documents / tables (双链) */
+.ink-editor .milkdown .ProseMirror a[href^='/r/'] {
+  color: var(--c-info);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-info) 30%, transparent);
+  cursor: pointer;
+}
+.ink-editor .milkdown .ProseMirror a[href^='/r/']::before {
+  content: '';
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 2px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z'/%3E%3Cpath d='M14 3v5h5M9 13h6M9 17h4'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z'/%3E%3Cpath d='M14 3v5h5M9 13h6M9 17h4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.ink-editor .milkdown .ProseMirror a[href^='/r/']:hover {
+  background: var(--c-info-bg);
+  border-bottom-color: var(--c-info);
+}
+
+/* [[ picker */
+.doc-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.doc-link-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.doc-link-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.doc-link-item > svg {
+  flex: none;
+  color: var(--c-text-3);
+}
+.doc-link-item.active {
+  background: var(--c-hover-strong);
+}
+.doc-link-repo {
+  flex: none;
+  max-width: 40%;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+.doc-link-item.create {
+  color: var(--c-info);
+}
+.doc-link-item.create > svg {
+  color: var(--c-info);
+}
+.doc-link-empty {
+  padding: 12px 8px;
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+/* backlinks below a document */
+.backlinks {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-border);
+}
+.backlinks-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+.backlinks-count {
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+.backlinks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.backlink {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius);
+  color: var(--c-text);
+  text-decoration: none;
+}
+.backlink:hover {
+  background: var(--c-hover);
+}
+.backlink-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.backlink-title > svg {
+  flex: none;
+  color: var(--c-text-3);
+}
+.backlink-repo {
+  flex: none;
+  max-width: 30%;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--c-surface);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+.backlink-time {
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+.backlinks-pop {
+  padding: 12px 14px 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.backlinks-pop .backlink {
+  margin: 0 -8px;
+  padding: 8px;
+}
+.backlinks-btn {
+  gap: 4px;
+  color: var(--c-text-2);
+}
+.backlink-snippet {
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-text-2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.ink-editor .milkdown .ProseMirror code {
+  color: var(--c-inline-code);
+  background: var(--c-inline-code-bg);
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  font-size: 85%;
+  line-height: 1.6;
+  display: inline;
+}
+.ink-editor .milkdown .ProseMirror pre code {
+  color: inherit;
+  background: transparent;
+  padding: 0;
+}
+.ink-editor .milkdown .ProseMirror blockquote:not(.ink-callout) {
+  padding-left: 18px;
+  margin: 8px 0;
+  color: var(--c-text-2);
+}
+.ink-editor .milkdown .ProseMirror blockquote:not(.ink-callout)::before {
+  width: 3px;
+  top: 6px;
+  bottom: 6px;
+  background: var(--c-border-strong);
+}
+.ink-editor .milkdown .ProseMirror hr {
+  height: 25px;
+  padding: 12px 0;
+  background-color: var(--c-border);
+}
+.ink-editor .milkdown .ProseMirror img {
+  border-radius: var(--radius);
+}
+/* lists: bullets & checkboxes */
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper {
+  color: var(--c-text-3);
+}
+/* crepe sizes the bullet / checkbox box at 32px, but a list line here is 34px
+   (3px padding + 28px line + 3px), which left markers a pixel above the text */
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper,
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper .label {
+  height: 34px;
+}
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper svg {
+  fill: var(--c-text-3);
+}
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper .checked svg {
+  fill: var(--c-primary);
+}
+.ink-editor .milkdown .milkdown-list-item-block li[data-item-type='task'][data-checked='true'] > .children {
+  color: var(--c-text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--c-border-strong);
+}
+/* tables */
+.ink-editor .milkdown .milkdown-table-block {
+  margin: 12px 0;
+}
+.ink-editor .milkdown .milkdown-table-block :is(th, td) {
+  border-color: var(--c-border) !important;
+  padding: 6px 12px;
+}
+.ink-editor .milkdown .milkdown-table-block th {
+  background: var(--c-surface);
+  font-weight: 600;
+}
+/* code blocks */
+.ink-editor .milkdown .milkdown-code-block {
+  margin: 12px 0;
+  padding: 6px 14px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-code-bg);
+}
+.ink-editor .milkdown .milkdown-code-block .cm-editor,
+.ink-editor .milkdown .milkdown-code-block .cm-gutters {
+  background: var(--c-code-bg);
+}
+.ink-editor .milkdown .milkdown-code-block .cm-gutters {
+  color: var(--c-text-3);
+  opacity: 0.7;
+}
+.ink-editor .milkdown .milkdown-code-block .cm-activeLine,
+.ink-editor .milkdown .milkdown-code-block .cm-activeLineGutter {
+  background: transparent;
+}
+.ink-editor .milkdown .milkdown-code-block .cm-editor.cm-focused .cm-activeLine {
+  background: var(--c-hover);
+}
+.ink-editor .milkdown .milkdown-code-block .cm-content,
+.ink-editor .milkdown .milkdown-code-block .cm-scroller {
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+.ink-editor .milkdown .milkdown-code-block .tools .tools-button-group button {
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm) !important;
+  color: var(--c-text-2);
+  font-weight: 500;
+}
+.ink-editor .milkdown .milkdown-code-block .tools .tools-button-group {
+  gap: 4px;
+}
+/* code language: an input (editor/langInput.ts) instead of Crepe's button + search popup */
+.ink-editor .milkdown .milkdown-code-block .tools > .language-button,
+.ink-editor .milkdown .milkdown-code-block .tools > .language-picker {
+  display: none;
+}
+.ink-editor .milkdown .milkdown-code-block .tools > .ink-lang {
+  margin-bottom: 4px;
+}
+/* the language chip: monospace label + caret, quiet until hovered
+   (.milkdown prefix: Crepe resets padding on every .milkdown descendant) */
+.milkdown .ink-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--c-text-3);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+.ink-lang-input {
+  box-sizing: content-box;
+  min-width: 0;
+  max-width: 200px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  outline: none;
+  cursor: inherit;
+}
+.ink-lang-input::placeholder {
+  color: var(--c-text-3);
+  opacity: 0.85;
+}
+.ink-lang-input::selection {
+  background: var(--c-selected);
+}
+.ink-lang-caret {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    transform 0.2s var(--ease);
+}
+.milkdown-code-block:hover .ink-lang:has(> .ink-lang-input:not(:read-only)),
+.ink-lang.open {
+  border-color: var(--c-border);
+  background: var(--c-panel);
+}
+.milkdown-code-block:hover .ink-lang:has(> .ink-lang-input:not(:read-only)) .ink-lang-caret,
+.ink-lang.open .ink-lang-caret {
+  opacity: 0.8;
+}
+.ink-lang:has(> .ink-lang-input:not(:read-only)):hover {
+  color: var(--c-text-2);
+  border-color: var(--c-border-strong);
+}
+.ink-lang:has(> .ink-lang-input:focus) {
+  border-color: var(--c-border-strong);
+  background: var(--c-panel);
+  color: var(--c-text);
+  box-shadow: 0 0 0 2px var(--c-primary-ring);
+  cursor: text;
+}
+.ink-lang.open .ink-lang-caret {
+  transform: rotate(180deg);
+}
+.ink-lang:has(> .ink-lang-input:read-only) {
+  cursor: default;
+}
+.ink-lang:has(> .ink-lang-input:read-only) .ink-lang-caret {
+  display: none;
+}
+.ink-lang-menu {
+  position: fixed;
+  z-index: 1000;
+  width: 224px;
+  max-height: 288px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-panel);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  animation: pop 0.12s var(--ease);
+}
+.ink-lang-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--c-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ink-lang-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ink-lang-alias {
+  flex: none;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c-text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.ink-lang-check {
+  flex: none;
+  color: var(--c-text);
+}
+.ink-lang-item.active {
+  background: var(--c-hover-strong);
+}
+.ink-lang-item.current {
+  font-weight: 600;
+}
+.ink-lang-item.current .ink-lang-alias {
+  display: none;
+}
+.ink-lang-empty {
+  padding: 7px 10px;
+  color: var(--c-text-3);
+  font-size: 12.5px;
+}
+/* diagram / drawing blocks shown as preview only: no code-block chrome, tools float on hover */
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) {
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  transition: border-color 0.15s;
+}
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden):hover {
+  border-color: var(--c-border);
+}
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) > .tools {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  right: 10px;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden):hover > .tools {
+  opacity: 1;
+}
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) > .tools > * {
+  pointer-events: auto;
+}
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) .ink-lang {
+  border-color: var(--c-border);
+  background: var(--c-panel);
+  box-shadow: var(--shadow-sm);
+}
+.ink-editor.readonly .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) > .tools {
+  display: none;
+}
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) .ink-diagram {
+  padding: 16px 0;
+}
+
+/* Crepe floating UI: slash menu, toolbar, block handle */
+.ink-editor .milkdown :is(.milkdown-slash-menu, .milkdown-toolbar, .milkdown-link-preview, .milkdown-link-edit, .language-list) {
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  background: var(--c-panel);
+}
+.ink-editor .milkdown .milkdown-block-handle {
+  border-radius: var(--radius-sm);
+}
+/* denser slash menu */
+.ink-editor .milkdown .milkdown-slash-menu .tab-group {
+  padding: 8px 8px 0;
+}
+.ink-editor .milkdown .milkdown-slash-menu .tab-group ul {
+  padding: 4px 4px 8px;
+  gap: 2px;
+}
+.ink-editor .milkdown .milkdown-slash-menu .tab-group li {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.ink-editor .milkdown .milkdown-slash-menu .menu-groups {
+  padding: 0 6px 6px;
+}
+.ink-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  padding: 10px 10px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--c-text-3);
+}
+.ink-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+}
+.ink-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  width: 20px;
+  height: 20px;
+  color: var(--c-text-2);
+  fill: var(--c-text-2);
+}
+/* our own stroke icons (draw / callout / file) must stay unfilled */
+.ink-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg[fill='none'] {
+  fill: none;
+}
+.ink-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  font-size: 14px;
+  font-weight: 500;
+}
+/* The virtual caret is the first child of .ProseMirror; positioned blocks that come later
+   (blockquotes / callouts, code blocks, tables) would otherwise paint over it. */
+.ink-editor .milkdown .ProseMirror .prosemirror-virtual-cursor {
+  z-index: 2;
+}
+.ink-editor .milkdown .ProseMirror-focused {
+  --prosemirror-virtual-cursor-color: var(--c-primary);
+}
+
+/* diagram previews */
+.ink-editor .ink-diagram {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 8px 0;
+}
+.ink-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+.ink-editor .ink-preview-error {
+  color: var(--c-danger);
+  font-size: 13px;
+  padding: 8px 0;
+}
+.ink-editor .ink-preview-error pre {
+  white-space: pre-wrap;
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ink-editor .ink-preview-hint {
+  color: var(--c-text-3);
+  padding: 24px 0;
+  text-align: center;
+}
+.ink-editor .ink-drawing {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius);
+  padding: 4px;
+  transition: box-shadow 0.15s;
+}
+.ink-editor.readonly .ink-drawing {
+  cursor: default;
+}
+.ink-drawing:hover {
+  box-shadow: inset 0 0 0 1px var(--c-border-strong);
+}
+.ink-editor.readonly .ink-drawing:hover {
+  box-shadow: none;
+}
+.ink-drawing img {
+  max-width: 100%;
+  height: auto;
+  /* draw.io SVGs adapt to the embedder's scheme; they sit on light paper, so keep them light */
+  color-scheme: light;
+}
+.ink-editor .ink-drawing-empty {
+  width: 100%;
+  padding: 48px 0;
+  text-align: center;
+  color: var(--c-text-3);
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 10px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ink-drawing:hover .ink-drawing-empty {
+  color: var(--c-primary);
+  border-color: var(--c-primary);
+}
+.ink-drawing:hover:has(.ink-drawing-empty) {
+  box-shadow: none;
+}
+
+/* full-screen board modal (excalidraw / mind map / draw.io) */
+.ink-board-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+  animation: fade 0.15s ease-out;
+}
+.ink-board-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(52px + var(--safe-t));
+  padding: var(--safe-t) 12px 0 18px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-panel);
+}
+.ink-board-title {
+  font-weight: 600;
+}
+.ink-board-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: var(--safe-b);
+}
+
+/* versions overlay */
+.versions-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+  animation: fade 0.15s ease-out;
+}
+.versions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(var(--header-h) + var(--safe-t));
+  padding: var(--safe-t) 14px 0 24px;
+  border-bottom: 1px solid var(--c-border);
+}
+.versions-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.versions-list {
+  width: 248px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--c-border);
+  padding: 8px;
+  background: var(--c-side);
+}
+.version-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 38px;
+  margin-bottom: 1px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--c-text-2);
+  cursor: pointer;
+  flex: none;
+}
+.version-item small {
+  color: var(--c-text-3);
+}
+.version-item:hover {
+  background: var(--c-hover);
+  color: var(--c-text);
+}
+.version-item.active {
+  background: var(--c-active);
+  color: var(--c-primary);
+  font-weight: 500;
+}
+.versions-preview {
+  flex: 1;
+  overflow-y: auto;
+}

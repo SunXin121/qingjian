@@ -94,7 +94,7 @@ export default function Sidebar() {
           </nav>
           <div className="side-section">
             <span>知识库</span>
-            <button className="icon-btn" title="新建知识库" onClick={newRepo}>
+            <button className="icon-btn" title="新建知识库" aria-label="新建知识库" onClick={newRepo}>
               <IconPlus width={15} height={15} />
             </button>
           </div>
@@ -331,7 +331,7 @@ function RepoTree({ repoId }: { repoId: string }) {
         <span className="tree-actions">
           <button
             className="icon-btn sm"
-            title="新建子文档"
+            title="新建子文档" aria-label="新建子文档"
             onClick={(e) => {
               e.stopPropagation()
               create(n.id, 'doc')
@@ -341,7 +341,7 @@ function RepoTree({ repoId }: { repoId: string }) {
           </button>
           <button
             className="icon-btn sm"
-            title="更多"
+            title="更多" aria-label="更多"
             onClick={(e) => {
               e.stopPropagation()
               nodeMenu(e.currentTarget, n)
@@ -366,7 +366,7 @@ function RepoTree({ repoId }: { repoId: string }) {
         </Link>
         <button
           className="icon-btn"
-          title="新建"
+          title="新建" aria-label="新建"
           onClick={(e) =>
             openMenu(e.currentTarget, [
               { label: '新建文档', icon: <IconDocPlus />, onClick: () => create(null, 'doc') },
@@ -380,7 +380,7 @@ function RepoTree({ repoId }: { repoId: string }) {
         {repo && (
           <button
             className="icon-btn"
-            title="知识库设置"
+            title="知识库设置" aria-label="知识库设置"
             onClick={(e) => repoMenu(e.currentTarget, repo, () => loadRepos().catch(() => {}), () => navigate('/'))}
           >
             <IconMore />

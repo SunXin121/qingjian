@@ -1,0 +1,194 @@
+/* ---------- embed in documents ---------- */
+/* children are scoped under .bt-embed so the editor's ".milkdown *" reset doesn't win */
+.ink-editor .milkdown .milkdown-code-block:has(.bt-embed) > .tools {
+  display: none;
+}
+.ink-editor .milkdown .milkdown-code-block:has(.bt-embed) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.bt-embed .bt-tag {
+  padding: 0 8px;
+}
+.bt-embed a {
+  text-decoration: none;
+}
+.bt-embed td a:hover {
+  text-decoration: underline;
+}
+.bt-embed .bt-chip {
+  padding: 0 7px;
+}
+.bt-embed.bt-embed {
+  text-align: left;
+  margin: 4px 0;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-panel);
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  cursor: default;
+}
+.bt-embed .bt-embed-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-3);
+}
+.bt-embed .bt-embed-title {
+  font-weight: 600;
+  color: var(--c-text);
+}
+.bt-embed .bt-embed-view::before {
+  content: '·';
+  margin-right: 8px;
+}
+.bt-embed .bt-embed-open {
+  color: var(--c-info);
+  text-decoration: none;
+  font-size: 12.5px;
+}
+.bt-embed .bt-embed-open:hover {
+  text-decoration: underline;
+}
+.bt-embed .bt-embed-scroll {
+  max-height: 420px;
+  overflow: auto;
+}
+.ink-editor .bt-embed table,
+.bt-embed table {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: 13px;
+}
+.ink-editor .bt-embed th,
+.ink-editor .bt-embed td,
+.bt-embed th,
+.bt-embed td {
+  max-width: 280px;
+  min-width: 80px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--c-border);
+  border-right: 1px solid var(--c-border);
+  background: var(--c-panel);
+  text-align: left;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ink-editor .bt-embed th,
+.bt-embed th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--c-side);
+  font-weight: 500;
+  color: var(--c-text-2);
+  white-space: nowrap;
+}
+.bt-embed td .bt-tag {
+  margin: 0 4px 2px 0;
+}
+.bt-embed td.t-number,
+.bt-embed td.t-autonumber {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bt-embed .bt-embed-check {
+  color: var(--c-info);
+  font-weight: 600;
+}
+.bt-embed .bt-embed-foot {
+  padding: 7px 14px;
+  font-size: 12px;
+  color: var(--c-text-3);
+  background: var(--c-side);
+}
+.bt-embed .bt-embed-kanban {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  overflow-x: auto;
+  align-items: flex-start;
+}
+.bt-embed .bt-embed-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 220px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--c-surface);
+}
+.bt-embed .bt-embed-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 4px;
+}
+.bt-embed .bt-embed-card {
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-panel);
+}
+.bt-embed .bt-embed-card-title {
+  font-weight: 600;
+}
+.bt-embed .bt-embed-card-line {
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+.bt-embed .bt-embed-more {
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+/* table picker */
+.bt-picker-tables {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.bt-picker-table {
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+.bt-picker-table-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--c-text);
+  font-weight: 500;
+}
+.bt-picker-table-head .muted {
+  font-weight: 400;
+  font-size: 12.5px;
+}
+.bt-picker-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.share-view-select {
+  max-width: 180px;
+}
+.doc-row-icon.table {
+  background: color-mix(in srgb, var(--tone-4) 13%, transparent);
+  color: var(--tone-4);
+}

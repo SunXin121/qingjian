@@ -7,7 +7,7 @@ export default function PageHeader({ children }: { children?: ReactNode }) {
   const { setSidebarOpen } = useStore()
   return (
     <header className="page-header">
-      <button className="icon-btn mobile-only" title="菜单" onClick={() => setSidebarOpen(true)}>
+      <button className="icon-btn mobile-only" title="菜单" aria-label="菜单" onClick={() => setSidebarOpen(true)}>
         <IconMenu />
       </button>
       {children}

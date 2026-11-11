@@ -1,0 +1,50 @@
+/* ================= error boundary ================= */
+.error-state strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--c-text);
+  font-size: 16px;
+}
+.error-state .error-detail {
+  max-width: 560px;
+  max-height: 120px;
+  margin: 14px auto 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: var(--radius);
+  background: var(--c-surface-low);
+  color: var(--c-text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.error-state .error-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* conflict banner: diff against the server's version */
+.conflict-diff {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+}
+.modal:focus,
+.menu:focus {
+  outline: none;
+}
+
+/* ================= reduced motion ================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

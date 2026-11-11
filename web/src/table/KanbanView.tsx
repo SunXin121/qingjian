@@ -189,12 +189,12 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               {!readOnly && (
                 <>
                   {writable && (
-                    <button className="icon-btn sm" title="新建记录" onClick={() => addCard(col)}>
+                    <button className="icon-btn sm" title="新建记录" aria-label="新建记录" onClick={() => addCard(col)}>
                       <IconPlus width={15} height={15} />
                     </button>
                   )}
                   {col.choice && (
-                    <button className="icon-btn sm" title="更多" onClick={(e) => columnMenu(e.currentTarget, col.choice!)}>
+                    <button className="icon-btn sm" title="更多" aria-label="更多" onClick={(e) => columnMenu(e.currentTarget, col.choice!)}>
                       <IconMore width={15} height={15} />
                     </button>
                   )}

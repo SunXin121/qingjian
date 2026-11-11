@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 // Imperative dialogs (confirm / prompt) and toasts, mounted outside the React tree.
@@ -14,7 +14,46 @@ export function mount(render: (close: () => void) => ReactNode) {
   root.render(render(close))
 }
 
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Keeps keyboard focus inside `ref` while it is mounted (Tab wraps around) and gives it
+ * back to whatever had it before once the element goes away.
+ */
+export function useFocusTrap(ref: { current: HTMLElement | null }) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const before = document.activeElement as HTMLElement | null
+    // children with autoFocus already took focus; otherwise start on the panel itself
+    if (!el.contains(document.activeElement)) el.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.offsetParent !== null)
+      if (!items.length) return e.preventDefault()
+      const first = items[0]
+      const last = items[items.length - 1]
+      const cur = document.activeElement
+      if (e.shiftKey && (cur === first || !el.contains(cur))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (cur === last || !el.contains(cur))) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    el.addEventListener('keydown', onKey)
+    return () => {
+      el.removeEventListener('keydown', onKey)
+      if (before?.isConnected) before.focus({ preventScroll: true })
+    }
+  }, [ref])
+}
+
 export function Modal({ title, children, onClose, wide }: { title?: ReactNode; children: ReactNode; onClose: () => void; wide?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  useFocusTrap(ref)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -22,8 +61,12 @@ export function Modal({ title, children, onClose, wide }: { title?: ReactNode; c
   }, [onClose])
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={'modal' + (wide ? ' wide' : '')} role="dialog">
-        {title && <div className="modal-title">{title}</div>}
+      <div ref={ref} className={'modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} tabIndex={-1}>
+        {title && (
+          <div className="modal-title" id={titleId}>
+            {title}
+          </div>
+        )}
         {children}
       </div>
     </div>
@@ -141,6 +184,9 @@ export function toast(message: string, ms = 2600) {
   if (!toastHost) {
     toastHost = document.createElement('div')
     toastHost.className = 'toast-host'
+    // announced by screen readers without moving focus
+    toastHost.setAttribute('role', 'status')
+    toastHost.setAttribute('aria-live', 'polite')
     document.body.appendChild(toastHost)
   }
   const el = document.createElement('div')
@@ -173,45 +219,82 @@ const anchorRect = (a: Anchor) => (a instanceof HTMLElement ? a.getBoundingClien
 
 export function openMenu(anchor: Anchor, items: MenuItem[], opts: { align?: 'left' | 'right'; width?: number } = {}) {
   const rect = anchorRect(anchor)
-  mount((close) => {
-    const visible = items.filter((i) => !i.hidden)
-    const width = opts.width ?? 196
-    const x = opts.align === 'left' ? rect.left : rect.right - width
-    const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
-    const estH = visible.length * 34 + visible.filter((i) => i.divider).length * 9 + 12
-    const top = rect.bottom + estH > window.innerHeight - 8 ? Math.max(8, rect.top - estH - 4) : rect.bottom + 4
-    return (
+  mount((close) => <MenuFrame rect={rect} items={items.filter((i) => !i.hidden)} opts={opts} close={close} />)
+}
+
+function MenuFrame({ rect, items, opts, close }: { rect: { left: number; right: number; top: number; bottom: number }; items: MenuItem[]; opts: { align?: 'left' | 'right'; width?: number }; close: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const width = opts.width ?? 196
+  const x = opts.align === 'left' ? rect.left : rect.right - width
+  const left = Math.max(8, Math.min(x, window.innerWidth - width - 8))
+  const estH = items.length * 34 + items.filter((i) => i.divider).length * 9 + 12
+  const top = rect.bottom + estH > window.innerHeight - 8 ? Math.max(8, rect.top - estH - 4) : rect.bottom + 4
+  // focus moves into the menu so the keyboard works, and returns to the trigger on close
+  // (before the chosen item runs, so an action that focuses something else still wins)
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null
+    ref.current?.focus({ preventScroll: true })
+    return () => {
+      if (before?.isConnected) before.focus({ preventScroll: true })
+    }
+  }, [])
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('.menu-item:not(:disabled)') ?? [])]
+    const cur = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    let next: number
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      e.preventDefault()
+      e.stopPropagation()
+      return close()
+    } else if (e.key === 'ArrowDown') next = cur < 0 ? 0 : (cur + 1) % buttons.length
+    else if (e.key === 'ArrowUp') next = cur < 0 ? buttons.length - 1 : (cur - 1 + buttons.length) % buttons.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = buttons.length - 1
+    else return
+    e.preventDefault()
+    buttons[next]?.focus()
+  }
+  return (
+    <div
+      className="menu-backdrop"
+      onMouseDown={close}
+      onTouchStart={(e) => e.target === e.currentTarget && close()}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        close()
+      }}
+    >
       <div
-        className="menu-backdrop"
-        onMouseDown={close}
-        onTouchStart={(e) => e.target === e.currentTarget && close()}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          close()
-        }}
+        ref={ref}
+        className="menu"
+        role="menu"
+        tabIndex={-1}
+        style={{ left, top, width, maxHeight: window.innerHeight - 16, overflowY: 'auto' }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
       >
-        <div className="menu" style={{ left, top, width, maxHeight: window.innerHeight - 16, overflowY: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
-          {visible.map((it, i) => (
-            <Fragment key={it.label + i}>
-              {it.divider && i > 0 && <div className="menu-sep" />}
-              <button
-                className={'menu-item' + (it.danger ? ' danger' : '')}
-                disabled={it.disabled}
-                onClick={() => {
-                  close()
-                  it.onClick()
-                }}
-              >
-                {it.icon && <span className="menu-icon">{it.icon}</span>}
-                <span className="ellipsis">{it.label}</span>
-                {it.checked && <span className="menu-check">✓</span>}
-              </button>
-            </Fragment>
-          ))}
-        </div>
+        {items.map((it, i) => (
+          <Fragment key={it.label + i}>
+            {it.divider && i > 0 && <div className="menu-sep" role="separator" />}
+            <button
+              className={'menu-item' + (it.danger ? ' danger' : '')}
+              role={it.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'}
+              aria-checked={it.checked !== undefined ? !!it.checked : undefined}
+              disabled={it.disabled}
+              onClick={() => {
+                close()
+                it.onClick()
+              }}
+            >
+              {it.icon && <span className="menu-icon">{it.icon}</span>}
+              <span className="ellipsis">{it.label}</span>
+              {it.checked && <span className="menu-check">✓</span>}
+            </button>
+          </Fragment>
+        ))}
       </div>
-    )
-  })
+    </div>
+  )
 }
 
 /** A floating panel anchored to an element; closes on outside click or Escape. */

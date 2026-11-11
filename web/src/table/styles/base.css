@@ -1,0 +1,58 @@
+/* =====================================================================
+   多维表格 (bitable)
+   ===================================================================== */
+:root {
+  --bt-accent-light: rgba(47, 107, 217, 0.1);
+  --bt-search-hit: #fdf3c4;
+  --bt-search-current: #fbd27a;
+  --bt-star: #f5b301;
+  --bt-star-off: #e3e3e0;
+  /* option tag colours: soft background, readable foreground */
+  --tag-0-bg: #e8eefc;
+  --tag-0-fg: #2a56b0;
+  --tag-1-bg: #fff1dc;
+  --tag-1-fg: #9a5a0c;
+  --tag-2-bg: #e2f5e9;
+  --tag-2-fg: #1d7340;
+  --tag-3-bg: #fde7e9;
+  --tag-3-fg: #b4323e;
+  --tag-4-bg: #f0e8fb;
+  --tag-4-fg: #6b3fb0;
+  --tag-5-bg: #e0f4f6;
+  --tag-5-fg: #13707c;
+  --tag-6-bg: #fdf3c9;
+  --tag-6-fg: #806308;
+  --tag-7-bg: #fbe6f2;
+  --tag-7-fg: #a33677;
+  --tag-8-bg: #ebedf0;
+  --tag-8-fg: #4b4f57;
+  --tag-9-bg: #e9f3dc;
+  --tag-9-fg: #4c7419;
+}
+:root[data-theme='dark'] {
+  --bt-accent-light: rgba(116, 166, 255, 0.16);
+  --bt-search-hit: #4a4220;
+  --bt-search-current: #7a5d14;
+  --bt-star: #e6a700;
+  --bt-star-off: #3d3e42;
+  --tag-0-bg: #233457;
+  --tag-0-fg: #a9c4ff;
+  --tag-1-bg: #44331a;
+  --tag-1-fg: #f3c27e;
+  --tag-2-bg: #1b3a28;
+  --tag-2-fg: #8fdcae;
+  --tag-3-bg: #46232a;
+  --tag-3-fg: #f5a3ac;
+  --tag-4-bg: #352850;
+  --tag-4-fg: #cdb1f5;
+  --tag-5-bg: #183a3f;
+  --tag-5-fg: #8bd6df;
+  --tag-6-bg: #3f3615;
+  --tag-6-fg: #e9d27c;
+  --tag-7-bg: #43213a;
+  --tag-7-fg: #f0a6d2;
+  --tag-8-bg: #2e3036;
+  --tag-8-fg: #c3c7cf;
+  --tag-9-bg: #2a3a1b;
+  --tag-9-fg: #b8dc8a;
+}

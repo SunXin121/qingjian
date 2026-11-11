@@ -1,0 +1,47 @@
+/* ---------- tags ---------- */
+.bt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  line-height: 22px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.bt-tag > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bt-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.bt-tag-x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.bt-tag-x:hover {
+  opacity: 1;
+}
+.bt-tag.c0, .bt-color-dot.c0 { background: var(--tag-0-bg); color: var(--tag-0-fg); }
+.bt-tag.c1, .bt-color-dot.c1 { background: var(--tag-1-bg); color: var(--tag-1-fg); }
+.bt-tag.c2, .bt-color-dot.c2 { background: var(--tag-2-bg); color: var(--tag-2-fg); }
+.bt-tag.c3, .bt-color-dot.c3 { background: var(--tag-3-bg); color: var(--tag-3-fg); }
+.bt-tag.c4, .bt-color-dot.c4 { background: var(--tag-4-bg); color: var(--tag-4-fg); }
+.bt-tag.c5, .bt-color-dot.c5 { background: var(--tag-5-bg); color: var(--tag-5-fg); }
+.bt-tag.c6, .bt-color-dot.c6 { background: var(--tag-6-bg); color: var(--tag-6-fg); }
+.bt-tag.c7, .bt-color-dot.c7 { background: var(--tag-7-bg); color: var(--tag-7-fg); }
+.bt-tag.c8, .bt-color-dot.c8 { background: var(--tag-8-bg); color: var(--tag-8-fg); }
+.bt-tag.c9, .bt-color-dot.c9 { background: var(--tag-9-bg); color: var(--tag-9-fg); }

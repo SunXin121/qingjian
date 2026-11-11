@@ -234,7 +234,7 @@ export function AttachmentList({ value, onChange, readOnly }: { value: Attachmen
           </a>
           <span className="bt-file-size">{formatSize(a.size)}</span>
           {!readOnly && (
-            <button className="icon-btn sm" title="移除" onClick={() => onChange(list.filter((_, j) => j !== i))}>
+            <button className="icon-btn sm" title="移除" aria-label="移除" onClick={() => onChange(list.filter((_, j) => j !== i))}>
               <IconClose width={14} height={14} />
             </button>
           )}

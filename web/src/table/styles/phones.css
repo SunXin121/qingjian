@@ -1,0 +1,116 @@
+/* ---------- phones ---------- */
+@media (max-width: 767px) {
+  .bt-tabs,
+  .bt-toolbar {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .bt-tool-label {
+    display: none;
+  }
+  .bt-search input {
+    width: 96px;
+    font-size: 16px;
+  }
+  .bt-tool.on .bt-tool-label {
+    display: inline;
+  }
+  .bt-tool {
+    height: 36px;
+    padding: 0 10px;
+  }
+  .bt-toolbar .btn.sm {
+    height: 36px;
+  }
+  .bt-sheet {
+    width: 100vw;
+  }
+  .bt-sheet-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .bt-sheet-label {
+    padding-top: 0;
+  }
+  .bt-sheet-body {
+    padding: 14px 16px calc(32px + var(--safe-b));
+  }
+  .bt-input {
+    height: 40px;
+    font-size: 16px; /* no zoom-on-focus in iOS Safari */
+  }
+  .bt-input.sm {
+    height: 36px;
+    font-size: 15px;
+  }
+  .bt-cond {
+    flex-wrap: wrap;
+  }
+  .bt-expr-bar {
+    padding-left: 0;
+    flex-wrap: wrap;
+  }
+  .bt-kanban-empty select {
+    width: 100%;
+  }
+  .bt-cond-conj {
+    flex-basis: 36px;
+  }
+  .bt-cond > select,
+  .bt-cond > input {
+    flex: 1 1 40%;
+  }
+  .bt-cond .bt-cond-op {
+    flex: 1 1 30%;
+  }
+  .bt-cond .bt-cond-value {
+    flex: 1 1 100%;
+  }
+  .bt-kanban {
+    padding: 4px 10px 24px;
+  }
+  .bt-col {
+    width: 82vw;
+    max-width: 300px;
+  }
+  .bt-title-input {
+    font-size: 16px;
+  }
+}
+
+/* type-to-edit box over a grid cell (frozen columns, IME input) */
+.bt-type-editor {
+  position: fixed;
+  z-index: 60;
+  display: none;
+  margin: 0;
+  padding: 8px 9px;
+  border: 2px solid var(--c-info);
+  border-radius: 3px;
+  background: var(--c-panel);
+  color: var(--c-text);
+  box-shadow: var(--shadow-md);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+}
+.bt-overlay-number {
+  width: 100%;
+  min-width: 120px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+  outline: none;
+}
+.bt-embed .bt-embed-card-line .muted {
+  margin-right: 6px;
+}
+
+/* hover "+" buttons over the grid: insert a record above / below, or a field to the right */

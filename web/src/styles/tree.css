@@ -1,0 +1,101 @@
+/* ---------- tree ---------- */
+.tree-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  margin-bottom: 1px;
+  padding-right: 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--c-text-2);
+  user-select: none;
+  transition: background 0.12s;
+}
+.tree-item:hover {
+  background: var(--c-hover);
+  color: var(--c-text);
+}
+.tree-item.active {
+  background: var(--c-active);
+  color: var(--c-primary);
+  font-weight: 500;
+}
+.tree-item.dragging {
+  opacity: 0.4;
+}
+.tree-item.drop-inside {
+  background: var(--c-primary-soft);
+  box-shadow: inset 0 0 0 1px var(--c-primary);
+}
+.tree-item.drop-before::before,
+.tree-item.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--c-primary);
+  border-radius: 1px;
+}
+.tree-item.drop-before::before {
+  top: -1px;
+}
+.tree-item.drop-after::after {
+  bottom: -1px;
+}
+.tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+  transition: transform 0.15s var(--ease);
+}
+.tree-toggle:hover {
+  background: var(--c-hover-strong);
+}
+.tree-toggle.open {
+  transform: rotate(90deg);
+}
+.tree-toggle.invisible {
+  visibility: hidden;
+}
+.tree-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--c-text-3);
+}
+.tree-item.active .tree-icon {
+  color: var(--c-primary);
+}
+.tree-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 4px;
+}
+.tree-actions {
+  display: none;
+  gap: 1px;
+}
+.tree-item:hover .tree-actions {
+  display: flex;
+}
+.tree-actions .icon-btn:hover {
+  background: var(--c-hover-strong);
+}
+.tree-tail {
+  height: 40px;
+}

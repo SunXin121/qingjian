@@ -196,7 +196,8 @@ export const calloutPlugin = $prose(
           let decos = prev.decos.map(tr.mapping, doc)
           const spans = ranges.map(([a, b]) => topLevelSpan(doc, Math.min(a, b), Math.max(a, b))).sort((x, y) => x[0] - y[0])
           for (let i = 0; i < spans.length; i++) {
-            let [from, to] = spans[i]
+            const from = spans[i][0]
+            let to = spans[i][1]
             while (i + 1 < spans.length && spans[i + 1][0] <= to) to = Math.max(to, spans[++i][1])
             const stale = decos.find(from, to).filter((d) => d.from >= from && d.to <= to)
             decos = decos.remove(stale).add(doc, blockDecorations(doc, newState.selection, toggled, from, to))

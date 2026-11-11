@@ -3,12 +3,20 @@ import { api, formatSize, formatTime, getConfig, type BackupStatus, type ClientC
 import { confirmDialog, toast } from '../components/dialog'
 import { IconArchive, IconCloud, IconDatabase, IconDisk, IconDoc, IconInfo, IconRefresh, IconSparkles, IconTrash } from '../components/icons'
 import PageHeader from '../components/PageHeader'
+import { getThemeMode, setThemeMode, type ThemeMode } from '../theme'
+
+const THEMES: { mode: ThemeMode; label: string }[] = [
+  { mode: 'system', label: '跟随系统' },
+  { mode: 'light', label: '浅色' },
+  { mode: 'dark', label: '深色' },
+]
 
 export default function Settings() {
   const [stats, setStats] = useState<StorageStats | null>(null)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [config, setConfig] = useState<ClientConfig | null>(null)
   const [cleaning, setCleaning] = useState(false)
+  const [theme, setTheme] = useState(getThemeMode)
 
   const loadStats = useCallback(() => api.storageStats().then(setStats).catch((e) => toast(e.message)), [])
   const loadBackup = useCallback(() => api.backupStatus().then(setBackup).catch((e) => toast(e.message)), [])
@@ -63,6 +71,34 @@ export default function Settings() {
       </PageHeader>
       <div className="page-body settings">
         <h1 className="page-title">设置</h1>
+
+        <section className="settings-card">
+          <h2>
+            <span className="card-icon">
+              <IconSparkles width={16} height={16} />
+            </span>
+            外观
+          </h2>
+          <div className="settings-row">
+            <p className="muted">界面主题。保存在当前浏览器中，不同设备可以分别设置。</p>
+            <div className="seg" role="radiogroup" aria-label="界面主题">
+              {THEMES.map((t) => (
+                <button
+                  key={t.mode}
+                  role="radio"
+                  aria-checked={theme === t.mode}
+                  className={theme === t.mode ? 'active' : ''}
+                  onClick={() => {
+                    setThemeMode(t.mode)
+                    setTheme(t.mode)
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <section className="settings-card">
           <h2>

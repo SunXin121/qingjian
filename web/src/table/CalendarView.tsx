@@ -178,13 +178,13 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
   return (
     <div className="bt-cal">
       <div className="bt-cal-head">
-        <button className="icon-btn" title="上个月" onClick={() => shift(-1)}>
+        <button className="icon-btn" title="上个月" aria-label="上个月" onClick={() => shift(-1)}>
           <IconChevron width={16} height={16} style={{ transform: 'rotate(180deg)' }} />
         </button>
         <div className="bt-cal-month">
           {y} 年 {m} 月
         </div>
-        <button className="icon-btn" title="下个月" onClick={() => shift(1)}>
+        <button className="icon-btn" title="下个月" aria-label="下个月" onClick={() => shift(1)}>
           <IconChevron width={16} height={16} />
         </button>
         <button className="btn sm" onClick={() => setMonth(today.slice(0, 7))}>
@@ -222,7 +222,7 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
               <div className="bt-cal-date">
                 <span>{Number(d.slice(8))}</span>
                 {writable && (
-                  <button className="icon-btn sm bt-cal-add" title="新建记录" onClick={() => add(d)}>
+                  <button className="icon-btn sm bt-cal-add" title="新建记录" aria-label="新建记录" onClick={() => add(d)}>
                     <IconPlus width={13} height={13} />
                   </button>
                 )}

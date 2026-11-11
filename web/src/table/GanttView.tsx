@@ -352,13 +352,13 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
   return (
     <div className={'bt-gantt' + (drag?.moved ? ' dragging' : '')}>
       <div className="bt-cal-head">
-        <button className="icon-btn" title="向前" onClick={() => page(-1)}>
+        <button className="icon-btn" title="向前" aria-label="向前" onClick={() => page(-1)}>
           <IconChevron width={16} height={16} style={{ transform: 'rotate(180deg)' }} />
         </button>
         <button className="btn sm" onClick={goToday}>
           今天
         </button>
-        <button className="icon-btn" title="向后" onClick={() => page(1)}>
+        <button className="icon-btn" title="向后" aria-label="向后" onClick={() => page(1)}>
           <IconChevron width={16} height={16} />
         </button>
         <span className="spacer" />

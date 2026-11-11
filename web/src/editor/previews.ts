@@ -3,6 +3,7 @@
 // Heavy libraries are loaded lazily the first time they are needed.
 
 import { renderPlantUML } from '../api'
+import { isDark } from '../theme'
 
 export interface DrawingRef {
   scene?: string
@@ -21,7 +22,8 @@ export const DRAWINGS: Record<DrawingKind, { label: string; empty: string; svgNa
 
 export const isDrawingKind = (k: string): k is DrawingKind => k in DRAWINGS
 
-export const prefersDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+/** Whether the page is currently shown in the dark theme (system or chosen in settings). */
+export const prefersDark = isDark
 
 /** Decode a data: URL (base64 or percent-encoded) into UTF-8 text. */
 export function dataURLToText(url: string): string {
@@ -83,7 +85,7 @@ async function renderMermaid(code: string): Promise<string> {
     const { svg } = await mermaid.render(id, code)
     return `<div class="ink-diagram">${svg}</div>`
   } catch (e: any) {
-    throw new Error(String(e?.message ?? e))
+    throw new Error(String(e?.message ?? e), { cause: e })
   } finally {
     // mermaid leaves its scratch element behind when parsing fails
     document.getElementById(id)?.remove()

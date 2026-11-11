@@ -11,6 +11,7 @@ import { exportCSV, importCSV } from '../table/csv'
 import { pickFiles } from '../table/editors'
 import { TableModel, useSyncState, useTable } from '../table/model'
 import TableView from '../table/TableView'
+import '../table/table.css'
 
 const lastViewKey = (id: string) => `qj.view.${id}`
 
@@ -102,9 +103,17 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
         e.preventDefault()
       }
     }
+    // a hidden tab may be discarded without any unload event (mobile app switch)
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') model.flush()
+    }
     window.addEventListener('beforeunload', onUnload)
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onHide)
     return () => {
       window.removeEventListener('beforeunload', onUnload)
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onHide)
       model.flush()
     }
   }, [model])
@@ -189,7 +198,7 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
         {backlinks.length > 0 && (
           <button
             className="btn ghost sm backlinks-btn"
-            title="链接到这个表格的文档"
+            title="链接到这个表格的文档" aria-label="链接到这个表格的文档"
             onClick={(e) =>
               openPopover(
                 e.currentTarget,
@@ -210,10 +219,10 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
             <IconLink width={15} height={15} /> {backlinks.length}
           </button>
         )}
-        <button className="icon-btn hide-mobile" title="分享" onClick={share}>
+        <button className="icon-btn hide-mobile" title="分享" aria-label="分享" onClick={share}>
           <IconShare />
         </button>
-        <button className="icon-btn" title="更多" onClick={(e) => more(e.currentTarget)}>
+        <button className="icon-btn" title="更多" aria-label="更多" onClick={(e) => more(e.currentTarget)}>
           <IconMore />
         </button>
       </PageHeader>

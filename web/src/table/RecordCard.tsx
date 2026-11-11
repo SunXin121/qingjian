@@ -68,16 +68,16 @@ export default function RecordCard({ model, viewId, recordId, list, readOnly, on
         <header className="bt-sheet-head">
           <div className="bt-sheet-title ellipsis">{title || '未命名记录'}</div>
           <span className="spacer" />
-          <button className="icon-btn" title="上一条 (↑)" disabled={!prev} onClick={() => prev && onNavigate(prev)}>
+          <button className="icon-btn" title="上一条 (↑)" aria-label="上一条 (↑)" disabled={!prev} onClick={() => prev && onNavigate(prev)}>
             <IconUp />
           </button>
-          <button className="icon-btn" title="下一条 (↓)" disabled={!next} onClick={() => next && onNavigate(next)}>
+          <button className="icon-btn" title="下一条 (↓)" aria-label="下一条 (↓)" disabled={!next} onClick={() => next && onNavigate(next)}>
             <IconDown />
           </button>
           {!readOnly && (
             <button
               className="icon-btn"
-              title="删除记录"
+              title="删除记录" aria-label="删除记录"
               onClick={async () => {
                 if (!(await confirmDialog('确定删除这条记录吗？可用 Ctrl+Z 撤销。', { danger: true, okText: '删除' }))) return
                 const target = next ?? prev
@@ -89,7 +89,7 @@ export default function RecordCard({ model, viewId, recordId, list, readOnly, on
               <IconTrash />
             </button>
           )}
-          <button className="icon-btn" title="关闭" onClick={onClose}>
+          <button className="icon-btn" title="关闭" aria-label="关闭" onClick={onClose}>
             <IconClose />
           </button>
         </header>

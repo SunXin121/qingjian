@@ -207,7 +207,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     credentials: 'same-origin',
   })
   const text = await res.text()
-  let data: any = null
+  let data: any
   try {
     data = text ? JSON.parse(text) : null
   } catch {

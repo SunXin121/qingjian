@@ -1,0 +1,94 @@
+/* ---------- callouts & fold blocks ---------- */
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout {
+  --callout: var(--c-info);
+  --callout-bg: var(--c-info-bg);
+  padding: 10px 16px;
+  margin: 10px 0;
+  border: 1px solid color-mix(in srgb, var(--callout) 20%, transparent);
+  border-radius: 10px;
+  background: var(--callout-bg);
+  box-sizing: border-box;
+}
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout::before {
+  display: none;
+}
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout-warn {
+  --callout: var(--c-warn);
+  --callout-bg: var(--c-warn-soft);
+}
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout-success {
+  --callout: var(--c-success);
+  --callout-bg: var(--c-success-bg);
+}
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout-error {
+  --callout: var(--c-error);
+  --callout-bg: var(--c-error-bg);
+}
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout-fold {
+  --callout: var(--c-text-3);
+  --callout-bg: var(--c-surface);
+  border-color: var(--c-border);
+}
+.ink-editor .milkdown .ProseMirror blockquote.ink-callout > p {
+  margin: 4px 0;
+}
+.ink-callout-title {
+  font-weight: 600;
+}
+.ink-callout-title.no-title {
+  font-weight: normal;
+}
+.ink-editor .ink-callout-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  color: var(--callout);
+  vertical-align: -2px;
+  user-select: none;
+}
+.ink-editor .ink-callout-icon {
+  display: inline-flex;
+}
+.ink-editor .ink-callout-label {
+  font-weight: 600;
+}
+.ink-editor .ink-callout-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-text-2);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.ink-editor .ink-callout-toggle:hover {
+  background: var(--c-hover);
+}
+.ink-editor .ink-callout-toggle.open {
+  transform: rotate(90deg);
+}
+/* the [!TYPE] marker is only visible while editing the title line */
+.ink-editor .ink-callout-marker {
+  font-size: 0;
+}
+.ink-editor .ink-callout-marker.editing {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: normal;
+  color: var(--callout);
+  background: var(--c-panel);
+  border-radius: 4px;
+  padding: 1px 0;
+}
+.ink-editor.readonly .ink-callout-marker {
+  font-size: 0;
+}
+.ink-callout.ink-collapsed > :not(.ink-callout-title) {
+  display: none;
+}

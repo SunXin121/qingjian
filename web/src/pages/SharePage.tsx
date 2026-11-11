@@ -160,7 +160,7 @@ function SharedDoc({
           <span className="crumb ellipsis">{doc ? untitled(doc.title) : ''}</span>
           <span className="spacer" />
           {headings.length > 0 && (
-            <button className="icon-btn outline-toggle" title="大纲" onClick={() => setOutlineOpen((v) => !v)}>
+            <button className="icon-btn outline-toggle" title="大纲" aria-label="大纲" onClick={() => setOutlineOpen((v) => !v)}>
               <IconList />
             </button>
           )}
@@ -292,7 +292,7 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
 
   const header = (extra: React.ReactNode) => (
     <header className="page-header share-header">
-      <button className="icon-btn mobile-only" title="目录" onClick={() => setSidebarOpen(true)}>
+      <button className="icon-btn mobile-only" title="目录" aria-label="目录" onClick={() => setSidebarOpen(true)}>
         <IconMenu />
       </button>
       {extra}

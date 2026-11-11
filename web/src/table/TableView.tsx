@@ -216,7 +216,7 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
           </button>
         ))}
         {!readOnly && (
-          <button className="bt-tab add" title="添加视图" onClick={(e) => addView(e.currentTarget)}>
+          <button className="bt-tab add" title="添加视图" aria-label="添加视图" onClick={(e) => addView(e.currentTarget)}>
             <IconPlus width={15} height={15} />
           </button>
         )}
@@ -288,29 +288,29 @@ export default function TableView({ model, readOnly, viewId, onViewChange }: Pro
             )}
             {active.type === 'grid' && (
               <>
-                <button className="icon-btn sm" title="上一个 (Shift+Enter)" disabled={!hits} onClick={() => step(-1)}>
+                <button className="icon-btn sm" title="上一个 (Shift+Enter)" aria-label="上一个 (Shift+Enter)" disabled={!hits} onClick={() => step(-1)}>
                   <IconUp width={14} height={14} />
                 </button>
-                <button className="icon-btn sm" title="下一个 (Enter)" disabled={!hits} onClick={() => step(1)}>
+                <button className="icon-btn sm" title="下一个 (Enter)" aria-label="下一个 (Enter)" disabled={!hits} onClick={() => step(1)}>
                   <IconDown width={14} height={14} />
                 </button>
               </>
             )}
-            <button className="icon-btn sm" title="关闭搜索 (Esc)" onClick={closeSearch}>
+            <button className="icon-btn sm" title="关闭搜索 (Esc)" aria-label="关闭搜索 (Esc)" onClick={closeSearch}>
               <IconClose width={14} height={14} />
             </button>
           </div>
         ) : (
-          <button className="bt-tool" title="搜索 (Ctrl+F)" onClick={openSearch}>
+          <button className="bt-tool" title="搜索 (Ctrl+F)" aria-label="搜索 (Ctrl+F)" onClick={openSearch}>
             <IconSearch width={15} height={15} />
           </button>
         )}
         {!readOnly && (
           <>
-            <button className="icon-btn hide-mobile" title="撤销 (Ctrl+Z)" disabled={!model.canUndo} onClick={() => model.undo()}>
+            <button className="icon-btn hide-mobile" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)" disabled={!model.canUndo} onClick={() => model.undo()}>
               <IconUndo width={16} height={16} />
             </button>
-            <button className="icon-btn hide-mobile" title="重做 (Ctrl+Shift+Z)" disabled={!model.canRedo} onClick={() => model.redo()}>
+            <button className="icon-btn hide-mobile" title="重做 (Ctrl+Shift+Z)" aria-label="重做 (Ctrl+Shift+Z)" disabled={!model.canRedo} onClick={() => model.redo()}>
               <IconRedo width={16} height={16} />
             </button>
           </>

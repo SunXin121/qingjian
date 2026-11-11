@@ -144,7 +144,7 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
                 <button
                   type="button"
                   className={`bt-color-dot c${c.color % 10}`}
-                  title="切换颜色"
+                  title="切换颜色" aria-label="切换颜色"
                   onClick={() => setChoices(choices.map((x, j) => (j === i ? { ...x, color: (x.color + 1) % TAG_COLORS } : x)))}
                 />
                 <input
@@ -163,7 +163,7 @@ function FieldEditor({ model, target, onClose }: { model: TableModel; target: Ta
                     }
                   }}
                 />
-                <button type="button" className="icon-btn sm" title="删除选项" onClick={() => setChoices(choices.filter((_, j) => j !== i))}>
+                <button type="button" className="icon-btn sm" title="删除选项" aria-label="删除选项" onClick={() => setChoices(choices.filter((_, j) => j !== i))}>
                   <IconClose width={14} height={14} />
                 </button>
               </div>

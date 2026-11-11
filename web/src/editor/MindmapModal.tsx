@@ -17,6 +17,7 @@ function loadMindMap() {
     import('simple-mind-map/src/plugins/TouchEvent.js') as Promise<MindMapModule>,
   ]).then(([core, ...plugins]) => {
     const MindMap = core.default
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- a plugin registration, not a React hook
     for (const p of plugins) MindMap.usePlugin(p.default)
     return MindMap
   })
@@ -161,7 +162,7 @@ export default function MindmapModal({ content, onSave, onClose }: Props) {
         <button className="btn sm" disabled={!hasActive} onClick={() => cmd('INSERT_NODE')} title="Enter">
           同级主题
         </button>
-        <button className="btn sm" disabled={!hasActive} onClick={editText} title="F2 / 双击">
+        <button className="btn sm" disabled={!hasActive} onClick={editText} title="F2 / 双击" aria-label="F2 / 双击">
           编辑文字
         </button>
         <button className="btn sm" disabled={!hasActive} onClick={() => cmd('REMOVE_NODE')} title="Delete">

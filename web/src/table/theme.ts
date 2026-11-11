@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Theme } from '@glideapps/glide-data-grid'
+import { onThemeChange } from '../theme'
 import { TAG_COLORS } from './types'
 
 export interface Palette {
@@ -112,7 +113,6 @@ export function useGridTheme(): Partial<Theme> {
     return r.theme
   })
   useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
     const update = () => {
       // tokens switch in CSS on the same tick; read them after styles recalc
       requestAnimationFrame(() => {
@@ -121,8 +121,7 @@ export function useGridTheme(): Partial<Theme> {
         setTheme(r.theme)
       })
     }
-    mq?.addEventListener('change', update)
-    return () => mq?.removeEventListener('change', update)
+    return onThemeChange(update)
   }, [])
   return theme
 }

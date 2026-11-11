@@ -1,0 +1,178 @@
+/* ---------- modal / menu / toast ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--c-overlay);
+  /* no backdrop-filter here: re-blurring the whole viewport on every frame of the
+     fade-in made dialogs stutter, and a 2px blur was barely visible anyway */
+  animation: fade 0.15s ease-out;
+}
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--c-panel);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  animation: pop 0.18s var(--ease);
+}
+.modal.wide {
+  max-width: 640px;
+}
+.modal-title {
+  padding: 20px 22px 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.modal-body {
+  padding: 10px 22px;
+  color: var(--c-text-2);
+  line-height: 1.6;
+}
+.modal-body.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field span:empty {
+  display: none;
+}
+.field span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-text-2);
+}
+.field input,
+.field textarea,
+.login-card input {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  outline: none;
+  background: var(--c-bg);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field input::placeholder,
+.field textarea::placeholder,
+.login-card input::placeholder {
+  color: var(--c-placeholder);
+}
+.field input:focus,
+.field textarea:focus,
+.login-card input:focus {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-ring);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px 20px;
+}
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+}
+.menu {
+  position: fixed;
+  min-width: 168px;
+  padding: 5px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  animation: pop 0.12s var(--ease);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--c-text);
+  text-align: left;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.menu-item:hover {
+  background: var(--c-hover);
+}
+.menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--c-text-3);
+}
+.menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.menu-item:hover .menu-icon {
+  color: var(--c-text-2);
+}
+.menu-item.danger,
+.menu-item.danger .menu-icon {
+  color: var(--c-danger);
+}
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--c-border);
+}
+.menu-item.danger:hover {
+  background: var(--c-error-bg);
+}
+.toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: calc(32px + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: var(--c-toast-bg);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+  animation: rise 0.2s var(--ease);
+  transition: opacity 0.3s;
+  max-width: 86vw;
+}
+.toast.leaving {
+  opacity: 0;
+}
+@keyframes fade {
+  from { opacity: 0; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+}

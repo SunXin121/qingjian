@@ -4,6 +4,7 @@ import { Modal, mount } from '../components/dialog'
 import { IconTable } from '../components/icons'
 import { viewIcon } from './TableView'
 import type { ViewType } from './types'
+import './table.css'
 
 /** Lets the user pick a table view to embed into a document. */
 export function pickTableView(): Promise<{ table: string; view: string } | null> {

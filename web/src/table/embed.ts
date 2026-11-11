@@ -7,6 +7,7 @@ import { cellValue, displayText, KANBAN_EMPTY, kanbanField, kanbanLayout, primar
 import type { AttachmentValue, Field, Rec, TableData } from './types'
 import { baseField, ratingMax } from './types'
 import { derive } from './compute'
+import './table.css'
 
 export interface EmbedRef {
   table?: string

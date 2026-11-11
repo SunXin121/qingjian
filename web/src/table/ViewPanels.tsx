@@ -63,7 +63,7 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
           </span>
         )
         const remove = (
-          <button className="icon-btn sm" title="删除条件" onClick={() => set(filter.conds.filter((_, j) => j !== i))}>
+          <button className="icon-btn sm" title="删除条件" aria-label="删除条件" onClick={() => set(filter.conds.filter((_, j) => j !== i))}>
             <IconClose width={14} height={14} />
           </button>
         )
@@ -352,7 +352,7 @@ function RulesPanel({ model, viewId, kind }: { model: TableModel; viewId: string
     </select>
   )
   const remove = (i: number) => (
-    <button className="icon-btn sm" title="删除" onClick={() => set(rules.filter((_, j) => j !== i))}>
+    <button className="icon-btn sm" title="删除" aria-label="删除" onClick={() => set(rules.filter((_, j) => j !== i))}>
       <IconClose width={14} height={14} />
     </button>
   )
@@ -495,7 +495,7 @@ export function FieldsPanel({ model, viewId, readOnly }: { model: TableModel; vi
             <span className="ellipsis bt-field-name">{f.name}</span>
             <span className="bt-field-type">{i === 0 ? '主字段' : fieldTypeLabel(f.type)}</span>
             {!readOnly && (
-              <button className="icon-btn sm" title="编辑字段" onClick={(e) => openFieldEditor(e.currentTarget, model, { field: f })}>
+              <button className="icon-btn sm" title="编辑字段" aria-label="编辑字段" onClick={(e) => openFieldEditor(e.currentTarget, model, { field: f })}>
                 <IconEdit width={14} height={14} />
               </button>
             )}
@@ -630,7 +630,7 @@ function TitleOptions({ model, view, fields }: { model: TableModel; view: View; 
             <span key={id} className="bt-title-field">
               <span className="ellipsis">{byId.get(id)!.name}</span>
               {shown.length > 1 && (
-                <button className="icon-btn sm" title="移除" onClick={() => setFields(shown.filter((x) => x !== id))}>
+                <button className="icon-btn sm" title="移除" aria-label="移除" onClick={() => setFields(shown.filter((x) => x !== id))}>
                   <IconClose width={12} height={12} />
                 </button>
               )}

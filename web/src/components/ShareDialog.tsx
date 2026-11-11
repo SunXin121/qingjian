@@ -26,7 +26,7 @@ function PasswordInput({ value, onChange, autoFocus, placeholder }: { value: str
   return (
     <span className="share-pw-input">
       <input autoFocus={autoFocus} value={value} placeholder={placeholder} autoComplete="off" spellCheck={false} onChange={(e) => onChange(e.target.value.trim())} />
-      <button type="button" className="btn sm" title="重新随机生成" onClick={() => onChange(randomPassword())}>
+      <button type="button" className="btn sm" title="重新随机生成" aria-label="重新随机生成" onClick={() => onChange(randomPassword())}>
         随机生成
       </button>
     </span>

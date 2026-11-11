@@ -1,0 +1,212 @@
+/* ================= responsive ================= */
+
+/* medium: outline becomes a toggled drawer */
+@media (max-width: 1279px) {
+  .outline-toggle {
+    display: inline-flex;
+  }
+  .outline {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    width: auto;
+    max-height: none;
+    padding: 0;
+    display: none;
+    background: var(--c-overlay-soft);
+    animation: fade 0.15s;
+  }
+  .outline.open {
+    display: block;
+  }
+  .outline-inner {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(300px, 82vw);
+    overflow-y: auto;
+    padding: calc(20px + var(--safe-t)) 12px calc(20px + var(--safe-b));
+    border-left: 0;
+    background: var(--c-panel);
+    box-shadow: var(--shadow);
+  }
+  .outline-item {
+    border-radius: var(--radius-sm);
+  }
+  .outline-item::before {
+    display: none;
+  }
+  .outline-item:hover {
+    background: var(--c-hover);
+  }
+}
+
+/* tablet: narrower paddings */
+@media (max-width: 1023px) {
+  .doc-body {
+    padding: 40px 40px 30vh;
+  }
+  .page-body {
+    padding: 32px 28px 80px;
+  }
+}
+
+/* phone: off-canvas sidebar, single column */
+@media (max-width: 767px) {
+  :root {
+    --side-w: min(300px, 84vw);
+    --header-h: 48px;
+  }
+  .mobile-only {
+    display: inline-flex !important;
+  }
+  .content {
+    margin-left: 0;
+  }
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s var(--ease);
+    box-shadow: none;
+  }
+  .shell.sidebar-open .sidebar {
+    transform: none;
+    box-shadow: var(--shadow);
+  }
+  .shell.sidebar-open .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: var(--c-overlay);
+    animation: fade 0.15s;
+  }
+  .search-trigger kbd {
+    display: none;
+  }
+  .page-header {
+    padding-left: 8px;
+    padding-right: 8px;
+    gap: 4px;
+  }
+  .crumb {
+    max-width: 30vw;
+  }
+  .page-body {
+    padding: 20px 16px 80px;
+  }
+  .page-title {
+    font-size: 24px;
+  }
+  .section-head {
+    margin-top: 28px;
+  }
+  .repo-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .repo-card .icon-btn {
+    opacity: 1;
+  }
+  .doc-row-repo {
+    display: none;
+  }
+  .doc-row-time {
+    width: auto;
+  }
+  .doc-body {
+    padding: 24px 18px 40vh;
+  }
+  .doc-title {
+    font-size: 28px;
+    margin-bottom: 14px;
+  }
+  .banner {
+    padding: 10px 16px;
+  }
+  .versions-body {
+    flex-direction: column;
+  }
+  .versions-list {
+    width: auto;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .version-item {
+    width: auto;
+    flex-direction: column;
+    justify-content: center;
+    height: 48px;
+    gap: 0;
+  }
+  .search-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+  .search-panel {
+    max-width: none;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    padding-top: var(--safe-t);
+  }
+  .search-results {
+    flex: 1;
+    max-height: none;
+  }
+  .modal-backdrop:not(.search-backdrop) {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal {
+    max-width: none;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: var(--safe-b);
+    animation: sheet 0.25s var(--ease);
+  }
+  .modal-actions .btn {
+    flex: 1;
+    height: 40px;
+  }
+  .field input,
+  .field textarea {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+}
+@keyframes sheet {
+  from { transform: translateY(40px); opacity: 0; }
+}
+
+/* touch devices: bigger targets, always-visible actions, no drag handle */
+@media (hover: none) {
+  .tree-item {
+    height: 40px;
+  }
+  .tree-actions {
+    display: flex;
+  }
+  .tree-actions .icon-btn.sm {
+    width: 32px;
+    height: 32px;
+  }
+  .side-link {
+    height: 40px;
+  }
+  .menu-item {
+    height: 44px;
+  }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+  }
+  .repo-card .icon-btn {
+    opacity: 1;
+  }
+  .ink-editor .milkdown .milkdown-block-handle {
+    display: none !important;
+  }
+}

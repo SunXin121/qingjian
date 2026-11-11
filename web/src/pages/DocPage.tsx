@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, ApiError, formatTime, type Doc } from '../api'
-import { confirmDialog, openMenu, toast } from '../components/dialog'
+import { confirmDialog, Modal, mount, openMenu, toast } from '../components/dialog'
 import { IconCamera, IconChevron, IconDownload, IconHistory, IconList, IconMore, IconShare, IconTrash, RepoMark } from '../components/icons'
 import Backlinks from '../components/Backlinks'
 import Outline, { parseHeadings, type Heading } from '../components/Outline'
@@ -10,6 +10,9 @@ import { openShareDialog } from '../components/ShareDialog'
 import VersionsPanel from '../components/VersionsPanel'
 import Editor from '../editor/Editor'
 import { useStore } from '../store'
+import { onThemeChange } from '../theme'
+
+const DiffView = lazy(() => import('../components/DiffView'))
 
 type Status = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict'
 
@@ -143,16 +146,37 @@ export default function DocPage() {
     const onUnload = (e: BeforeUnloadEvent) => {
       if (dirty.current) e.preventDefault()
     }
+    // A hidden tab can be frozen or discarded without any unload event (switching apps
+    // on a phone), so whatever is still waiting for the autosave timer goes out now.
+    const onHide = () => {
+      if (document.visibilityState === 'hidden' && dirty.current && statusRef.current !== 'conflict') save()
+    }
     window.addEventListener('keydown', onKey)
     window.addEventListener('beforeunload', onUnload)
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onHide)
     return () => {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('beforeunload', onUnload)
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onHide)
       clearTimeout(timer.current)
       if (dirty.current) save()
     }
   }, [save])
 
+  useEffect(() => {
+    if (doc) document.title = `${title.trim() || '无标题文档'} - 青简`
+  }, [title, doc])
+  // the code editor's theme is fixed when the editor is created: rebuild it from the
+  // saved content when the page switches between light and dark
+  useEffect(
+    () =>
+      onThemeChange(() => {
+        if (statusRef.current !== 'conflict') save().then(load)
+      }),
+    [save, load],
+  )
   useEffect(() => {
     const el = titleEl.current
     if (el) {
@@ -169,6 +193,29 @@ export default function DocPage() {
     [schedule],
   )
 
+  /** What the other window saved, next to what is in this editor. */
+  const showConflictDiff = async () => {
+    try {
+      const remote = await api.doc(docId)
+      const local = getMd.current()
+      mount((close) => (
+        <Modal title="与服务器上的版本对比" onClose={close} wide>
+          <div className="modal-body conflict-diff">
+            <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+              <DiffView oldText={remote.markdown} newText={local} oldLabel="服务器上的版本" newLabel="当前窗口的内容" />
+            </Suspense>
+          </div>
+          <div className="modal-actions">
+            <button className="btn" onClick={close}>
+              关闭
+            </button>
+          </div>
+        </Modal>
+      ))
+    } catch (e: any) {
+      toast(e.message)
+    }
+  }
   const repo = repos.find((r) => r.id === repoId)
 
   const share = () => openShareDialog({ target_type: 'node', target_id: docId, title: titleRef.current || '无标题文档' })
@@ -232,16 +279,16 @@ export default function DocPage() {
         <span className={'save-status ' + status}>{statusText[status]}</span>
         <span className="spacer" />
         {headings.length > 0 && (
-          <button className="icon-btn outline-toggle" title="大纲" onClick={() => setOutlineOpen((v) => !v)}>
+          <button className="icon-btn outline-toggle" title="大纲" aria-label="大纲" onClick={() => setOutlineOpen((v) => !v)}>
             <IconList />
           </button>
         )}
-        <button className="icon-btn hide-mobile" title="分享" onClick={share}>
+        <button className="icon-btn hide-mobile" title="分享" aria-label="分享" onClick={share}>
           <IconShare />
         </button>
         <button
           className="icon-btn"
-          title="历史版本"
+          title="历史版本" aria-label="历史版本"
           onClick={async () => {
             await save()
             setVersionsOpen(true)
@@ -249,7 +296,7 @@ export default function DocPage() {
         >
           <IconHistory />
         </button>
-        <button className="icon-btn" title="更多" onClick={(e) => more(e.currentTarget)}>
+        <button className="icon-btn" title="更多" aria-label="更多" onClick={(e) => more(e.currentTarget)}>
           <IconMore />
         </button>
       </PageHeader>
@@ -257,6 +304,9 @@ export default function DocPage() {
       {status === 'conflict' && (
         <div className="banner warn">
           <span>这篇文档在其他窗口或设备上被修改过。</span>
+          <button className="btn sm" onClick={showConflictDiff}>
+            查看差异
+          </button>
           <button className="btn sm" onClick={load}>
             放弃本地修改并加载最新
           </button>

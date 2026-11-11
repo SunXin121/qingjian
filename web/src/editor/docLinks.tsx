@@ -10,6 +10,7 @@ import { $prose } from '@milkdown/kit/utils'
 import { api, nodePath, type NodeRef, type NodeRenamed } from '../api'
 import { openPopover, toast } from '../components/dialog'
 import { IconDoc, IconDocPlus, IconTable } from '../components/icons'
+import '../table/table.css'
 
 /** Path of an in-app document / table page, or null for any other link. */
 export function nodeLinkPath(href: string | null): string | null {

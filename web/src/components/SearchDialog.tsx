@@ -23,6 +23,7 @@ export default function SearchDialog() {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,18 +52,28 @@ export default function SearchDialog() {
       return
     }
     setLoading(true)
+    // a slow answer to an earlier query must not replace the results of a later one
+    let stale = false
     const t = setTimeout(() => {
       api
         .search(q)
         .then((r) => {
+          if (stale) return
           setHits(r)
           setSel(0)
         })
-        .catch(() => setHits([]))
-        .finally(() => setLoading(false))
+        .catch(() => !stale && setHits([]))
+        .finally(() => !stale && setLoading(false))
     }, 180)
-    return () => clearTimeout(t)
+    return () => {
+      stale = true
+      clearTimeout(t)
+    }
   }, [q])
+  // keep the keyboard selection visible in a long result list
+  useEffect(() => {
+    listRef.current?.querySelector('.search-hit.sel')?.scrollIntoView({ block: 'nearest' })
+  }, [sel])
 
   if (!searchOpen) return null
   const list = q.trim() ? hits : recent
@@ -73,14 +84,15 @@ export default function SearchDialog() {
 
   return (
     <div className="modal-backdrop search-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setSearchOpen(false)}>
-      <div className="search-panel">
+      <div className="search-panel" role="dialog" aria-modal="true" aria-label="搜索">
         <div className="search-input">
           <IconSearch />
           <input
             ref={inputRef}
             autoFocus
             value={q}
-            placeholder="搜索文档标题和内容…"
+            placeholder="搜索文档、表格的标题和内容…"
+            aria-label="搜索"
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') setSearchOpen(false)
@@ -97,7 +109,7 @@ export default function SearchDialog() {
             取消
           </button>
         </div>
-        <div className="search-results">
+        <div className="search-results" ref={listRef}>
           {!q.trim() && recent.length > 0 && <div className="search-group">最近编辑</div>}
           {list.map((h, i) => (
             <button key={h.id} className={'search-hit' + (i === sel ? ' sel' : '')} onMouseEnter={() => setSel(i)} onClick={() => go(h)}>
@@ -116,7 +128,7 @@ export default function SearchDialog() {
               </div>
             </button>
           ))}
-          {q.trim() && !loading && hits.length === 0 && <div className="search-empty">没有找到相关文档</div>}
+          {q.trim() && !loading && hits.length === 0 && <div className="search-empty">没有找到相关内容</div>}
         </div>
       </div>
     </div>
