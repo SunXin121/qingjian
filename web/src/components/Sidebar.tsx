@@ -5,6 +5,7 @@ import { childrenMap, nodeTitle, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast, type MenuItem } from './dialog'
 import { canPickFolder, droppedEntries, isFileDrag, pickImport, runImport } from './ImportDialog'
 import { editRepoDialog, repoMenu } from './RepoDialog'
+import { Caption, cn, IconButton, Kbd } from './ui'
 import { useWindowed } from './useWindowed'
 import {
   IconBack,
@@ -43,7 +44,7 @@ function loadExpanded(): Set<string> {
 }
 
 export default function Sidebar() {
-  const { repos, loadRepos, setSidebarOpen, setSearchOpen } = useStore()
+  const { repos, loadRepos, sidebarOpen, setSidebarOpen, setSearchOpen } = useStore()
   const repoMatch = useMatch('/r/:repoId/*')
   const repoId = repoMatch?.params.repoId
   const navigate = useNavigate()
@@ -66,66 +67,111 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="sidebar" onClick={(e) => (e.target as Element).closest('a') && setSidebarOpen(false)}>
-      <div className="sidebar-head">
-        <Link to="/" className="brand">
-          <Logo size={26} />
-          <span className="brand-name">青简</span>
+    <aside
+      className={cn(
+        'fixed inset-y-0 left-0 z-30 flex w-(--side-w) flex-col border-r border-line-subtle bg-sunken pt-(--safe-t)',
+        'max-md:w-[min(300px,84vw)] max-md:-translate-x-full max-md:transition-transform max-md:duration-(--dur-base) max-md:ease-out',
+        sidebarOpen && 'max-md:translate-x-0 max-md:shadow-modal',
+      )}
+      onClick={(e) => (e.target as Element).closest('a') && setSidebarOpen(false)}
+    >
+      <div className="flex h-12 shrink-0 items-center px-3">
+        <Link to="/" className="-ml-1 flex items-center gap-2.5 rounded-md px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-hover">
+          <Logo size={24} className="shadow-[0_1px_2px_rgb(0_0_0/0.12)] rounded-[7px]" />
+          <span className="font-serif text-[17px] font-bold tracking-[0.08em] text-ink">青简</span>
         </Link>
       </div>
-      <button className="search-trigger" onClick={() => setSearchOpen(true)}>
-        <IconSearch width={16} height={16} />
-        <span>搜索文档</span>
-        <kbd>Ctrl K</kbd>
+      <button
+        className="group mx-2.5 mb-2 flex h-9 shrink-0 items-center gap-2 rounded-md border border-line-subtle bg-[color-mix(in_oklab,var(--bg-surface)_70%,transparent)] px-2.5 text-[12.5px] text-ink-4 transition-[border-color,color,background-color] duration-(--dur-fast) hover:border-line hover:bg-surface hover:text-ink-3 md:h-8"
+        onClick={() => setSearchOpen(true)}
+      >
+        <IconSearch width={14} height={14} />
+        <span className="flex-1 text-left">搜索</span>
+        <Kbd keys={['Ctrl', 'K']} className="max-md:hidden" />
       </button>
 
       {repoId ? (
         <RepoTree repoId={repoId} />
       ) : (
         <>
-          <nav className="side-nav">
-            <NavLink to="/" end className="side-link">
-              <IconHome /> 首页
-            </NavLink>
-            <NavLink to="/shares" className="side-link">
-              <IconShare /> 分享管理
-            </NavLink>
-            <NavLink to="/trash" className="side-link">
-              <IconTrash /> 回收站
-            </NavLink>
+          <nav className="flex flex-col gap-px px-2">
+            <SideLink to="/" end icon={<IconHome />}>
+              首页
+            </SideLink>
+            <SideLink to="/shares" icon={<IconShare />}>
+              分享管理
+            </SideLink>
+            <SideLink to="/trash" icon={<IconTrash />}>
+              回收站
+            </SideLink>
           </nav>
-          <div className="side-section">
-            <span>知识库</span>
-            <button className="icon-btn" title="新建知识库" aria-label="新建知识库" onClick={newRepo}>
-              <IconPlus width={15} height={15} />
-            </button>
-          </div>
-          <div className="side-scroll">
+          <Caption
+            className="mt-4 px-4"
+            action={
+              <IconButton label="新建知识库" size="sm" onClick={newRepo} className="-mr-1">
+                <IconPlus width={14} height={14} />
+              </IconButton>
+            }
+          >
+            知识库
+          </Caption>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
             {repos.map((r) => (
-              <NavLink key={r.id} to={`/r/${r.id}`} className="side-link">
-                <RepoMark repo={r} className="side-dot" /> <span className="ellipsis">{r.name}</span>
-                <span className="side-count">{r.doc_count || ''}</span>
-              </NavLink>
+              <SideLink key={r.id} to={`/r/${r.id}`} icon={<RepoMark repo={r} size={18} />} count={r.doc_count || undefined}>
+                {r.name}
+              </SideLink>
             ))}
             {repos.length === 0 && (
-              <button className="side-empty-btn" onClick={newRepo}>
-                <IconPlus width={15} height={15} /> 新建第一个知识库
+              <button
+                className="flex h-9 w-full items-center gap-2 rounded-md border border-dashed border-line-strong px-2.5 text-[12.5px] text-ink-3 transition-colors duration-(--dur-fast) hover:border-accent hover:text-accent"
+                onClick={newRepo}
+              >
+                <IconPlus width={14} height={14} /> 新建第一个知识库
               </button>
             )}
           </div>
         </>
       )}
 
-      <div className="sidebar-foot">
-        <NavLink to="/settings" className="sidebar-settings" title="设置">
-          <IconSettings width={17} height={17} />
+      <div className="flex shrink-0 items-center gap-1 border-t border-line-subtle px-2 pt-2 pb-[calc(8px+var(--safe-b))]">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              'flex h-9 flex-1 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-(--dur-fast) md:h-8',
+              isActive ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-hover hover:text-ink',
+            )
+          }
+        >
+          <IconSettings width={16} height={16} className="opacity-80" />
           <span>设置</span>
         </NavLink>
-        <button className="icon-btn" title="退出登录" aria-label="退出登录" onClick={logout}>
-          <IconLogout width={17} height={17} />
-        </button>
+        <IconButton label="退出登录" onClick={logout}>
+          <IconLogout width={16} height={16} />
+        </IconButton>
       </div>
     </aside>
+  )
+}
+
+/** A navigation row in the sidebar. */
+function SideLink({ to, end, icon, count, children }: { to: string; end?: boolean; icon: React.ReactNode; count?: number; children: React.ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        cn(
+          'group flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-(--dur-fast) md:h-8 touch:h-10',
+          '[&>svg]:size-4 [&>svg]:shrink-0',
+          isActive ? 'bg-accent-soft font-medium text-accent [&>svg]:text-accent' : 'text-ink-2 hover:bg-hover hover:text-ink [&>svg]:text-ink-3',
+        )
+      }
+    >
+      {icon}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {count !== undefined && <span className="tabular shrink-0 pl-1.5 text-[11.5px] text-ink-4 group-[.active]:text-accent/70">{count}</span>}
+    </NavLink>
   )
 }
 
@@ -333,13 +379,23 @@ function RepoTree({ repoId }: { repoId: string }) {
   const renderRow = ({ n, depth }: { n: TreeNode; depth: number }) => {
     const children = kids.get(n.id) ?? []
     const open = expanded.has(n.id)
-    const cls = ['tree-item', n.id === activeId && 'active', drag?.over === n.id && `drop-${drag.pos}`, fileDrop === n.id && 'drop-inside', drag?.id === n.id && 'dragging'].filter(Boolean).join(' ')
+    const active = n.id === activeId
+    const dropInside = (drag?.over === n.id && drag.pos === 'inside') || fileDrop === n.id
+    const Icon = n.type === 'group' ? (open ? IconFolderOpen : IconFolder) : n.type === 'table' ? IconTable : IconDoc
     return (
       <div
         key={n.id}
         data-row
-        className={cls}
-        style={{ paddingLeft: 8 + depth * 16 }}
+        className={cn(
+          'group relative mb-px flex h-8 cursor-pointer items-center gap-1 rounded-md pr-1 text-[13px] select-none touch:h-10',
+          'transition-colors duration-(--dur-fast)',
+          active ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-hover hover:text-ink',
+          dropInside && 'bg-accent-soft shadow-[inset_0_0_0_1px_var(--accent)]',
+          drag?.id === n.id && 'opacity-40',
+          drag?.over === n.id && drag.pos === 'before' && 'before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-accent',
+          drag?.over === n.id && drag.pos === 'after' && 'after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-accent',
+        )}
+        style={{ paddingLeft: 6 + depth * 16 }}
         draggable
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'move'
@@ -358,37 +414,45 @@ function RepoTree({ repoId }: { repoId: string }) {
         }}
       >
         <button
-          className={'tree-toggle' + (open ? ' open' : '') + (children.length ? '' : ' invisible')}
+          className={cn(
+            'grid size-5 shrink-0 place-items-center rounded-[4px] text-ink-4 transition-[transform,background-color] duration-(--dur-fast) ease-out hover:bg-active hover:text-ink-2',
+            open && 'rotate-90',
+            !children.length && 'invisible',
+          )}
+          tabIndex={-1}
+          aria-label={open ? '折叠' : '展开'}
           onClick={(e) => {
             e.stopPropagation()
             toggle(n.id)
           }}
         >
-          <IconChevron width={14} height={14} />
+          <IconChevron width={13} height={13} />
         </button>
-        {n.type === 'group' ? open ? <IconFolderOpen className="tree-icon" /> : <IconFolder className="tree-icon" /> : n.type === 'table' ? <IconTable className="tree-icon" /> : <IconDoc className="tree-icon" />}
-        <span className="tree-title">{nodeTitle(n)}</span>
-        <span className="tree-actions">
-          <button
-            className="icon-btn sm"
-            title="新建子文档" aria-label="新建子文档"
+        <Icon width={15} height={15} className={cn('shrink-0', active ? 'text-accent' : 'text-ink-3')} />
+        <span className="min-w-0 flex-1 truncate pl-1">{nodeTitle(n)}</span>
+        <span className="hidden shrink-0 gap-px group-hover:flex touch:flex">
+          <IconButton
+            label="新建子文档"
+            size="sm"
+            className="hover:bg-active"
             onClick={(e) => {
               e.stopPropagation()
               create(n.id, 'doc')
             }}
           >
-            <IconPlus width={15} height={15} />
-          </button>
-          <button
-            className="icon-btn sm"
-            title="更多" aria-label="更多"
+            <IconPlus width={14} height={14} />
+          </IconButton>
+          <IconButton
+            label="更多"
+            size="sm"
+            className="hover:bg-active"
             onClick={(e) => {
               e.stopPropagation()
               nodeMenu(e.currentTarget, n)
             }}
           >
-            <IconMore width={15} height={15} />
-          </button>
+            <IconMore width={14} height={14} />
+          </IconButton>
         </span>
       </div>
     )
@@ -396,17 +460,16 @@ function RepoTree({ repoId }: { repoId: string }) {
 
   return (
     <>
-      <div className="repo-head">
-        <Link to="/" className="icon-btn" title="返回首页">
-          <IconBack width={17} height={17} />
+      <div className="flex shrink-0 items-center gap-0.5 px-2 pb-1.5">
+        <Link to="/" className="grid size-9 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-hover hover:text-ink md:size-7" title="返回首页" aria-label="返回首页">
+          <IconBack width={16} height={16} />
         </Link>
-        <Link to={`/r/${repoId}`} className="repo-name">
-          {repo && <RepoMark repo={repo} className="side-dot" />}
-          <span>{repo?.name ?? '知识库'}</span>
+        <Link to={`/r/${repoId}`} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-[13.5px] font-semibold text-ink transition-colors hover:bg-hover">
+          {repo && <RepoMark repo={repo} size={20} />}
+          <span className="truncate">{repo?.name ?? '知识库'}</span>
         </Link>
-        <button
-          className="icon-btn"
-          title="新建" aria-label="新建"
+        <IconButton
+          label="新建"
           onClick={(e) =>
             openMenu(e.currentTarget, [
               { label: '新建文档', icon: <IconDocPlus />, onClick: () => create(null, 'doc') },
@@ -415,12 +478,11 @@ function RepoTree({ repoId }: { repoId: string }) {
             ])
           }
         >
-          <IconPlus />
-        </button>
+          <IconPlus width={16} height={16} />
+        </IconButton>
         {repo && (
-          <button
-            className="icon-btn"
-            title="知识库设置" aria-label="知识库设置"
+          <IconButton
+            label="知识库设置"
             onClick={(e) =>
               repoMenu(
                 e.currentTarget,
@@ -431,12 +493,15 @@ function RepoTree({ repoId }: { repoId: string }) {
               )
             }
           >
-            <IconMore />
-          </button>
+            <IconMore width={16} height={16} />
+          </IconButton>
         )}
       </div>
       <div
-        className={'side-scroll tree' + (fileDrop === null ? ' file-drop' : '')}
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2',
+          fileDrop === null && 'rounded-md bg-accent-softer shadow-[inset_0_0_0_1px_var(--accent-ring)]',
+        )}
         onDragOver={(e) => {
           if (drag || !isFileDrag(e.dataTransfer)) return
           e.preventDefault()
@@ -454,16 +519,19 @@ function RepoTree({ repoId }: { repoId: string }) {
           <div style={{ height: win.after }} />
         </div>
         {nodes.length === 0 && (
-          <div className="side-empty">
-            <button className="btn" onClick={() => create(null, 'doc')}>
-              <IconDocPlus width={16} height={16} /> 新建第一篇文档
+          <div className="flex flex-col items-center gap-3 px-3 py-6 text-center">
+            <button
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-[12.5px] font-medium text-ink shadow-sm transition-colors hover:bg-hover"
+              onClick={() => create(null, 'doc')}
+            >
+              <IconDocPlus width={15} height={15} /> 新建第一篇文档
             </button>
-            <p className="side-hint">也可以从「···」菜单导入 Markdown，或把文件、文件夹拖到这里</p>
+            <p className="m-0 text-[11.5px] leading-relaxed text-ink-4">也可以从「···」菜单导入 Markdown，或把文件、文件夹拖到这里</p>
           </div>
         )}
         {/* drop zone to move items to the end of root */}
         <div
-          className="tree-tail"
+          className="h-10"
           onDragOver={(e) => drag && e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault()

@@ -1,16 +1,18 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { api, ApiError, formatTime, type Doc } from '../api'
-import { confirmDialog, Modal, mount, openMenu, toast } from '../components/dialog'
-import { IconCamera, IconChevron, IconDownload, IconHistory, IconList, IconMore, IconShare, IconTrash, RepoMark } from '../components/icons'
+import { confirmDialog, Modal, ModalActions, ModalBody, mount, openMenu, toast } from '../components/dialog'
+import { IconCamera, IconDownload, IconHistory, IconList, IconMore, IconShare, IconTrash, RepoMark } from '../components/icons'
 import Backlinks from '../components/Backlinks'
 import Outline, { parseHeadings, type Heading } from '../components/Outline'
-import PageHeader from '../components/PageHeader'
+import { Crumb } from '../components/page'
+import PageHeader, { Crumbs } from '../components/PageHeader'
+import { Button, cn, EmptyState, IconButton, Loading } from '../components/ui'
 import { openShareDialog } from '../components/ShareDialog'
 import VersionsPanel from '../components/VersionsPanel'
 import Editor from '../editor/Editor'
 import { useStore } from '../store'
-import { onThemeChange } from '../theme'
+import { onThemeModeChange } from '../theme'
 import { exportMarkdown } from '../components/ExportDialog'
 
 const DiffView = lazy(() => import('../components/DiffView'))
@@ -173,7 +175,7 @@ export default function DocPage() {
   // saved content when the page switches between light and dark
   useEffect(
     () =>
-      onThemeChange(() => {
+      onThemeModeChange(() => {
         if (statusRef.current !== 'conflict') save().then(load)
       }),
     [save, load],
@@ -200,17 +202,15 @@ export default function DocPage() {
       const remote = await api.doc(docId)
       const local = getMd.current()
       mount((close) => (
-        <Modal title="与服务器上的版本对比" onClose={close} wide>
-          <div className="modal-body conflict-diff">
-            <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+        <Modal title="与服务器上的版本对比" onClose={close} wide className="sm:max-w-[880px]">
+          <ModalBody className="conflict-diff p-0">
+            <Suspense fallback={<Loading />}>
               <DiffView oldText={remote.markdown} newText={local} oldLabel="服务器上的版本" newLabel="当前窗口的内容" />
             </Suspense>
-          </div>
-          <div className="modal-actions">
-            <button className="btn" onClick={close}>
-              关闭
-            </button>
-          </div>
+          </ModalBody>
+          <ModalActions>
+            <Button onClick={close}>关闭</Button>
+          </ModalActions>
         </Modal>
       ))
     } catch (e: any) {
@@ -250,13 +250,19 @@ export default function DocPage() {
 
   if (error) {
     return (
-      <div className="page">
+      <div>
         <PageHeader />
-        <div className="empty-state">{error}</div>
+        <EmptyState title="打不开这篇文档">{error}</EmptyState>
       </div>
     )
   }
-  if (!doc) return <div className="page"><PageHeader /><div className="ink-loading">加载中…</div></div>
+  if (!doc)
+    return (
+      <div>
+        <PageHeader />
+        <Loading />
+      </div>
+    )
 
   const statusText: Record<Status, string> = {
     saved: savedAt ? `已保存 · ${formatTime(savedAt)}` : '已保存',
@@ -267,62 +273,59 @@ export default function DocPage() {
   }
 
   return (
-    <div className="page doc-page">
+    <div className="flex min-h-dvh flex-col">
       <PageHeader>
-        <nav className="crumbs">
-          <Link to={`/r/${repoId}`} className="crumb-link">
-            {repo && <RepoMark repo={repo} className="side-dot sm" />}
-            <span className="ellipsis">{repo?.name}</span>
-          </Link>
-          <IconChevron className="crumb-sep" width={14} height={14} />
-          <span className="crumb-cur ellipsis">{title.trim() || '无标题文档'}</span>
-        </nav>
-        <span className={'save-status ' + status}>{statusText[status]}</span>
-        <span className="spacer" />
+        <Crumbs>
+          <Crumb to={`/r/${repoId}`} icon={repo && <RepoMark repo={repo} size={18} />}>
+            {repo?.name}
+          </Crumb>
+          <Crumb current>{title.trim() || '无标题文档'}</Crumb>
+          <SaveState status={status} label={statusText[status]} />
+        </Crumbs>
         {headings.length > 0 && (
-          <button className="icon-btn outline-toggle" title="大纲" aria-label="大纲" onClick={() => setOutlineOpen((v) => !v)}>
-            <IconList />
-          </button>
+          <IconButton label="大纲" className="xl:hidden" active={outlineOpen} onClick={() => setOutlineOpen((v) => !v)}>
+            <IconList width={16} height={16} />
+          </IconButton>
         )}
-        <button className="icon-btn hide-mobile" title="分享" aria-label="分享" onClick={share}>
-          <IconShare />
-        </button>
-        <button
-          className="icon-btn"
-          title="历史版本" aria-label="历史版本"
+        <IconButton label="分享" className="max-md:hidden" onClick={share}>
+          <IconShare width={16} height={16} />
+        </IconButton>
+        <IconButton
+          label="历史版本"
           onClick={async () => {
             await save()
             setVersionsOpen(true)
           }}
         >
-          <IconHistory />
-        </button>
-        <button className="icon-btn" title="更多" aria-label="更多" onClick={(e) => more(e.currentTarget)}>
-          <IconMore />
-        </button>
+          <IconHistory width={16} height={16} />
+        </IconButton>
+        <IconButton label="更多" onClick={(e) => more(e.currentTarget)}>
+          <IconMore width={16} height={16} />
+        </IconButton>
       </PageHeader>
 
       {status === 'conflict' && (
-        <div className="banner warn">
-          <span>这篇文档在其他窗口或设备上被修改过。</span>
-          <button className="btn sm" onClick={showConflictDiff}>
+        <div className="flex flex-wrap items-center gap-2 border-b border-[color-mix(in_oklab,var(--warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--warning)_10%,var(--bg-editor))] px-4 py-2.5 text-[12.5px] text-ink md:px-6">
+          <span className="mr-auto">这篇文档在其他窗口或设备上被修改过。</span>
+          <Button size="sm" onClick={showConflictDiff}>
             查看差异
-          </button>
-          <button className="btn sm" onClick={load}>
+          </Button>
+          <Button size="sm" onClick={load}>
             放弃本地修改并加载最新
-          </button>
-          <button className="btn sm danger" onClick={() => save({ force: true })}>
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => save({ force: true })}>
             用当前内容覆盖
-          </button>
+          </Button>
         </div>
       )}
 
-      <div className="doc-layout">
-        <main className="doc-main">
-          <div className="doc-body">
+      <div className="flex flex-1 items-start">
+        <main className="doc-main min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-[calc(var(--prose-width)+128px)] px-5 pt-8 pb-[30vh] md:px-16 md:pt-14">
             <textarea
               ref={titleEl}
-              className="doc-title"
+              className="mb-4 block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[28px] leading-[1.3] font-bold tracking-[-0.015em] text-ink outline-none placeholder:text-ink-4 focus-visible:outline-none md:mb-5 md:text-[34px]"
+              style={{ fontFamily: 'var(--prose-font)' }}
               rows={1}
               value={title}
               placeholder="无标题文档"
@@ -363,6 +366,18 @@ export default function DocPage() {
   )
 }
 
+/** Save state next to the breadcrumbs: a dot that pulses while there are unsaved edits. */
+function SaveState({ status, label }: { status: Status; label: string }) {
+  const tone =
+    status === 'saved' ? 'bg-success' : status === 'conflict' || status === 'error' ? 'bg-danger' : status === 'saving' ? 'bg-accent animate-pulse' : 'bg-warning'
+  return (
+    <span className="ml-2 inline-flex shrink-0 items-center gap-1.5 text-[11.5px] whitespace-nowrap text-ink-4" role="status" aria-live="polite">
+      <span className={cn('size-1.5 rounded-full transition-colors duration-(--dur-base)', tone)} />
+      <span className="max-sm:hidden">{label}</span>
+    </span>
+  )
+}
+
 /** Count words the way Chinese editors do: each CJK character is a word, latin runs count once. */
 function countWords(md: string) {
   const text = md
@@ -382,12 +397,12 @@ function DocStats({ markdown, updatedAt }: { markdown: string; updatedAt: number
   const { words, chars } = useMemo(() => countWords(markdown), [markdown])
   const minutes = Math.max(1, Math.round(words / 400))
   return (
-    <footer className="doc-stats">
+    <footer className="tabular sticky bottom-0 z-15 flex h-[calc(var(--statusbar-h)+var(--safe-b))] items-center gap-4 border-t border-line-subtle bg-[color-mix(in_oklab,var(--bg-editor)_86%,transparent)] px-4 pb-(--safe-b) text-[11.5px] whitespace-nowrap text-ink-4 backdrop-blur-md md:px-5">
       <span>{words.toLocaleString()} 字</span>
       <span>{chars.toLocaleString()} 字符</span>
       <span>约 {minutes} 分钟读完</span>
-      <span className="spacer" />
-      {updatedAt > 0 && <span className="hide-mobile">更新于 {new Date(updatedAt).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })}</span>}
+      <span className="flex-1" />
+      {updatedAt > 0 && <span className="max-md:hidden">更新于 {new Date(updatedAt).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })}</span>}
     </footer>
   )
 }

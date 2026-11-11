@@ -44,10 +44,24 @@ export let palette: Palette = {
   success: '#2f9e5b',
 }
 
+let probe: CanvasRenderingContext2D | null = null
+/** Any CSS colour (oklch, color-mix…) as rgba(): the grid parses colours itself. */
+function toRgba(color: string): string {
+  if (!color) return color
+  probe ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })
+  if (!probe) return color
+  probe.clearRect(0, 0, 1, 1)
+  probe.fillStyle = '#000'
+  probe.fillStyle = color
+  probe.fillRect(0, 0, 1, 1)
+  const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data
+  return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${+(a / 255).toFixed(3)})`
+}
+
 function read(): { theme: Partial<Theme>; palette: Palette } {
   const cs = getComputedStyle(document.documentElement)
-  const v = (name: string) => cs.getPropertyValue(name).trim()
-  const font = v('--font')
+  const v = (name: string) => toRgba(cs.getPropertyValue(name).trim())
+  const font = cs.getPropertyValue('--font-ui').trim()
   const p: Palette = {
     tagBg: Array.from({ length: TAG_COLORS }, (_, i) => v(`--tag-${i}-bg`)),
     tagFg: Array.from({ length: TAG_COLORS }, (_, i) => v(`--tag-${i}-fg`)),
@@ -67,9 +81,9 @@ function read(): { theme: Partial<Theme>; palette: Palette } {
     success: v('--c-success') || '#2f9e5b',
   }
   const theme: Partial<Theme> = {
-    accentColor: v('--c-info'),
-    accentFg: '#ffffff',
-    accentLight: v('--bt-accent-light'),
+    accentColor: v('--accent'),
+    accentFg: v('--accent-contrast'),
+    accentLight: v('--accent-soft'),
     textDark: v('--c-text'),
     textMedium: v('--c-text-2'),
     textLight: v('--c-text-3'),
@@ -77,7 +91,7 @@ function read(): { theme: Partial<Theme>; palette: Palette } {
     bgIconHeader: v('--c-text-3'),
     fgIconHeader: v('--c-panel'),
     textHeader: v('--c-text-2'),
-    textHeaderSelected: '#ffffff',
+    textHeaderSelected: v('--accent-contrast'),
     bgCell: v('--c-panel'),
     bgCellMedium: v('--c-surface'),
     bgHeader: v('--c-side'),
@@ -100,7 +114,7 @@ function read(): { theme: Partial<Theme>; palette: Palette } {
     cellVerticalPadding: 4,
     headerIconSize: 16,
     roundingRadius: 4,
-    resizeIndicatorColor: v('--c-info'),
+    resizeIndicatorColor: v('--accent'),
   }
   return { theme, palette: p }
 }

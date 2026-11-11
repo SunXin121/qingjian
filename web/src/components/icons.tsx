@@ -34,6 +34,9 @@ import {
   Lock,
   LogOut,
   Menu,
+  Monitor,
+  Moon,
+  Palette,
   PanelLeft,
   Pencil,
   Plus,
@@ -45,6 +48,7 @@ import {
   Share2,
   Sheet,
   Sparkles,
+  Sun,
   TableOfContents,
   Trash2,
   Unlink,
@@ -110,19 +114,23 @@ export const IconInfo = wrap(Info)
 export const IconRefresh = wrap(RefreshCw)
 export const IconSidebar = wrap(PanelLeft)
 export const IconTable = wrap(Sheet)
+export const IconSun = wrap(Sun)
+export const IconMoon = wrap(Moon)
+export const IconMonitor = wrap(Monitor)
+export const IconPalette = wrap(Palette)
 
-/** Brand mark: stacked bamboo slips (简) on an accent tile. Inline so it follows the theme. */
-export function Logo({ size = 26 }: { size?: number }) {
+/** Brand mark: stacked bamboo slips (简) on an ink tile. Inline so it follows the theme. */
+export function Logo({ size = 26, className }: { size?: number; className?: string }) {
   return (
-    <svg className="logo" width={size} height={size} viewBox="0 0 64 64" aria-hidden>
-      <rect width="64" height="64" rx="16" fill="var(--logo)" />
-      <g fill="var(--on-logo)">
+    <svg className={'shrink-0 ' + (className ?? '')} width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <rect width="64" height="64" rx="16" fill="var(--text-primary)" />
+      <g fill="var(--bg-editor)">
         <rect x="14" y="15" width="7" height="34" rx="2.5" opacity="0.95" />
         <rect x="24.5" y="15" width="7" height="34" rx="2.5" opacity="0.85" />
         <rect x="35" y="15" width="7" height="34" rx="2.5" opacity="0.95" />
-        <rect x="45.5" y="15" width="5" height="34" rx="2.5" opacity="0.6" />
+        <rect x="45.5" y="15" width="5" height="34" rx="2.5" fill="var(--accent)" opacity="1" />
       </g>
-      <path d="M10 25h44M10 39h44" stroke="var(--logo)" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M10 25h44M10 39h44" stroke="var(--text-primary)" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   )
 }
@@ -143,19 +151,38 @@ export function iconSrc(value: string) {
 }
 
 /** Repo badge: uploaded image, library icon, emoji, or the initial on a tinted tile. */
-export function RepoMark({ repo, className }: { repo: { id: string; name: string; icon?: string }; className: string }) {
+export function RepoMark({ repo, size = 20, className }: { repo: { id: string; name: string; icon?: string }; size?: number; className?: string }) {
   const [failedImage, setFailedImage] = useState('')
   const icon = repo.icon?.trim() ?? ''
   const isImage = icon.startsWith('/files/')
   const src = isImage ? null : iconSrc(icon)
   const glyph = (!isImage && !src && icon) || Array.from(repo.name.trim())[0]?.toUpperCase() || '库'
+  const isInitial = !isImage && !src && !icon
   return (
-    <span className={className} style={{ '--tone': `var(--tone-${repoTone(repo.id)})` } as React.CSSProperties} aria-hidden>
+    <span
+      className={
+        'inline-grid shrink-0 place-items-center overflow-hidden leading-none font-semibold select-none ' +
+        'bg-[color-mix(in_oklab,var(--tone)_14%,transparent)] text-(--tone) shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--tone)_16%,transparent)] ' +
+        (className ?? '')
+      }
+      style={
+        {
+          '--tone': `var(--tone-${repoTone(repo.id)})`,
+          width: size,
+          height: size,
+          borderRadius: Math.round(size * 0.28),
+          fontSize: Math.round(size * (isInitial ? 0.52 : 0.62)),
+        } as React.CSSProperties
+      }
+      aria-hidden
+    >
       {isImage && failedImage !== icon ? (
-        <img className="repo-mark-image" src={icon} alt="" onError={() => setFailedImage(icon)} />
+        <img className="block size-full object-cover" src={icon} alt="" onError={() => setFailedImage(icon)} />
       ) : src ? (
-        <span className="repo-mark-icon" style={{ '--icon': `url("${src}")` } as React.CSSProperties} />
-      ) : glyph}
+        <span className="block size-[62%] bg-current [mask:var(--icon)_center/contain_no-repeat]" style={{ '--icon': `url("${src}")` } as React.CSSProperties} />
+      ) : (
+        glyph
+      )}
     </span>
   )
 }

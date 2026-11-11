@@ -4,6 +4,7 @@ import { api, authEvents } from './api'
 import ErrorBoundary from './components/ErrorBoundary'
 import SearchDialog from './components/SearchDialog'
 import Sidebar from './components/Sidebar'
+import { cn, Loading } from './components/ui'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import RepoHome from './pages/RepoHome'
@@ -62,12 +63,15 @@ function Shell() {
     return () => window.removeEventListener('qj-tree-changed', onTree)
   }, [loadTree, treeRepoId])
   return (
-    <div className={'shell' + (sidebarOpen ? ' sidebar-open' : '')}>
+    <div className="flex min-h-dvh bg-editor">
       <Sidebar />
-      <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
-      <div className="content">
+      <div
+        className={cn('fixed inset-0 z-[25] hidden animate-fade bg-scrim md:hidden', sidebarOpen && 'block')}
+        onClick={() => setSidebarOpen(false)}
+      />
+      <div className="min-w-0 flex-1 md:ml-(--side-w)">
         <ErrorBoundary resetKey={location.pathname}>
-          <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+          <Suspense fallback={<Loading />}>
             <Outlet />
           </Suspense>
         </ErrorBoundary>
@@ -133,7 +137,7 @@ export default function App() {
           path="s/:token/:docId?"
           element={
             <ErrorBoundary>
-              <Suspense fallback={<div className="ink-loading">加载中…</div>}>
+              <Suspense fallback={<Loading />}>
                 <SharePage />
               </Suspense>
             </ErrorBoundary>

@@ -2,132 +2,98 @@
    青简 — design tokens
    Neutral paper greys with an ink-black (松烟) accent.
    ===================================================================== */
+/* =====================================================================
+   Legacy variable names, kept as aliases of the design tokens (tokens.css) for the
+   stylesheets not yet rewritten (editor, tables, drawings). New code uses the tokens or
+   the Tailwind theme directly.
+   ===================================================================== */
 :root {
-  --c-bg: #fcfcfb;
-  --c-side: #f5f5f3;
-  --c-panel: #ffffff;
-  --c-text: #1c1c1e;
-  --c-text-2: #55565a;
-  --c-text-3: #8c8d91;
-  --c-border: #e7e7e4;
-  --c-border-strong: #d8d8d4;
-  --c-hover: rgba(30, 30, 32, 0.05);
-  --c-hover-strong: rgba(30, 30, 32, 0.085);
-  --c-active: #ebebe9;
-  --c-primary: #232326;
-  --c-primary-hover: #000000;
-  --c-primary-soft: #f0f0ee;
-  --c-primary-ring: rgba(35, 35, 38, 0.16);
-  --c-primary-shadow: rgba(0, 0, 0, 0.16);
-  --c-on-primary: #ffffff;
-  --c-danger: #d14343;
-  --c-warn-bg: #fff8e8;
-  --c-warn-border: #f2d796;
-  --c-mark: #fde68a;
-  --c-header-bg: rgba(252, 252, 251, 0.86);
-  --c-placeholder: #bcbcbf;
-  --c-code-bg: #f6f6f4;
-  --c-surface: #f5f5f3;
-  --c-surface-low: #ededeb;
-  --c-selected: rgba(60, 90, 140, 0.16);
-  --c-inline-code: #b4541a;
-  --c-inline-code-bg: rgba(120, 120, 115, 0.12);
-  --c-overlay: rgba(20, 20, 22, 0.36);
-  --c-overlay-soft: rgba(20, 20, 22, 0.24);
-  --c-toast-bg: rgba(28, 28, 30, 0.94);
+  --c-bg: var(--bg-editor);
+  --c-side: var(--bg-sunken);
+  --c-panel: var(--bg-surface);
+  --c-text: var(--text-primary);
+  --c-text-2: var(--text-secondary);
+  --c-text-3: var(--text-tertiary);
+  --c-border: var(--border-default);
+  --c-border-strong: var(--border-strong);
+  --c-hover: var(--bg-hover);
+  --c-hover-strong: var(--bg-active);
+  --c-active: var(--bg-active);
+  --c-primary: var(--accent);
+  --c-primary-hover: var(--accent-hover);
+  --c-primary-soft: var(--accent-soft);
+  --c-primary-ring: var(--accent-ring);
+  --c-primary-shadow: oklch(0% 0 0 / 14%);
+  --c-on-primary: var(--accent-contrast);
+  --c-danger: var(--danger);
+  --c-warn-bg: color-mix(in oklab, var(--warning) 12%, var(--bg-surface));
+  --c-warn-border: color-mix(in oklab, var(--warning) 40%, transparent);
+  --c-mark: var(--highlight);
+  --c-header-bg: color-mix(in oklab, var(--bg-editor) 86%, transparent);
+  --c-placeholder: var(--text-quaternary);
+  --c-code-bg: var(--bg-inset);
+  --c-surface: var(--bg-inset);
+  --c-surface-low: var(--bg-active);
+  --c-selected: var(--selection);
+  --c-inline-code: color-mix(in oklab, var(--accent) 80%, var(--text-primary));
+  --c-inline-code-bg: var(--bg-active);
+  --c-overlay: var(--scrim);
+  --c-overlay-soft: var(--scrim);
+  --c-toast-bg: color-mix(in oklab, var(--text-primary) 94%, transparent);
   --c-paper: #ffffff; /* background behind exported drawings / graphviz, which assume light */
-  --c-add-bg: #e8f6ec;
-  --c-add-mark: #b2e3bf;
-  --c-del-bg: #fdeeee;
-  --c-del-mark: #f5c2c2;
-  --c-info: #2f6bd9;
-  --c-info-bg: #f0f5ff;
-  --c-warn: #b4741a;
-  --c-warn-soft: #fff8e8;
-  --c-success: #1c8a4e;
-  --c-success-bg: #edf8f1;
-  --c-error: #d14343;
-  --c-error-bg: #fdf0f0;
-  --logo: #232326;
-  --on-logo: #ffffff;
+  --c-add-bg: color-mix(in oklab, var(--success) 12%, var(--bg-surface));
+  --c-add-mark: color-mix(in oklab, var(--success) 32%, var(--bg-surface));
+  --c-del-bg: color-mix(in oklab, var(--danger) 10%, var(--bg-surface));
+  --c-del-mark: color-mix(in oklab, var(--danger) 28%, var(--bg-surface));
+  --c-info: var(--info);
+  --c-info-bg: color-mix(in oklab, var(--info) 8%, transparent);
+  --c-warn: var(--warning);
+  --c-warn-soft: color-mix(in oklab, var(--warning) 9%, transparent);
+  --c-success: var(--success);
+  --c-success-bg: color-mix(in oklab, var(--success) 9%, transparent);
+  --c-error: var(--danger);
+  --c-error-bg: color-mix(in oklab, var(--danger) 8%, transparent);
+  --logo: var(--text-primary);
+  --on-logo: var(--bg-editor);
   /* repo accent tones */
-  --tone-0: #55565a;
+  --tone-0: #6b6a66;
   --tone-1: #2f64b8;
   --tone-2: #b4436a;
   --tone-3: #b8621f;
   --tone-4: #2f7f4c;
   --tone-5: #8d6a17;
-  --radius-sm: 6px;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --side-w: 260px;
-  --header-h: 52px;
-  --font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  --font-serif: 'Iowan Old Style', 'Source Serif 4', Georgia, 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', serif;
-  --shadow-sm: 0 1px 2px rgba(20, 20, 22, 0.05);
-  --shadow-md: 0 1px 2px rgba(20, 20, 22, 0.04), 0 6px 16px -4px rgba(20, 20, 22, 0.09);
-  --shadow: 0 0 0 1px rgba(20, 20, 22, 0.05), 0 2px 4px -1px rgba(20, 20, 22, 0.05), 0 14px 32px -8px rgba(20, 20, 22, 0.16);
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --safe-b: env(safe-area-inset-bottom, 0px);
-  --safe-t: env(safe-area-inset-top, 0px);
-  color-scheme: light;
+  --radius-sm: var(--r-sm);
+  --radius: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --font: var(--font-ui);
+  --shadow-md: var(--shadow-card);
+  --shadow: var(--shadow-pop);
+  --ease: var(--ease-out);
+}
+:root[data-theme='dark'] {
+  --c-primary-shadow: oklch(0% 0 0 / 35%);
+  --tone-0: #b4b5b9;
+  --tone-1: #7eaaf0;
+  --tone-2: #e88aab;
+  --tone-3: #e9a06a;
+  --tone-4: #7cc796;
+  --tone-5: #d9b468;
 }
 
-* {
-  box-sizing: border-box;
-}
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-family: var(--font);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  -webkit-text-size-adjust: 100%;
-  -webkit-tap-highlight-color: transparent;
-}
-::selection {
-  background: var(--c-selected);
-}
-a {
-  color: inherit;
-  text-decoration: none;
-}
-button {
-  font: inherit;
-  color: inherit;
-}
-input,
-textarea {
-  font: inherit;
-  color: inherit;
-}
-:focus-visible {
-  outline: 2px solid var(--c-primary-ring);
-  outline-offset: 1px;
-}
 kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
   padding: 0 5px;
-  border: 1px solid var(--c-border);
-  border-bottom-width: 2px;
+  border: 1px solid var(--border-default);
   border-radius: 5px;
-  color: var(--c-text-3);
-  background: var(--c-panel);
-}
-mark {
-  background: var(--c-mark);
-  color: inherit;
-  border-radius: 3px;
-  padding: 0 2px;
+  background: var(--bg-raised);
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
 }
 .muted {
   color: var(--c-text-3);
@@ -145,31 +111,6 @@ mark {
   display: none !important;
 }
 
-/* thin, unobtrusive scrollbars */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--c-border-strong) transparent;
-}
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--c-border-strong);
-  border-radius: 10px;
-  border: 3px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* Keep shared UI icons aligned with text, including inline metadata. */
-.lucide {
-  display: inline-block;
-  flex-shrink: 0;
-  vertical-align: middle;
-}
 
 /* Compact controls center a single text line, independent of body leading. */
 .btn,

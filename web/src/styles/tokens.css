@@ -1,0 +1,190 @@
+/* =====================================================================
+   青简 — design tokens
+   Layered paper backgrounds, four text levels, translucent borders that work on any
+   layer, one accent colour the reader picks (data-accent), and a shared motion scale.
+   The resolved theme lives on <html data-theme>, the accent on data-accent and the
+   page background on data-background (see theme.ts).
+   ===================================================================== */
+:root {
+  --font-ui: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC',
+    sans-serif;
+  --font-serif: 'Iowan Old Style', 'Source Serif 4', Charter, Georgia, 'Songti SC', 'Noto Serif CJK SC',
+    'Source Han Serif SC', 'SimSun', serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Consolas, 'Liberation Mono', Menlo,
+    'Sarasa Mono SC', monospace;
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 20px;
+
+  --dur-fast: 130ms;
+  --dur-base: 220ms;
+  --dur-slow: 340ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --side-w: 248px;
+  --header-h: 48px;
+  --statusbar-h: 28px;
+
+  /* reading / writing: the editor and share pages follow these (Settings → 外观) */
+  --prose-font: var(--font-ui);
+  --prose-size: 16px;
+  --prose-line: 1.75;
+  --prose-width: 760px;
+
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+/* ---------- light ---------- */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-sunken: #f1efea;
+  --bg-base: #f6f4f0;
+  --bg-editor: #fcfbf8;
+  --bg-surface: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-overlay: #ffffff;
+  --bg-inset: #f3f1ec;
+  --bg-hover: oklch(24% 0.012 70 / 4.5%);
+  --bg-active: oklch(24% 0.012 70 / 7.5%);
+
+  --border-subtle: oklch(24% 0.012 70 / 7%);
+  --border-default: oklch(24% 0.012 70 / 11%);
+  --border-strong: oklch(24% 0.012 70 / 18%);
+
+  --text-primary: oklch(22% 0.008 70);
+  --text-secondary: oklch(43% 0.01 70);
+  --text-tertiary: oklch(56% 0.01 70);
+  --text-quaternary: oklch(64% 0.008 70);
+  --text-inverse: oklch(99% 0 0);
+
+  --shadow-sm: 0 1px 2px oklch(24% 0.012 70 / 6%);
+  --shadow-card: 0 0 0 1px oklch(24% 0.012 70 / 6%), 0 1px 2px oklch(24% 0.012 70 / 4%),
+    0 4px 12px -6px oklch(24% 0.012 70 / 8%);
+  --shadow-pop: 0 0 0 1px oklch(24% 0.012 70 / 7%), 0 2px 4px -1px oklch(24% 0.012 70 / 5%),
+    0 12px 28px -8px oklch(24% 0.012 70 / 13%), 0 24px 56px -16px oklch(24% 0.012 70 / 10%);
+  --shadow-modal: 0 0 0 1px oklch(24% 0.012 70 / 7%), 0 8px 16px -4px oklch(24% 0.012 70 / 8%),
+    0 24px 48px -12px oklch(24% 0.012 70 / 18%);
+
+  --scrim: oklch(30% 0.01 70 / 28%);
+  --success: oklch(56% 0.13 155);
+  --warning: oklch(64% 0.13 75);
+  --danger: oklch(56% 0.19 25);
+  --info: oklch(55% 0.15 255);
+  --highlight: oklch(90% 0.12 95 / 70%);
+}
+
+/* the plain white page background (Settings → 外观 → 背景) */
+:root[data-theme='light'][data-background='white'] {
+  --bg-sunken: #f6f6f7;
+  --bg-base: #fbfbfb;
+  --bg-editor: #ffffff;
+  --bg-inset: #f4f4f5;
+  --bg-hover: oklch(22% 0.006 265 / 4.5%);
+  --bg-active: oklch(22% 0.006 265 / 7.5%);
+  --border-subtle: oklch(22% 0.006 265 / 7%);
+  --border-default: oklch(22% 0.006 265 / 11%);
+  --border-strong: oklch(22% 0.006 265 / 18%);
+}
+
+/* ---------- dark ---------- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-sunken: #141312;
+  --bg-base: #181716;
+  --bg-editor: #1c1b19;
+  --bg-surface: #21201e;
+  --bg-raised: #262523;
+  --bg-overlay: #2a2927;
+  --bg-inset: #121110;
+  --bg-hover: oklch(100% 0 0 / 4.5%);
+  --bg-active: oklch(100% 0 0 / 8%);
+
+  --border-subtle: oklch(100% 0 0 / 6%);
+  --border-default: oklch(100% 0 0 / 10%);
+  --border-strong: oklch(100% 0 0 / 17%);
+
+  --text-primary: oklch(93% 0.004 70);
+  --text-secondary: oklch(74% 0.008 70);
+  --text-tertiary: oklch(58% 0.009 70);
+  --text-quaternary: oklch(46% 0.008 70);
+  --text-inverse: oklch(16% 0.006 70);
+
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 40%);
+  --shadow-card: 0 0 0 1px oklch(100% 0 0 / 6%), 0 1px 2px oklch(0% 0 0 / 30%);
+  --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 8%), 0 8px 24px -6px oklch(0% 0 0 / 60%),
+    0 20px 48px -12px oklch(0% 0 0 / 45%);
+  --shadow-modal: 0 0 0 1px oklch(100% 0 0 / 8%), 0 16px 40px -8px oklch(0% 0 0 / 65%),
+    0 40px 80px -20px oklch(0% 0 0 / 55%);
+
+  --scrim: oklch(0% 0 0 / 55%);
+  --success: oklch(72% 0.14 155);
+  --warning: oklch(80% 0.14 80);
+  --danger: oklch(68% 0.18 25);
+  --info: oklch(72% 0.13 255);
+  --highlight: oklch(52% 0.1 95 / 55%);
+}
+
+:root[data-theme='dark'][data-background='white'] {
+  --bg-sunken: #0f1011;
+  --bg-base: #141516;
+  --bg-editor: #18191b;
+  --bg-surface: #1e1f21;
+  --bg-raised: #242527;
+  --bg-overlay: #28292c;
+  --bg-inset: #0d0e0f;
+}
+
+/* ---------- accent ---------- */
+/* 朱砂 (default) */
+:root { --accent: oklch(54% 0.15 30); --accent-hover: oklch(48.5% 0.155 30); }
+:root[data-theme='dark'] { --accent: oklch(68% 0.15 32); --accent-hover: oklch(73% 0.145 32); }
+/* 黛青 */
+:root[data-accent='teal'] { --accent: oklch(50% 0.08 205); --accent-hover: oklch(44% 0.075 205); }
+:root[data-accent='teal'][data-theme='dark'] { --accent: oklch(76% 0.1 205); --accent-hover: oklch(81% 0.095 205); }
+/* 靛蓝 */
+:root[data-accent='indigo'] { --accent: oklch(52% 0.15 258); --accent-hover: oklch(46% 0.14 258); }
+:root[data-accent='indigo'][data-theme='dark'] { --accent: oklch(72% 0.13 255); --accent-hover: oklch(77% 0.125 255); }
+/* 青瓷 */
+:root[data-accent='celadon'] { --accent: oklch(50% 0.12 155); --accent-hover: oklch(44% 0.11 155); }
+:root[data-accent='celadon'][data-theme='dark'] { --accent: oklch(74% 0.12 152); --accent-hover: oklch(79% 0.115 152); }
+/* 琥珀 */
+:root[data-accent='amber'] { --accent: oklch(58% 0.12 70); --accent-hover: oklch(52% 0.115 70); }
+:root[data-accent='amber'][data-theme='dark'] { --accent: oklch(80% 0.13 85); --accent-hover: oklch(85% 0.12 85); }
+/* 紫藤 */
+:root[data-accent='wisteria'] { --accent: oklch(52% 0.16 300); --accent-hover: oklch(46% 0.15 300); }
+:root[data-accent='wisteria'][data-theme='dark'] { --accent: oklch(73% 0.13 300); --accent-hover: oklch(78% 0.13 300); }
+/* 松烟 (ink) */
+:root[data-accent='ink'] { --accent: oklch(26% 0.008 70); --accent-hover: oklch(16% 0.006 70); }
+:root[data-accent='ink'][data-theme='dark'] { --accent: oklch(90% 0.006 70); --accent-hover: oklch(97% 0.004 70); }
+
+:root {
+  --accent-contrast: oklch(99% 0 0);
+  --accent-soft: color-mix(in oklab, var(--accent) 13%, transparent);
+  --accent-softer: color-mix(in oklab, var(--accent) 7%, transparent);
+  --accent-ring: color-mix(in oklab, var(--accent) 34%, transparent);
+  --accent-muted: color-mix(in oklab, var(--accent) 62%, var(--text-tertiary));
+  --selection: color-mix(in oklab, var(--accent) 20%, transparent);
+}
+:root[data-theme='dark'] {
+  --accent-contrast: oklch(16% 0.006 70);
+  --selection: color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-slow: 1ms;
+  }
+}

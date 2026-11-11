@@ -1,27 +1,204 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router'
 import { api, formatSize, getConfig, resetConfig, type ClientConfig, type ImgbedConfig, type StorageStats } from '../api'
 import { confirmDialog, toast } from '../components/dialog'
-import { IconArchive, IconCloud, IconDatabase, IconDisk, IconDoc, IconInfo, IconSparkles, IconTrash } from '../components/icons'
-import PageHeader from '../components/PageHeader'
-import { getThemeMode, setThemeMode, type ThemeMode } from '../theme'
+import { IconArchive, IconCheck, IconCloud, IconDatabase, IconDisk, IconDoc, IconInfo, IconMonitor, IconMoon, IconPalette, IconSparkles, IconSun, IconTrash } from '../components/icons'
+import { Crumb, PageBody } from '../components/page'
+import PageHeader, { Crumbs } from '../components/PageHeader'
+import { Button, cn, Field, inputClass, Loading, Segmented } from '../components/ui'
+import { ACCENTS, getAppearance, getThemeMode, PROSE_WIDTHS, setAppearance, setThemeMode, type Appearance, type ThemeMode } from '../theme'
 
-const THEMES: { mode: ThemeMode; label: string }[] = [
-  { mode: 'system', label: '跟随系统' },
-  { mode: 'light', label: '浅色' },
-  { mode: 'dark', label: '深色' },
-]
+const SECTIONS = [
+  { id: 'appearance', label: '外观', icon: <IconPalette /> },
+  { id: 'storage', label: '存储空间', icon: <IconDisk /> },
+  { id: 'imgbed', label: '图床', icon: <IconCloud /> },
+  { id: 'about', label: '关于', icon: <IconInfo /> },
+] as const
+type SectionId = (typeof SECTIONS)[number]['id']
+
+/** One setting: label (and hint) on the left, its control on the right; stacks on phones. */
+function Row({ label, hint, children, className }: { label: ReactNode; hint?: ReactNode; children?: ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex flex-col gap-3 border-b border-line-subtle py-4 last:border-b-0 sm:flex-row sm:items-center sm:gap-6', className)}>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium text-ink">{label}</div>
+        {hint && <div className="mt-1 text-[12px] leading-relaxed text-ink-3">{hint}</div>}
+      </div>
+      {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
+    </div>
+  )
+}
+
+function Panel({ title, desc, children }: { title: string; desc?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="animate-rise">
+      <h2 className="m-0 text-[17px] font-semibold text-ink">{title}</h2>
+      {desc && <p className="mt-1.5 mb-0 text-[12.5px] leading-relaxed text-ink-3">{desc}</p>}
+      <div className="mt-4 rounded-lg border border-line-subtle bg-surface px-4 shadow-card md:px-5">{children}</div>
+    </section>
+  )
+}
 
 export default function Settings() {
-  const [stats, setStats] = useState<StorageStats | null>(null)
-  const [config, setConfig] = useState<ClientConfig | null>(null)
-  const [cleaning, setCleaning] = useState(false)
+  const [params, setParams] = useSearchParams()
+  const tab: SectionId = SECTIONS.some((x) => x.id === params.get('tab')) ? (params.get('tab') as SectionId) : 'appearance'
+  const select = (id: SectionId) => setParams(id === 'appearance' ? {} : { tab: id }, { replace: true })
+
+  return (
+    <div>
+      <PageHeader>
+        <Crumbs>
+          <Crumb>设置</Crumb>
+        </Crumbs>
+      </PageHeader>
+      <PageBody wide className="flex flex-col gap-6 md:flex-row md:gap-10">
+        <nav className="no-scrollbar -mx-4 flex shrink-0 gap-1 overflow-x-auto px-4 md:sticky md:top-[calc(var(--header-h)+40px)] md:mx-0 md:w-44 md:flex-col md:self-start md:overflow-visible md:px-0">
+          <h1 className="m-0 mb-3 hidden px-2.5 text-[20px] font-semibold text-ink md:block">设置</h1>
+          {SECTIONS.map((x) => (
+            <button
+              key={x.id}
+              onClick={() => select(x.id)}
+              className={cn(
+                'flex h-9 shrink-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] whitespace-nowrap transition-colors duration-(--dur-fast) md:h-8 [&_svg]:size-4',
+                tab === x.id ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-hover hover:text-ink [&_svg]:text-ink-3',
+              )}
+            >
+              {x.icon}
+              {x.label}
+            </button>
+          ))}
+        </nav>
+        <div className="min-w-0 flex-1">
+          {tab === 'appearance' && <AppearancePanel />}
+          {tab === 'storage' && <StoragePanel />}
+          {tab === 'imgbed' && <ImgbedCard />}
+          {tab === 'about' && <AboutPanel />}
+        </div>
+      </PageBody>
+    </div>
+  )
+}
+
+const THEMES: { value: ThemeMode; title: string; icon: ReactNode }[] = [
+  { value: 'light', title: '浅色', icon: <IconSun width={15} height={15} /> },
+  { value: 'dark', title: '深色', icon: <IconMoon width={15} height={15} /> },
+  { value: 'system', title: '跟随系统', icon: <IconMonitor width={15} height={15} /> },
+]
+
+function AppearancePanel() {
   const [theme, setTheme] = useState(getThemeMode)
+  const [a, setA] = useState(getAppearance)
+  const update = (patch: Partial<Appearance>) => {
+    setAppearance(patch)
+    setA(getAppearance())
+  }
+  return (
+    <div className="flex flex-col gap-8">
+      <Panel title="外观" desc="保存在当前浏览器中，不同设备可以分别设置。">
+        <Row label="主题" hint="深色模式会在夜间减少刺眼的亮光。">
+          <Segmented
+            label="主题"
+            value={theme}
+            options={THEMES.map((t) => ({ ...t, label: t.title }))}
+            onChange={(m) => {
+              setThemeMode(m)
+              setTheme(m)
+            }}
+          />
+        </Row>
+        <Row label="强调色" hint="按钮、选中项和链接使用的颜色。">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="强调色">
+            {ACCENTS.map((x) => (
+              <button
+                key={x.id}
+                role="radio"
+                aria-checked={a.accent === x.id}
+                title={x.name}
+                aria-label={x.name}
+                onClick={() => update({ accent: x.id })}
+                className={cn(
+                  'grid size-7 place-items-center rounded-full text-white transition-[box-shadow,transform] duration-(--dur-fast) ease-spring hover:scale-110 md:size-6',
+                  a.accent === x.id && 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_4px_var(--accent)]',
+                )}
+                style={{ background: x.swatch }}
+              >
+                {a.accent === x.id && <IconCheck width={13} height={13} strokeWidth={2.5} />}
+              </button>
+            ))}
+          </div>
+        </Row>
+        <Row label="背景" hint="暖纸色更柔和，纯白更干净。">
+          {(['paper', 'white'] as const).map((bg) => (
+            <button
+              key={bg}
+              onClick={() => update({ background: bg })}
+              aria-pressed={a.background === bg}
+              className={cn(
+                'flex h-9 items-center gap-2 rounded-md border px-3 text-[12.5px] transition-[border-color,box-shadow] duration-(--dur-fast) md:h-8',
+                a.background === bg ? 'border-accent text-ink shadow-[0_0_0_3px_var(--accent-soft)]' : 'border-line text-ink-2 hover:border-line-strong',
+              )}
+            >
+              <span className={cn('size-4 rounded-full border border-line-strong', bg === 'paper' ? 'bg-[#f6f2ea]' : 'bg-white')} />
+              {bg === 'paper' ? '暖纸' : '纯白'}
+              {a.background === bg && <IconCheck width={13} height={13} className="text-accent" />}
+            </button>
+          ))}
+        </Row>
+      </Panel>
 
+      <Panel title="阅读与写作" desc="文档正文和分享页的排版。">
+        <Row label="正文字体">
+          <Segmented
+            label="正文字体"
+            value={a.proseFont}
+            options={[
+              { value: 'sans', label: '无衬线' },
+              { value: 'serif', label: '衬线' },
+            ]}
+            onChange={(v) => update({ proseFont: v })}
+          />
+        </Row>
+        <Row label="正文字号">
+          <input
+            type="range"
+            min={14}
+            max={20}
+            step={1}
+            value={a.proseSize}
+            aria-label="正文字号"
+            onChange={(e) => update({ proseSize: +e.target.value })}
+            className="w-40 accent-(--accent)"
+          />
+          <span className="tabular w-10 text-right text-[12px] text-ink-3">{a.proseSize}px</span>
+        </Row>
+        <Row label="内容宽度">
+          <Segmented
+            label="内容宽度"
+            value={a.proseWidth}
+            options={(Object.keys(PROSE_WIDTHS) as (keyof typeof PROSE_WIDTHS)[]).map((k) => ({ value: k, label: PROSE_WIDTHS[k].label }))}
+            onChange={(v) => update({ proseWidth: v })}
+          />
+        </Row>
+        <div className="border-t border-line-subtle py-4">
+          <div className="mb-2 text-[11.5px] font-medium text-ink-4">效果预览</div>
+          <div className="rounded-lg border border-line-subtle bg-editor px-5 py-4 text-ink" style={{ fontFamily: 'var(--prose-font)', fontSize: 'var(--prose-size)', lineHeight: 1.75 }}>
+            <div className="mb-1 text-[1.25em] font-semibold">山中问答</div>
+            问余何意栖碧山，笑而不答心自闲。桃花流水窅然去，别有天地非人间。中英文与
+            <code className="mx-1 rounded-[4px] bg-active px-1.5 py-0.5 font-mono text-[0.86em] text-[color-mix(in_oklab,var(--accent)_80%,var(--text-primary))]">inline code</code>
+            会像这样排在一起。
+          </div>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+function StoragePanel() {
+  const [stats, setStats] = useState<StorageStats | null>(null)
+  const [cleaning, setCleaning] = useState(false)
   const loadStats = useCallback(() => api.storageStats().then(setStats).catch((e) => toast(e.message)), [])
-
   useEffect(() => {
     loadStats()
-    getConfig().then(setConfig).catch(() => {})
   }, [loadStats])
 
   const cleanup = async () => {
@@ -44,105 +221,62 @@ export default function Settings() {
   }
 
   return (
-    <div className="page">
-      <PageHeader>
-        <span className="crumb">设置</span>
-      </PageHeader>
-      <div className="page-body settings">
-        <h1 className="page-title">设置</h1>
-
-        <section className="settings-card">
-          <h2>
-            <span className="card-icon">
-              <IconSparkles width={16} height={16} />
-            </span>
-            外观
-          </h2>
-          <div className="settings-row">
-            <p className="muted">界面主题。保存在当前浏览器中，不同设备可以分别设置。</p>
-            <div className="seg" role="radiogroup" aria-label="界面主题">
-              {THEMES.map((t) => (
-                <button
-                  key={t.mode}
-                  role="radio"
-                  aria-checked={theme === t.mode}
-                  className={theme === t.mode ? 'active' : ''}
-                  onClick={() => {
-                    setThemeMode(t.mode)
-                    setTheme(t.mode)
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+    <Panel title="存储空间" desc="全部数据都在服务器的 data 目录：数据库和按内容去重的附件。">
+      {stats ? (
+        <>
+          <div className="grid grid-cols-2 gap-2.5 py-4 lg:grid-cols-4">
+            <Stat icon={<IconDoc width={14} height={14} />} label="文档" value={String(stats.docs)} sub={`${stats.versions} 个历史版本`} />
+            <Stat icon={<IconDatabase width={14} height={14} />} label="数据库" value={formatSize(stats.db_bytes)} />
+            <Stat icon={<IconArchive width={14} height={14} />} label="附件" value={formatSize(stats.stored_bytes)} sub={`${stats.attachments} 个，去重后 ${stats.blobs} 份`} />
+            <Stat icon={<IconTrash width={14} height={14} />} label="未引用附件" value={formatSize(stats.unreferenced_bytes)} sub={`${stats.unreferenced} 个`} />
           </div>
-        </section>
+          <Row
+            label="清理未引用附件"
+            hint={`未引用附件指已不在任何文档（含回收站）和历史版本中出现的文件。最近 ${stats.grace_hours} 小时内上传的文件不会被清理。`}
+          >
+            <Button icon={<IconSparkles width={14} height={14} />} loading={cleaning} disabled={stats.unreferenced === 0} onClick={cleanup}>
+              {cleaning ? '清理中…' : '清理'}
+            </Button>
+          </Row>
+        </>
+      ) : (
+        <Loading className="py-10" />
+      )}
+    </Panel>
+  )
+}
 
-        <section className="settings-card">
-          <h2>
-            <span className="card-icon">
-              <IconDisk width={16} height={16} />
-            </span>
-            存储空间
-          </h2>
-          {stats ? (
-            <>
-              <div className="stat-grid">
-                <Stat icon={<IconDoc width={15} height={15} />} label="文档" value={String(stats.docs)} sub={`${stats.versions} 个历史版本`} />
-                <Stat icon={<IconDatabase width={15} height={15} />} label="数据库" value={formatSize(stats.db_bytes)} />
-                <Stat icon={<IconArchive width={15} height={15} />} label="附件" value={formatSize(stats.stored_bytes)} sub={`${stats.attachments} 个，去重后 ${stats.blobs} 份`} />
-                <Stat icon={<IconTrash width={15} height={15} />} label="未引用附件" value={formatSize(stats.unreferenced_bytes)} sub={`${stats.unreferenced} 个`} />
-              </div>
-              <div className="settings-row">
-                <p className="muted">
-                  未引用附件指已不在任何文档（含回收站）和历史版本中出现的文件。最近 {stats.grace_hours} 小时内上传的文件不会被清理。
-                </p>
-                <button className="btn" disabled={cleaning || stats.unreferenced === 0} onClick={cleanup}>
-                  <IconSparkles width={15} height={15} />
-                  {cleaning ? '清理中…' : '清理未引用附件'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="muted">加载中…</div>
-          )}
-        </section>
-
-        <ImgbedCard />
-
-        <section className="settings-card">
-          <h2>
-            <span className="card-icon">
-              <IconInfo width={16} height={16} />
-            </span>
-            关于
-          </h2>
-          <div className="settings-kv">
-            <span>版本</span>
-            <span>{config?.version ?? '—'}</span>
-            <span>附件上限</span>
-            <span>{config ? `${config.max_upload_mb} MB` : '—'}</span>
-            <span>回收站保留</span>
-            <span>{config ? `${config.trash_days} 天` : '—'}</span>
-            <span>draw.io</span>
-            <span className="ellipsis">{config?.drawio_url ?? '—'}</span>
-          </div>
-        </section>
-      </div>
-    </div>
+function AboutPanel() {
+  const [config, setConfig] = useState<ClientConfig | null>(null)
+  useEffect(() => {
+    getConfig().then(setConfig).catch(() => {})
+  }, [])
+  const rows: [string, string][] = [
+    ['版本', config?.version ?? '—'],
+    ['附件上限', config ? `${config.max_upload_mb} MB` : '—'],
+    ['回收站保留', config ? `${config.trash_days} 天` : '—'],
+    ['draw.io', config?.drawio_url ?? '—'],
+  ]
+  return (
+    <Panel title="关于" desc="青简 Qingjian · 个人自托管的在线知识库。">
+      {rows.map(([k, v]) => (
+        <Row key={k} label={k}>
+          <span className="max-w-72 truncate font-mono text-[12px] text-ink-2">{v}</span>
+        </Row>
+      ))}
+    </Panel>
   )
 }
 
 function Stat({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
   return (
-    <div className="stat">
-      <div className="stat-label">
+    <div className="rounded-lg border border-line-subtle bg-editor p-3">
+      <div className="flex items-center gap-1.5 text-[11.5px] text-ink-3">
         {icon}
         {label}
       </div>
-      <div className="stat-value">{value}</div>
-      {sub && <div className="stat-sub">{sub}</div>}
+      <div className="tabular mt-2 text-[18px] leading-none font-semibold text-ink">{value}</div>
+      {sub && <div className="mt-1.5 text-[11px] text-ink-4">{sub}</div>}
     </div>
   )
 }
@@ -221,80 +355,70 @@ function ImgbedCard() {
     }
   }
 
+  const selectClass = cn(inputClass, 'h-10 appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23888%27 stroke-width=%272%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E")] bg-[length:12px] bg-[right_10px_center] bg-no-repeat pr-8 md:h-9')
+  const text = cn(inputClass, 'h-10 md:h-9')
   return (
-    <section className="settings-card">
-      <h2>
-        <span className="card-icon">
-          <IconCloud width={16} height={16} />
-        </span>
-        图床
-      </h2>
+    <Panel
+      title="图床"
+      desc={
+        <>
+          配置{' '}
+          <a className="text-accent hover:underline" href="https://cfbed.sanyue.de/" target="_blank" rel="noreferrer">
+            CloudFlare ImgBed
+          </a>{' '}
+          后，导出 Markdown 时可以选择把图片和附件上传到图床，导出的文档直接引用图床链接，无需再打包压缩包。
+        </>
+      }
+    >
       {!saved ? (
-        <div className="muted">加载中…</div>
+        <Loading className="py-10" />
       ) : (
         <form onSubmit={save}>
-          <p className="muted settings-desc">
-            配置{' '}
-            <a href="https://cfbed.sanyue.de/" target="_blank" rel="noreferrer">
-              CloudFlare ImgBed
-            </a>{' '}
-            后，导出 Markdown 时可以选择把图片和附件上传到图床，导出的文档直接引用图床链接，无需再打包压缩包。
-          </p>
-          <div className="imgbed-form">
-            <label className="field wide">
-              <span>图床地址</span>
-              <input value={form.url} placeholder="https://img.example.com（留空则关闭）" onChange={(e) => set('url', e.target.value)} />
-            </label>
-            <label className="field">
-              <span>上传认证码</span>
-              <input type="password" autoComplete="off" value={form.auth_code} placeholder="未设置可留空" onChange={(e) => set('auth_code', e.target.value)} />
-            </label>
-            <label className="field">
-              <span>API Token</span>
-              <input type="password" autoComplete="off" value={form.token} placeholder="需要 upload 权限，可留空" onChange={(e) => set('token', e.target.value)} />
-            </label>
-            <label className="field">
-              <span>上传渠道</span>
-              <select value={form.channel} onChange={(e) => set('channel', e.target.value as ImgbedConfig['channel'])}>
+          <div className="grid gap-x-4 gap-y-3.5 py-4 sm:grid-cols-2">
+            <Field label="图床地址" className="sm:col-span-2">
+              <input className={text} value={form.url} placeholder="https://img.example.com（留空则关闭）" onChange={(e) => set('url', e.target.value)} />
+            </Field>
+            <Field label="上传认证码">
+              <input className={text} type="password" autoComplete="off" value={form.auth_code} placeholder="未设置可留空" onChange={(e) => set('auth_code', e.target.value)} />
+            </Field>
+            <Field label="API Token">
+              <input className={text} type="password" autoComplete="off" value={form.token} placeholder="需要 upload 权限，可留空" onChange={(e) => set('token', e.target.value)} />
+            </Field>
+            <Field label="上传渠道">
+              <select className={selectClass} value={form.channel} onChange={(e) => set('channel', e.target.value as ImgbedConfig['channel'])}>
                 {CHANNELS.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="field">
-              <span>渠道名称</span>
-              <input value={form.channel_name} placeholder="同类渠道有多个时填写" onChange={(e) => set('channel_name', e.target.value)} />
-            </label>
-            <label className="field">
-              <span>上传目录</span>
-              <input value={form.folder} placeholder="如 qingjian/img" onChange={(e) => set('folder', e.target.value)} />
-            </label>
-            <label className="field">
-              <span>文件命名</span>
-              <select value={form.name_type} onChange={(e) => set('name_type', e.target.value as ImgbedConfig['name_type'])}>
+            </Field>
+            <Field label="渠道名称">
+              <input className={text} value={form.channel_name} placeholder="同类渠道有多个时填写" onChange={(e) => set('channel_name', e.target.value)} />
+            </Field>
+            <Field label="上传目录">
+              <input className={text} value={form.folder} placeholder="如 qingjian/img" onChange={(e) => set('folder', e.target.value)} />
+            </Field>
+            <Field label="文件命名">
+              <select className={selectClass} value={form.name_type} onChange={(e) => set('name_type', e.target.value as ImgbedConfig['name_type'])}>
                 {NAME_TYPES.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
               </select>
-            </label>
+            </Field>
           </div>
-          <div className="settings-row">
-            <p className="muted">已上传过的文件会被记住，重复导出不会重复上传（已记录 {uploaded} 个）。</p>
-            <div className="settings-actions">
-              <button type="button" className="btn" disabled={uploaded === 0} onClick={forget}>
-                清除上传记录
-              </button>
-              <button type="submit" className="btn primary" disabled={busy || !dirty}>
-                {busy ? '保存中…' : '保存'}
-              </button>
-            </div>
-          </div>
+          <Row label="上传记录" hint={`已上传过的文件会被记住，重复导出不会重复上传（已记录 ${uploaded} 个）。`} className="border-t">
+            <Button disabled={uploaded === 0} onClick={forget}>
+              清除上传记录
+            </Button>
+            <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
+              {busy ? '保存中…' : '保存'}
+            </Button>
+          </Row>
         </form>
       )}
-    </section>
+    </Panel>
   )
 }

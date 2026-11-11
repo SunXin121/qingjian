@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { IconCheck, IconClose } from './icons'
+import { Button, cn, inputClass } from './ui'
 
 // Imperative dialogs (confirm / prompt) and toasts, mounted outside the React tree.
 
@@ -50,7 +52,7 @@ export function useFocusTrap(ref: { current: HTMLElement | null }) {
   }, [ref])
 }
 
-export function Modal({ title, children, onClose, wide }: { title?: ReactNode; children: ReactNode; onClose: () => void; wide?: boolean }) {
+export function Modal({ title, children, onClose, wide, className }: { title?: ReactNode; children: ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const titleId = useId()
   useFocusTrap(ref)
@@ -60,17 +62,52 @@ export function Modal({ title, children, onClose, wide }: { title?: ReactNode; c
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className={'modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} tabIndex={-1}>
+    // no backdrop-filter: re-blurring the viewport on every frame of the fade made dialogs stutter
+    <div
+      className="fixed inset-0 z-[200] flex animate-fade items-end justify-center bg-scrim p-0 sm:items-center sm:p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        ref={ref}
+        className={cn(
+          'modal relative flex max-h-[calc(100dvh-24px)] w-full animate-modal flex-col overflow-hidden rounded-t-2xl bg-overlay shadow-modal sm:max-h-[calc(100dvh-48px)] sm:rounded-xl',
+          wide ? 'sm:max-w-[640px]' : 'sm:max-w-[420px]',
+          className,
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        tabIndex={-1}
+      >
         {title && (
-          <div className="modal-title" id={titleId}>
-            {title}
+          <div className="flex shrink-0 items-center gap-3 px-5 pt-4 pb-1">
+            <div className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink" id={titleId}>
+              {title}
+            </div>
+            <button
+              type="button"
+              aria-label="关闭"
+              onClick={onClose}
+              className="-mr-1.5 grid size-8 place-items-center rounded-md text-ink-3 transition-colors duration-(--dur-fast) hover:bg-hover hover:text-ink md:size-7"
+            >
+              <IconClose width={16} height={16} />
+            </button>
           </div>
         )}
         {children}
       </div>
     </div>
   )
+}
+
+/** Scrollable body of a modal. */
+export function ModalBody({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('min-h-0 flex-1 overflow-y-auto px-5 py-3 text-[13px] leading-relaxed text-ink-2', className)}>{children}</div>
+}
+
+/** Button row at the bottom of a modal. */
+export function ModalActions({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 pt-2 pb-[calc(16px+var(--safe-b))] sm:pb-4', className)}>{children}</div>
 }
 
 interface ConfirmOpts {
@@ -88,15 +125,13 @@ export function confirmDialog(message: ReactNode, opts: ConfirmOpts = {}): Promi
       }
       return (
         <Modal title={opts.title ?? '请确认'} onClose={() => done(false)}>
-          <div className="modal-body">{message}</div>
-          <div className="modal-actions">
-            <button className="btn" onClick={() => done(false)}>
-              取消
-            </button>
-            <button className={'btn ' + (opts.danger ? 'danger' : 'primary')} autoFocus onClick={() => done(true)}>
+          <ModalBody>{message}</ModalBody>
+          <ModalActions>
+            <Button onClick={() => done(false)}>取消</Button>
+            <Button variant={opts.danger ? 'danger' : 'primary'} autoFocus onClick={() => done(true)}>
               {opts.okText ?? '确定'}
-            </button>
-          </div>
+            </Button>
+          </ModalActions>
         </Modal>
       )
     })
@@ -128,15 +163,22 @@ function PromptForm({ title, fields, okText, onDone }: { title: string; fields: 
           if (valid) onDone(values)
         }}
       >
-        <div className="modal-body form">
+        <ModalBody className="flex flex-col gap-3.5">
           {fields.map((f, i) => (
-            <label key={f.name} className="field">
-              <span>{f.label}</span>
+            <label key={f.name} className="flex flex-col gap-1.5">
+              {f.label && <span className="text-[12px] font-medium text-ink-2">{f.label}</span>}
               {f.multiline ? (
-                <textarea rows={3} value={values[f.name]} placeholder={f.placeholder} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} />
+                <textarea
+                  rows={3}
+                  className={cn(inputClass, 'resize-y py-2 leading-relaxed')}
+                  value={values[f.name]}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
+                />
               ) : (
                 <input
                   ref={i === 0 ? first : undefined}
+                  className={cn(inputClass, 'h-10 md:h-9')}
                   value={values[f.name]}
                   placeholder={f.placeholder}
                   onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
@@ -144,15 +186,13 @@ function PromptForm({ title, fields, okText, onDone }: { title: string; fields: 
               )}
             </label>
           ))}
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={() => onDone(null)}>
-            取消
-          </button>
-          <button type="submit" className="btn primary" disabled={!valid}>
+        </ModalBody>
+        <ModalActions>
+          <Button onClick={() => onDone(null)}>取消</Button>
+          <Button type="submit" variant="primary" disabled={!valid}>
             {okText}
-          </button>
-        </div>
+          </Button>
+        </ModalActions>
       </form>
     </Modal>
   )
@@ -183,19 +223,21 @@ let toastHost: HTMLDivElement | null = null
 export function toast(message: string, ms = 2600) {
   if (!toastHost) {
     toastHost = document.createElement('div')
-    toastHost.className = 'toast-host'
+    toastHost.className = 'pointer-events-none fixed bottom-[calc(28px+var(--safe-b))] left-1/2 z-[300] flex -translate-x-1/2 flex-col items-center gap-2'
     // announced by screen readers without moving focus
     toastHost.setAttribute('role', 'status')
     toastHost.setAttribute('aria-live', 'polite')
     document.body.appendChild(toastHost)
   }
   const el = document.createElement('div')
-  el.className = 'toast'
+  el.className =
+    'max-w-[min(440px,calc(100vw-32px))] animate-rise rounded-lg bg-[color-mix(in_oklab,var(--text-primary)_94%,transparent)] px-4 py-2 text-center text-[12.5px] leading-relaxed font-medium text-ink-inverse shadow-pop transition-[opacity,transform] duration-(--dur-base) ease-out'
   el.textContent = message
   toastHost.appendChild(el)
   setTimeout(() => {
-    el.classList.add('leaving')
-    setTimeout(() => el.remove(), 300)
+    el.style.opacity = '0'
+    el.style.transform = 'translateY(4px)'
+    setTimeout(() => el.remove(), 260)
   }, ms)
 }
 
@@ -239,7 +281,7 @@ function MenuFrame({ rect, items, opts, close }: { rect: { left: number; right: 
     }
   }, [])
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('.menu-item:not(:disabled)') ?? [])]
+    const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('[data-menu-item]:not(:disabled)') ?? [])]
     const cur = buttons.indexOf(document.activeElement as HTMLButtonElement)
     let next: number
     if (e.key === 'Escape' || e.key === 'Tab') {
@@ -254,9 +296,10 @@ function MenuFrame({ rect, items, opts, close }: { rect: { left: number; right: 
     e.preventDefault()
     buttons[next]?.focus()
   }
+  const fromAbove = top < rect.top
   return (
     <div
-      className="menu-backdrop"
+      className="fixed inset-0 z-[210]"
       onMouseDown={close}
       onTouchStart={(e) => e.target === e.currentTarget && close()}
       onContextMenu={(e) => {
@@ -266,18 +309,23 @@ function MenuFrame({ rect, items, opts, close }: { rect: { left: number; right: 
     >
       <div
         ref={ref}
-        className="menu"
+        className="fixed animate-pop overflow-y-auto rounded-lg border border-line-subtle bg-overlay p-1 shadow-pop outline-none"
         role="menu"
         tabIndex={-1}
-        style={{ left, top, width, maxHeight: window.innerHeight - 16, overflowY: 'auto' }}
+        style={{ left, top, width, maxHeight: window.innerHeight - 16, transformOrigin: `${fromAbove ? 'bottom' : 'top'} ${opts.align === 'left' ? 'left' : 'right'}` }}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
         {items.map((it, i) => (
           <Fragment key={it.label + i}>
-            {it.divider && i > 0 && <div className="menu-sep" role="separator" />}
+            {it.divider && i > 0 && <div className="mx-1.5 my-1 h-px bg-line-subtle" role="separator" />}
             <button
-              className={'menu-item' + (it.danger ? ' danger' : '')}
+              data-menu-item
+              className={cn(
+                'group flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] outline-none md:h-8',
+                'transition-colors duration-(--dur-fast) disabled:pointer-events-none disabled:opacity-45',
+                it.danger ? 'text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] focus-visible:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]' : 'text-ink hover:bg-hover focus-visible:bg-hover',
+              )}
               role={it.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'}
               aria-checked={it.checked !== undefined ? !!it.checked : undefined}
               disabled={it.disabled}
@@ -286,9 +334,11 @@ function MenuFrame({ rect, items, opts, close }: { rect: { left: number; right: 
                 it.onClick()
               }}
             >
-              {it.icon && <span className="menu-icon">{it.icon}</span>}
-              <span className="ellipsis">{it.label}</span>
-              {it.checked && <span className="menu-check">✓</span>}
+              {it.icon && (
+                <span className={cn('inline-flex shrink-0 [&_svg]:size-[15px]', it.danger ? 'text-danger' : 'text-ink-3 group-hover:text-ink-2')}>{it.icon}</span>
+              )}
+              <span className="min-w-0 flex-1 truncate">{it.label}</span>
+              {it.checked && <IconCheck width={14} height={14} className="shrink-0 text-accent" />}
             </button>
           </Fragment>
         ))}
@@ -333,7 +383,7 @@ function PopoverFrame({ rect, opts, close, children }: { rect: { left: number; r
     if (rect.bottom + 6 + h > window.innerHeight - 8 && rect.top - 6 - h > 8) setTop(rect.top - 6 - h)
   })
   return (
-    <div className="menu-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()} onTouchStart={(e) => e.target === e.currentTarget && close()}>
+    <div className="fixed inset-0 z-[210]" onMouseDown={(e) => e.target === e.currentTarget && close()} onTouchStart={(e) => e.target === e.currentTarget && close()}>
       <div ref={ref} className={'popover ' + (opts.className ?? '')} style={{ left, top, width, maxHeight: `calc(100vh - ${Math.max(16, top + 8)}px)` }}>
         {children}
       </div>

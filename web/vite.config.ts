@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // Milkdown renders document images with a plain <img src>, so a long document downloads
 // every picture as soon as it opens. Give them `loading="lazy"` (set before `src`, or the
@@ -18,7 +19,7 @@ const lazyImagesPlugin: Plugin = {
 }
 
 export default defineConfig({
-  plugins: [react(), lazyImagesPlugin],
+  plugins: [react(), tailwindcss(), lazyImagesPlugin],
   server: {
     port: 5173,
     // Keep the browser's Host header (the string shorthand would rewrite it to the target):

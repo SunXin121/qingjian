@@ -1,0 +1,220 @@
+/* Tailwind theme mapped onto the design tokens, the element base, shared animations.
+   Utility names: bg-{sunken,base,editor,surface,raised,overlay,inset,hover,active},
+   text-ink / ink-2 / ink-3 / ink-4, border-line / line-subtle / line-strong, accent-*. */
+@theme inline {
+  --color-sunken: var(--bg-sunken);
+  --color-base: var(--bg-base);
+  --color-editor: var(--bg-editor);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+  --color-overlay: var(--bg-overlay);
+  --color-inset: var(--bg-inset);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+
+  --color-line: var(--border-default);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+
+  --color-ink: var(--text-primary);
+  --color-ink-2: var(--text-secondary);
+  --color-ink-3: var(--text-tertiary);
+  --color-ink-4: var(--text-quaternary);
+  --color-ink-inverse: var(--text-inverse);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-softer: var(--accent-softer);
+  --color-accent-ring: var(--accent-ring);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-scrim: var(--scrim);
+
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-2xl: var(--r-2xl);
+
+  --font-ui: var(--font-ui);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-modal: var(--shadow-modal);
+
+  --ease-out: var(--ease-out);
+  --ease-spring: var(--ease-spring);
+
+  --animate-fade: qj-fade var(--dur-base) var(--ease-out) both;
+  --animate-rise: qj-rise var(--dur-base) var(--ease-out) both;
+  --animate-pop: qj-pop var(--dur-fast) var(--ease-out) both;
+  --animate-modal: qj-modal var(--dur-base) var(--ease-out) both;
+  --animate-slide-left: qj-slide-left var(--dur-base) var(--ease-out) both;
+  --animate-slide-right: qj-slide-right var(--dur-base) var(--ease-out) both;
+  --animate-spin: qj-spin 0.7s linear infinite;
+  --animate-shimmer: qj-shimmer 1.4s var(--ease-in-out) infinite;
+}
+
+/* devices without hover (phones, tablets): bigger targets, always-visible row actions */
+@custom-variant touch (@media (hover: none));
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--bg-editor);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--selection);
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  /* bare buttons start blank; styled ones (a class of their own) override this layer */
+  button {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-quaternary);
+  }
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 1px;
+  }
+  kbd {
+    font-family: var(--font-ui);
+  }
+  mark {
+    background: var(--highlight);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+
+  /* thin, unobtrusive scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--text-tertiary) 60%, transparent);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* shared UI icons sit on the text line */
+  .lucide {
+    display: inline-block;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes qj-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes qj-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes qj-pop {
+  from { opacity: 0; transform: scale(0.97) translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes qj-modal {
+  from { opacity: 0; transform: scale(0.97) translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes qj-slide-left {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes qj-slide-right {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes qj-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes qj-shimmer {
+  from { background-position: -180% 0; }
+  to { background-position: 180% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

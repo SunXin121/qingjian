@@ -3,7 +3,9 @@ import { Link } from 'react-router'
 import { api, formatTime, nodePath, shareURL, type Share } from '../api'
 import { confirmDialog, copyText, openMenu, toast } from '../components/dialog'
 import { IconBook, IconCopy, IconDoc, IconEye, IconLink, IconLock, IconMore, IconSettings, IconTable, IconTrash, IconUnlink } from '../components/icons'
-import PageHeader from '../components/PageHeader'
+import { Crumb, PageBody, PageTitle, RowIcon, RowList, rowClass } from '../components/page'
+import PageHeader, { Crumbs } from '../components/PageHeader'
+import { Badge, EmptyState, IconButton, Loading, type Tone } from '../components/ui'
 import { formatExpiry, openShareDialog, shareState } from '../components/ShareDialog'
 import { nodeTitle } from '../store'
 
@@ -50,62 +52,63 @@ export default function Shares() {
     ])
 
   return (
-    <div className="page">
+    <div>
       <PageHeader>
-        <span className="crumb">分享管理</span>
+        <Crumbs>
+          <Crumb>分享管理</Crumb>
+        </Crumbs>
       </PageHeader>
-      <div className="page-body">
-        <h1 className="page-title">分享管理</h1>
-        <p className="muted">所有对外公开的只读链接。在文档页右上角或知识库菜单中可以创建分享。</p>
-        <div className="doc-list share-list">
-          {list?.map((sh) => {
-            const st = shareState(sh)
-            const target = sh.target_type === 'repo' ? `/r/${sh.target_id}` : nodePath({ id: sh.target_id, repo_id: sh.repo_id, type: sh.node_type })
-            return (
-              <div key={sh.token} className="share-item">
-                <span className={'doc-row-icon' + (sh.target_type === 'repo' ? ' repo' : '')}>
-                  {sh.target_type === 'repo' ? <IconBook width={16} height={16} /> : sh.node_type === 'table' ? <IconTable width={16} height={16} /> : <IconDoc width={16} height={16} />}
-                </span>
-                <div className="share-item-main">
-                  <div className="share-item-title">
-                    {sh.target_alive ? (
-                      <Link to={target} className="ellipsis">
-                        {shareTitle(sh)}
-                      </Link>
-                    ) : (
-                      <span className="ellipsis muted">{shareTitle(sh)}</span>
-                    )}
-                    {sh.has_password && <IconLock width={14} height={14} className="muted" aria-label="有密码" />}
+      <PageBody>
+        <PageTitle sub="所有对外公开的只读链接。在文档页右上角或知识库菜单中可以创建分享。">分享管理</PageTitle>
+        {!list ? (
+          <Loading />
+        ) : list.length === 0 ? (
+          <EmptyState icon={<IconLink />} title="还没有分享任何内容">
+            分享后，任何拿到链接的人都能只读访问。
+          </EmptyState>
+        ) : (
+          <RowList>
+            {list.map((sh) => {
+              const st = shareState(sh)
+              const target = sh.target_type === 'repo' ? `/r/${sh.target_id}` : nodePath({ id: sh.target_id, repo_id: sh.repo_id, type: sh.node_type })
+              return (
+                <div key={sh.token} className={rowClass + ' py-2.5'}>
+                  <RowIcon accent={sh.target_type === 'repo'}>{sh.target_type === 'repo' ? <IconBook /> : sh.node_type === 'table' ? <IconTable /> : <IconDoc />}</RowIcon>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {sh.target_alive ? (
+                        <Link to={target} className="truncate font-medium text-ink hover:text-accent">
+                          {shareTitle(sh)}
+                        </Link>
+                      ) : (
+                        <span className="truncate text-ink-3">{shareTitle(sh)}</span>
+                      )}
+                      {sh.has_password && <IconLock width={13} height={13} className="shrink-0 text-ink-4" aria-label="有密码" />}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-4">
+                      <Badge tone={SHARE_TONE[st.cls] ?? 'neutral'}>{st.text}</Badge>
+                      <span>{sh.target_type === 'repo' ? '知识库' : sh.repo_name}</span>
+                      <span>{formatExpiry(sh)}</span>
+                      <span className="tabular inline-flex items-center gap-1">
+                        <IconEye width={12} height={12} /> {sh.view_count}
+                      </span>
+                      <span className="max-sm:hidden">创建于 {formatTime(sh.created_at)}</span>
+                    </div>
                   </div>
-                  <div className="share-item-meta">
-                    <span className={'share-badge ' + st.cls}>{st.text}</span>
-                    <span>{sh.target_type === 'repo' ? '知识库' : sh.repo_name}</span>
-                    <span>{formatExpiry(sh)}</span>
-                    <span className="meta-ico">
-                      <IconEye width={13} height={13} /> {sh.view_count}
-                    </span>
-                    <span>创建于 {formatTime(sh.created_at)}</span>
-                  </div>
+                  <IconButton label="操作" onClick={(e) => menu(e.currentTarget, sh)}>
+                    <IconMore width={16} height={16} />
+                  </IconButton>
                 </div>
-                <button className="icon-btn" title="操作" aria-label="操作" onClick={(e) => menu(e.currentTarget, sh)}>
-                  <IconMore />
-                </button>
-              </div>
-            )
-          })}
-          {list?.length === 0 && (
-            <div className="empty-state small">
-              <span className="empty-icon">
-                <IconLink width={22} height={22} />
-              </span>
-              还没有分享任何内容
-            </div>
-          )}
-        </div>
-      </div>
+              )
+            })}
+          </RowList>
+        )}
+      </PageBody>
     </div>
   )
 }
+
+const SHARE_TONE: Record<string, Tone> = { on: 'accent', off: 'neutral', warn: 'warn' }
 
 function shareTitle(sh: Share) {
   return sh.target_type === 'repo' ? sh.title || '未命名知识库' : nodeTitle({ type: sh.node_type, title: sh.title })

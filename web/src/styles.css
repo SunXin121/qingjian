@@ -1,21 +1,36 @@
-/* Split by area; the order below is the cascade order, so keep it when adding files. */
-@import './styles/base.css';
-@import './styles/buttons.css';
-@import './styles/shell.css';
-@import './styles/tree.css';
-@import './styles/page.css';
-@import './styles/document.css';
+/* Cascade: Tailwind utilities beat the legacy stylesheets, which sit in their own layer
+   until the components that use them are rewritten. Editor / table / drawing styles stay
+   unlayered: they override third-party CSS (Crepe, Glide, Excalidraw) that is unlayered too.
+   Tailwind's preflight is left out on purpose — it would reset the editor's content. */
+@layer theme, base, legacy, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import '@fontsource-variable/inter/index.css';
+
+@import './styles/tokens.css';
+@import './styles/app.css';
+
+/* legacy, split by area; the order below is the cascade order inside the layer */
+@import './styles/base.css' layer(legacy);
+@import './styles/buttons.css' layer(legacy);
+@import './styles/shell.css' layer(legacy);
+@import './styles/tree.css' layer(legacy);
+@import './styles/page.css' layer(legacy);
+@import './styles/document.css' layer(legacy);
+@import './styles/overlays.css' layer(legacy);
+@import './styles/search.css' layer(legacy);
+@import './styles/login.css' layer(legacy);
+@import './styles/responsive.css' layer(legacy);
+@import './styles/m2.css' layer(legacy);
+@import './styles/share.css' layer(legacy);
+@import './styles/settings.css' layer(legacy);
+@import './styles/diff.css' layer(legacy);
+@import './styles/refresh.css' layer(legacy);
+@import './styles/states.css' layer(legacy);
+@import './styles/dark.css' layer(legacy);
+
+/* unlayered: overrides of third-party editor / drawing styles */
 @import './styles/editor.css';
-@import './styles/overlays.css';
-@import './styles/search.css';
-@import './styles/login.css';
-@import './styles/responsive.css';
-@import './styles/m2.css';
-@import './styles/share.css';
-@import './styles/settings.css';
-@import './styles/diff.css';
 @import './styles/callouts.css';
 @import './styles/drawing-modals.css';
-@import './styles/dark.css';
-@import './styles/refresh.css';
-@import './styles/states.css';
