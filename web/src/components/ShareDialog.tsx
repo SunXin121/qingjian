@@ -58,17 +58,14 @@ export function shareState(sh: Share): { text: string; cls: string } {
   return { text: '公开中', cls: 'on' }
 }
 
-function ExpiryPicker({ value, custom, onChange }: { value: Preset; custom: string; onChange: (p: Preset, custom: string) => void }) {
+function ExpiryPicker({ value, custom, current, onChange }: { value: Preset; custom: string; current?: string; onChange: (p: Preset, custom: string) => void }) {
   const today = new Date()
   const min = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   return (
     <div className="share-expiry">
       <select value={value} onChange={(e) => onChange(e.target.value as Preset, custom)}>
-        {value === '' && (
-          <option value="" disabled>
-            修改有效期…
-          </option>
-        )}
+        {/* the link's current expiry date (choosing a preset replaces it) */}
+        {current && <option value="">{current}</option>}
         <option value="never">永久有效</option>
         <option value="1">1 天</option>
         <option value="7">7 天</option>
@@ -299,17 +296,18 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
           )}
 
           <div className="share-row">
-            <div>
-              <div className="share-row-title">有效期</div>
-              <div className="share-row-desc">{formatExpiry(share)}</div>
-            </div>
+            <div className="share-row-title">有效期</div>
             <ExpiryPicker
-              value={editPreset}
+              value={editPreset || (share.expires_at ? '' : 'never')}
               custom={custom}
+              current={share.expires_at ? formatExpiry(share).replace('有效期至 ', '至 ') : undefined}
               onChange={(p, c) => {
                 setCustom(c)
+                // re-picking the current date changes nothing
+                if (p === '') return setEditPreset('')
                 if (p === 'custom' && !c) return setEditPreset('custom')
                 setEditPreset('')
+                if (p === 'never' && !share.expires_at) return
                 run(() => api.updateShare(share.token, { expires_at: presetExpiry(p, c) }))
               }}
             />
@@ -329,7 +327,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
               重新生成链接
             </button>
             <button
-              className="btn sm danger outline"
+              className="btn sm danger-outline"
               disabled={busy}
               onClick={async () => {
                 if (!(await confirmDialog('删除后链接将永久失效。确定删除这个分享吗？', { danger: true, okText: '删除' }))) return

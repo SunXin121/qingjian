@@ -2485,7 +2485,7 @@ input[type='date'] {
   justify-content: space-between;
   align-items: center;
 }
-.modal-actions .btn.danger.outline {
+.btn.danger-outline {
   background: transparent;
   border-color: var(--c-border);
   color: var(--c-danger);
