@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -64,6 +65,10 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 		return nil, err
 	}
 	if err := s.backfillLinks(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.backfillTableIndex(); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -205,7 +210,42 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Security-Policy", s.pageCSP())
 	serveStaticFile(w, r, s.static, "index.html")
+}
+
+// pageCSP is the policy of the app page. Documents render user-written markdown, SVG and
+// diagrams, so this is the backstop should a sanitiser ever miss something: scripts only
+// from this origin (never inline), no plugins, no foreign frames except the draw.io editor.
+// Images and media may come from anywhere, since documents embed external pictures.
+func (s *Server) pageCSP() string {
+	frames := "'self' blob:"
+	if s.cfg.DrawioDir == "" {
+		drawio := s.cfg.DrawioURL
+		if drawio == "" {
+			drawio = "https://embed.diagrams.net/"
+		}
+		if u, err := url.Parse(drawio); err == nil && u.Host != "" {
+			frames += " " + u.Scheme + "://" + u.Host
+		}
+	}
+	return strings.Join([]string{
+		"default-src 'self'",
+		"script-src 'self' 'wasm-unsafe-eval' blob:",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data: blob: https: http:",
+		"media-src 'self' data: blob: https: http:",
+		// esm.sh: Excalidraw lists its CDN as the second source of every font face; the
+		// bundled fonts are used, but the browser reports each blocked alternative
+		"font-src 'self' data: https://esm.sh",
+		"connect-src 'self' data: blob:",
+		"worker-src 'self' blob:",
+		"frame-src " + frames,
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+		"frame-ancestors 'self'",
+	}, "; ")
 }
 
 // clientConfig exposes the settings the frontend needs.

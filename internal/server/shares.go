@@ -19,16 +19,16 @@ const (
 
 // Share is a read-only public link to a single document or a whole repo.
 type Share struct {
-	Token       string `json:"token"`
-	TargetType  string `json:"target_type"` // node | repo
-	TargetID    string `json:"target_id"`
+	Token       string  `json:"token"`
+	TargetType  string  `json:"target_type"` // node | repo
+	TargetID    string  `json:"target_id"`
 	ViewID      *string `json:"view_id"`
-	HasPassword bool   `json:"has_password"`
-	ExpiresAt   *int64 `json:"expires_at"`
-	Enabled     bool   `json:"enabled"`
-	ViewCount   int64  `json:"view_count"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	HasPassword bool    `json:"has_password"`
+	ExpiresAt   *int64  `json:"expires_at"`
+	Enabled     bool    `json:"enabled"`
+	ViewCount   int64   `json:"view_count"`
+	CreatedAt   int64   `json:"created_at"`
+	UpdatedAt   int64   `json:"updated_at"`
 
 	// resolved from the target
 	Title       string `json:"title"`
@@ -101,8 +101,8 @@ func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		TargetType string `json:"target_type"`
-		TargetID   string `json:"target_id"`
+		TargetType string  `json:"target_type"`
+		TargetID   string  `json:"target_id"`
 		Password   string  `json:"password"`
 		ExpiresAt  *int64  `json:"expires_at"`
 		ViewID     *string `json:"view_id"`

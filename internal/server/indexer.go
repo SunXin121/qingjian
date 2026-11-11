@@ -2,7 +2,10 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,6 +18,8 @@ import (
 const (
 	ftsInlineBytes = 64 << 10
 	ftsQuietPeriod = 10 * time.Second
+	// tables are indexed this long after their last edit
+	tableIndexDelay = 3 * time.Second
 )
 
 // indexDoc records the links of a saved document and updates its search index, now or
@@ -66,8 +71,9 @@ func (s *Server) indexPending(at int64) {
 	var ids []string
 	for rows.Next() {
 		var id string
-		rows.Scan(&id)
-		ids = append(ids, id)
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
 	}
 	rows.Close()
 	for _, id := range ids {
@@ -91,10 +97,30 @@ func (s *Server) indexOne(id string, at int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil
 	}
-	var title, md string
-	err = tx.QueryRow(`SELECT n.title, d.markdown FROM nodes n JOIN doc_contents d ON d.node_id = n.id WHERE n.id = ?`, id).Scan(&title, &md)
+	var typ, title string
+	err = tx.QueryRow(`SELECT type, title FROM nodes WHERE id = ?`, id).Scan(&typ, &title)
 	if err == sql.ErrNoRows {
 		return tx.Commit() // purged meanwhile
+	} else if err != nil {
+		return err
+	}
+	if typ == "table" {
+		body, err := tableSearchText(tx, id)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM docs_fts WHERE node_id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO docs_fts(node_id, title, body) VALUES(?,?,?)`, id, title, body); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	var md string
+	err = tx.QueryRow(`SELECT markdown FROM doc_contents WHERE node_id = ?`, id).Scan(&md)
+	if err == sql.ErrNoRows {
+		return tx.Commit()
 	} else if err != nil {
 		return err
 	}
@@ -102,4 +128,112 @@ func (s *Server) indexOne(id string, at int64) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// queueTableIndex schedules a table's records for full-text indexing. Tables are edited
+// in bursts of small ops, so the index is always rebuilt later, off the request.
+func queueTableIndex(tx *sql.Tx, id string, t int64) error {
+	_, err := tx.Exec(`INSERT INTO fts_pending(node_id, due_at) VALUES(?, ?) ON CONFLICT(node_id) DO UPDATE SET due_at = excluded.due_at`,
+		id, t+tableIndexDelay.Milliseconds())
+	return err
+}
+
+// tableSearchText is what search sees of a table: one line per record with the values of
+// its text-like fields and the names of the chosen options.
+func tableSearchText(tx *sql.Tx, id string) (string, error) {
+	rows, err := tx.Query(`SELECT id, type, options FROM bt_fields WHERE table_node_id = ? ORDER BY sort, rowid`, id)
+	if err != nil {
+		return "", err
+	}
+	type field struct {
+		id      string
+		choices map[string]string // select / multiselect: choice id → name
+	}
+	var fields []field
+	for rows.Next() {
+		var fid, typ, opts string
+		if err := rows.Scan(&fid, &typ, &opts); err != nil {
+			rows.Close()
+			return "", err
+		}
+		switch typ {
+		case "text", "longtext", "url", "phone", "email", "number":
+			fields = append(fields, field{id: fid})
+		case "select", "multiselect":
+			var o struct {
+				Choices []struct{ ID, Name string } `json:"choices"`
+			}
+			json.Unmarshal([]byte(opts), &o)
+			f := field{id: fid, choices: map[string]string{}}
+			for _, c := range o.Choices {
+				f.choices[c.ID] = c.Name
+			}
+			fields = append(fields, f)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	rows, err = tx.Query(`SELECT data FROM bt_records WHERE table_node_id = ? ORDER BY sort, seq`, id)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var b strings.Builder
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return "", err
+		}
+		var data map[string]any
+		if json.Unmarshal([]byte(raw), &data) != nil {
+			continue
+		}
+		wrote := false
+		put := func(s string) {
+			if s = strings.TrimSpace(s); s == "" {
+				return
+			}
+			if wrote {
+				b.WriteString(" · ")
+			}
+			b.WriteString(s)
+			wrote = true
+		}
+		for _, f := range fields {
+			switch v := data[f.id].(type) {
+			case string:
+				if f.choices != nil {
+					put(f.choices[v])
+				} else {
+					put(v)
+				}
+			case float64:
+				put(strconv.FormatFloat(v, 'f', -1, 64))
+			case []any:
+				for _, x := range v {
+					if cid, ok := x.(string); ok && f.choices != nil {
+						put(f.choices[cid])
+					}
+				}
+			}
+		}
+		if wrote {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String(), rows.Err()
+}
+
+// backfillTableIndex queues every existing table once, for databases created before
+// table records were searchable.
+func (s *Server) backfillTableIndex() error {
+	if _, done := s.getSetting("tables_indexed"); done {
+		return nil
+	}
+	if _, err := s.db.Exec(`INSERT INTO fts_pending(node_id, due_at) SELECT id, 0 FROM nodes WHERE type = 'table' ON CONFLICT(node_id) DO NOTHING`); err != nil {
+		return err
+	}
+	return s.setSetting("tables_indexed", "1")
 }

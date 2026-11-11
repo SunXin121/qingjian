@@ -123,8 +123,14 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n.Title, n.UpdatedAt = title, now()
-	tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, n.Title, n.UpdatedAt, id)
-	tx.Exec(`UPDATE docs_fts SET title = ? WHERE node_id = ?`, n.Title, id)
+	if _, err := tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, n.Title, n.UpdatedAt, id); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if _, err := tx.Exec(`UPDATE docs_fts SET title = ? WHERE node_id = ?`, n.Title, id); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -206,7 +212,9 @@ func descendantIDs(tx *sql.Tx, id string, onlyAlive bool) ([]string, error) {
 	var ids []string
 	for rows.Next() {
 		var x string
-		rows.Scan(&x)
+		if err := rows.Scan(&x); err != nil {
+			return nil, err
+		}
 		ids = append(ids, x)
 	}
 	return ids, rows.Err()
@@ -231,7 +239,10 @@ func (s *Server) deleteNode(w http.ResponseWriter, r *http.Request) {
 	}
 	t := now()
 	for _, x := range ids {
-		tx.Exec(`UPDATE nodes SET deleted_at = ?, trash_root = ? WHERE id = ?`, t, boolInt(x == id), x)
+		if _, err := tx.Exec(`UPDATE nodes SET deleted_at = ?, trash_root = ? WHERE id = ?`, t, boolInt(x == id), x); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		httpError(w, 500, err.Error())

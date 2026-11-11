@@ -42,7 +42,7 @@ func (e *testEnv) ops(tableID string, ops ...map[string]any) (int, map[string]an
 func TestTableLifecycle(t *testing.T) {
 	e := newEnv(t)
 	_, id := e.newTable("任务")
-	code, tb := e.table("/api/tables/"+id)
+	code, tb := e.table("/api/tables/" + id)
 	if code != 200 || len(tb.Fields) != 3 || len(tb.Views) != 1 || len(tb.Records) != 3 {
 		t.Fatalf("defaults: %d %+v", code, tb)
 	}
@@ -59,7 +59,7 @@ func TestTableLifecycle(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("ops: %d %v", code, m)
 	}
-	_, tb = e.table("/api/tables/"+id)
+	_, tb = e.table("/api/tables/" + id)
 	last := tb.Records[len(tb.Records)-1]
 	var data map[string]any
 	json.Unmarshal(last.Data, &data)
@@ -70,7 +70,7 @@ func TestTableLifecycle(t *testing.T) {
 	// null in a patch removes the value, deleting a field strips it from records
 	e.ops(id, map[string]any{"op": "record.update", "id": "rec0000001", "data": map[string]any{primary: nil}})
 	e.ops(id, map[string]any{"op": "field.delete", "id": "fnum000001"})
-	_, tb = e.table("/api/tables/"+id)
+	_, tb = e.table("/api/tables/" + id)
 	if got := string(tb.Records[len(tb.Records)-1].Data); got != "{}" {
 		t.Fatalf("data after removals: %s", got)
 	}
@@ -85,7 +85,7 @@ func TestTableLifecycle(t *testing.T) {
 		map[string]any{"op": "record.delete", "id": tb.Records[0].ID},
 		map[string]any{"op": "field.create", "id": "bad", "type": "nope"},
 	)
-	if _, tb2 := e.table("/api/tables/"+id); len(tb2.Records) != len(tb.Records) {
+	if _, tb2 := e.table("/api/tables/" + id); len(tb2.Records) != len(tb.Records) {
 		t.Fatalf("batch not atomic")
 	}
 	// ops on a doc are rejected
@@ -98,7 +98,7 @@ func TestTableLifecycle(t *testing.T) {
 func TestTableShareAndEmbed(t *testing.T) {
 	e := newEnv(t)
 	repoID, id := e.newTable("T")
-	_, tb := e.table("/api/tables/"+id)
+	_, tb := e.table("/api/tables/" + id)
 	e.ops(id, map[string]any{"op": "view.create", "id": "view000002", "name": "看板", "type": "kanban", "sort": 2})
 
 	_, sh := e.do(e.admin, "POST", "/api/shares", map[string]any{"target_type": "node", "target_id": id, "view_id": "view000002"})
@@ -131,7 +131,7 @@ func TestTableShareAndEmbed(t *testing.T) {
 func TestTableExport(t *testing.T) {
 	e := newEnv(t)
 	repoID, id := e.newTable("清单")
-	_, tb := e.table("/api/tables/"+id)
+	_, tb := e.table("/api/tables/" + id)
 	f := tb.Fields
 	var opts struct {
 		Choices []struct{ ID string } `json:"choices"`

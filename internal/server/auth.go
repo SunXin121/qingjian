@@ -146,9 +146,12 @@ func (s *Server) isSecure(r *http.Request) bool {
 
 func (s *Server) clientIP(r *http.Request) string {
 	if s.cfg.TrustProxy {
+		// The proxy appends the address it saw to whatever the client sent, so only the
+		// last entry is trustworthy; earlier ones are client-controlled.
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			return strings.TrimSpace(first)
+			if ip := strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:]); ip != "" {
+				return ip
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

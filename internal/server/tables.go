@@ -524,6 +524,10 @@ func (s *Server) tableOps(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := queueTableIndex(tx, id, t); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
 	tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, t, id)
 	for other := range l.touched {
 		tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, t, other)

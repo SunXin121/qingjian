@@ -36,8 +36,8 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, out)
 		return
 	}
-	if len(q) > 200 {
-		q = q[:200]
+	if r := []rune(q); len(r) > 200 {
+		q = string(r[:200])
 	}
 	var hits []SearchHit
 	var err error
@@ -117,11 +117,31 @@ func (s *Server) searchLike(q string) ([]SearchHit, error) {
 	return out, rows.Err()
 }
 
+// indexFold finds term in s ignoring case and returns a byte offset into s itself.
+// Lower-casing can change a character's byte length, so offsets found in a lowered copy
+// are not valid in the original; this walks the original instead.
+func indexFold(s, term string) int {
+	if i := strings.Index(s, term); i >= 0 {
+		return i
+	}
+	n := len(term)
+	for i := range s {
+		if i+n > len(s) {
+			break
+		}
+		// the match must end on a character boundary too
+		if (i+n == len(s) || utf8.RuneStart(s[i+n])) && strings.EqualFold(s[i:i+n], term) {
+			return i
+		}
+	}
+	return -1
+}
+
 // makeSnippet mirrors FTS5 snippet(): highlights are wrapped in \x01 ... \x02.
 func makeSnippet(body, term string) string {
 	body = strings.Join(strings.Fields(body), " ")
-	idx := strings.Index(strings.ToLower(body), strings.ToLower(term))
-	if idx < 0 {
+	idx := indexFold(body, term)
+	if idx < 0 || idx+len(term) > len(body) {
 		r := []rune(body)
 		if len(r) > 60 {
 			return string(r[:60]) + "…"

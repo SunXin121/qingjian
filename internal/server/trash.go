@@ -61,7 +61,10 @@ func (s *Server) restoreTrash(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 	switch kind {
 	case "repo":
-		tx.Exec(`UPDATE repos SET deleted_at = NULL WHERE id = ?`, id)
+		if _, err := tx.Exec(`UPDATE repos SET deleted_at = NULL WHERE id = ?`, id); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
 	case "node":
 		var deletedAt int64
 		var parentID *string
@@ -76,14 +79,23 @@ func (s *Server) restoreTrash(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, x := range ids {
 			// only revive descendants deleted together with the root
-			tx.Exec(`UPDATE nodes SET deleted_at = NULL, trash_root = 0 WHERE id = ? AND deleted_at = ?`, x, deletedAt)
+			if _, err := tx.Exec(`UPDATE nodes SET deleted_at = NULL, trash_root = 0 WHERE id = ? AND deleted_at = ?`, x, deletedAt); err != nil {
+				httpError(w, 500, err.Error())
+				return
+			}
 		}
 		// if the original parent is gone, put it back at the root
 		if parentID != nil {
 			var alive int
-			tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = ? AND deleted_at IS NULL`, *parentID).Scan(&alive)
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = ? AND deleted_at IS NULL`, *parentID).Scan(&alive); err != nil {
+				httpError(w, 500, err.Error())
+				return
+			}
 			if alive == 0 {
-				tx.Exec(`UPDATE nodes SET parent_id = NULL WHERE id = ?`, id)
+				if _, err := tx.Exec(`UPDATE nodes SET parent_id = NULL WHERE id = ?`, id); err != nil {
+					httpError(w, 500, err.Error())
+					return
+				}
 			}
 		}
 	default:
@@ -133,9 +145,16 @@ func purgeItem(tx *sql.Tx, kind, id string) error {
 			return err
 		}
 		for _, x := range ids {
-			tx.Exec(`DELETE FROM docs_fts WHERE node_id = ?`, x)
-			tx.Exec(`DELETE FROM shares WHERE target_type = 'node' AND target_id = ?`, x)
-			tx.Exec(`DELETE FROM nodes WHERE id = ?`, x)
+			for _, q := range []string{
+				`DELETE FROM docs_fts WHERE node_id = ?`,
+				`DELETE FROM fts_pending WHERE node_id = ?`,
+				`DELETE FROM shares WHERE target_type = 'node' AND target_id = ?`,
+				`DELETE FROM nodes WHERE id = ?`,
+			} {
+				if _, err := tx.Exec(q, x); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
