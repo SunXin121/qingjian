@@ -215,7 +215,8 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 
 // pageCSP is the policy of the app page. Documents render user-written markdown, SVG and
 // diagrams, so this is the backstop should a sanitiser ever miss something: scripts only
-// from this origin (never inline), no plugins, no foreign frames except the draw.io editor.
+// from this origin (never inline; plus the Cloudflare Web Analytics beacon), no plugins,
+// no foreign frames except the draw.io editor.
 // Images and media may come from anywhere, since documents embed external pictures.
 func (s *Server) pageCSP() string {
 	frames := "'self' blob:"
@@ -230,14 +231,15 @@ func (s *Server) pageCSP() string {
 	}
 	return strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'wasm-unsafe-eval' blob:",
+		// Cloudflare Web Analytics: injected by the proxy when the site sits behind Cloudflare
+		"script-src 'self' 'wasm-unsafe-eval' blob: https://static.cloudflareinsights.com",
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob: https: http:",
 		"media-src 'self' data: blob: https: http:",
 		// esm.sh: Excalidraw lists its CDN as the second source of every font face; the
 		// bundled fonts are used, but the browser reports each blocked alternative
 		"font-src 'self' data: https://esm.sh",
-		"connect-src 'self' data: blob:",
+		"connect-src 'self' data: blob: https://cloudflareinsights.com",
 		"worker-src 'self' blob:",
 		"frame-src " + frames,
 		"object-src 'none'",

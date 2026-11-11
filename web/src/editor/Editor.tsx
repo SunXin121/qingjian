@@ -8,7 +8,8 @@ import { uploadConfig, type Uploader } from '@milkdown/kit/plugin/upload'
 import { clearTextInCurrentBlockCommand, codeBlockSchema } from '@milkdown/kit/preset/commonmark'
 import type { Node as PMNode } from '@milkdown/kit/prose/model'
 import { TextSelection } from '@milkdown/kit/prose/state'
-import { oneDark } from '@codemirror/theme-one-dark'
+import remarkCjkFriendly from 'remark-cjk-friendly'
+import { $remark } from '@milkdown/kit/utils'
 import { uploadFile, type NodeRenamed } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
@@ -16,6 +17,8 @@ import { docLinkTrigger, followRename, nodeLinkPath, openDocLinkPicker } from '.
 import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
 import { previewBlockKeys } from './previewBlocks'
 import { imageRatioRemark } from './imageRatio'
+import { htmlImagesRemark } from './htmlImages'
+import { codeThemeDark, codeThemeLight } from './codeTheme'
 import { textDiagramView } from './textDiagram'
 
 const ExcalidrawModal = lazy(() => import('./ExcalidrawModal'))
@@ -41,6 +44,8 @@ const ICONS = {
   fold: icon('<path d="M4 6h16M4 12h10M4 18h10"/><path d="M17 14l2 2 2-2"/>'),
   docLink: icon('<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M10.5 15.5l3-3M11 12.5h2.5V15"/>'),
 }
+
+const cjkFriendlyRemark = $remark('qj-cjk-friendly', () => remarkCjkFriendly)
 
 /** documents at least this long skip layout of off-screen blocks (see .ink-editor.large) */
 const LARGE_DOC = 50_000
@@ -145,7 +150,7 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: '输入 / 唤起菜单，支持 Markdown 语法', mode: 'block' },
         [Crepe.Feature.CodeMirror]: {
-          theme: prefersDark() ? oneDark : [],
+          theme: prefersDark() ? codeThemeDark : codeThemeLight,
           renderPreview,
           previewOnlyByDefault: true,
           searchPlaceholder: '搜索语言',
@@ -278,6 +283,10 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       setDrawing({ kind, content })
     }
 
+    // CJK-friendly emphasis: `**举例：**获取` is bold although the closing ** sits between
+    // punctuation and a letter, which plain CommonMark rejects
+    crepe.editor.use(cjkFriendlyRemark)
+    crepe.editor.use(htmlImagesRemark)
     crepe.editor.use(imageRatioRemark)
     crepe.editor.use(calloutPlugin)
     // after Crepe's own code-block view: wraps it to give mermaid / dot blocks their own UI
