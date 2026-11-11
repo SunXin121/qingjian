@@ -52,6 +52,8 @@ export default function Outline({ headings, open, onClose }: { headings: Heading
   const minLevel = useMemo(() => Math.min(6, ...headings.map((h) => h.level)), [headings])
   if (headings.length === 0) return null
   const jumpTo = (h: Heading) => {
+    // long documents are still appending their later parts right after opening
+    window.dispatchEvent(new Event('qj-editor-flush'))
     const els = document.querySelectorAll('.doc-main .ink-editor .ProseMirror > :is(h1,h2,h3,h4,h5,h6)')
     const el = els[h.index] as HTMLElement | undefined
     if (el) scrollToHeading(el)

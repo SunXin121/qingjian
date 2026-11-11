@@ -3,13 +3,15 @@ import { Crepe } from '@milkdown/crepe'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import type { Ctx } from '@milkdown/kit/ctx'
-import { editorViewCtx, commandsCtx } from '@milkdown/kit/core'
+import { editorViewCtx, commandsCtx, parserCtx } from '@milkdown/kit/core'
+import { trailingConfig } from '@milkdown/kit/plugin/trailing'
 import { uploadConfig, type Uploader } from '@milkdown/kit/plugin/upload'
 import { clearTextInCurrentBlockCommand, codeBlockSchema } from '@milkdown/kit/preset/commonmark'
 import type { Node as PMNode } from '@milkdown/kit/prose/model'
-import { TextSelection } from '@milkdown/kit/prose/state'
+import { Plugin, PluginKey, TextSelection, type Transaction } from '@milkdown/kit/prose/state'
+import type { EditorView } from '@milkdown/kit/prose/view'
 import remarkCjkFriendly from 'remark-cjk-friendly'
-import { $remark } from '@milkdown/kit/utils'
+import { $prose, $remark } from '@milkdown/kit/utils'
 import { uploadFile, type NodeRenamed } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
@@ -20,6 +22,7 @@ import { imageRatioRemark } from './imageRatio'
 import { htmlImagesRemark } from './htmlImages'
 import { codeThemeDark, codeThemeLight } from './codeTheme'
 import { textDiagramView } from './textDiagram'
+import { PROGRESSIVE_MIN, splitMarkdown } from './progressive'
 
 const ExcalidrawModal = lazy(() => import('./ExcalidrawModal'))
 const DrawioModal = lazy(() => import('./DrawioModal'))
@@ -166,9 +169,18 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     const root = rootRef.current!
     let destroyed = false
 
+    // Long documents start with their first part only and the rest is appended in pieces
+    // right after (see progressive.ts), so the top of the page does not wait for all of it.
+    const pending = value.length >= PROGRESSIVE_MIN ? splitMarkdown(value) : [value]
+    const head = pending.shift()!
+    /** a document change other than appending the pending pieces (or caused by appending them) */
+    let edited = false
+    /** such a change that onChange has not been told about yet */
+    let unreported = false
+
     const crepe = new Crepe({
       root,
-      defaultValue: value,
+      defaultValue: head,
       features: {
         [Crepe.Feature.AI]: false,
         [Crepe.Feature.TopBar]: false,
@@ -320,6 +332,72 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     crepe.editor.use(previewBlockKeys)
     crepe.editor.use(docLinkTrigger)
 
+    // Where the next piece goes: the end of what is loaded so far, mapped through edits. It
+    // also tells edits apart from loading, including what other plugins append in response.
+    const tailKey = new PluginKey<number>('qj-progressive-tail')
+    crepe.editor.use(
+      $prose(
+        () =>
+          new Plugin<number>({
+            key: tailKey,
+            state: {
+              init: (_, state) => state.doc.content.size,
+              apply: (tr, pos) => {
+                const set = tr.getMeta(tailKey) as number | undefined
+                const root = (tr.getMeta('appendedTransaction') as Transaction | undefined) ?? tr
+                // like the change listener, skip what plugins keep out of the history (heading ids)
+                if (tr.docChanged && tr.getMeta('addToHistory') !== false && root.getMeta(tailKey) === undefined) edited = unreported = true
+                return set ?? tr.mapping.map(pos, -1)
+              },
+            },
+          }),
+      ),
+    )
+    // The editor keeps an empty paragraph after a document ending in a list, table, code…
+    // Only the whole document's end counts, or a blank line would be left between pieces.
+    crepe.editor.config((ctx) => {
+      ctx.update(trailingConfig.key, (prev) => ({ ...prev, shouldAppend: (node, state) => !pending.length && prev.shouldAppend(node, state) }))
+    })
+    let pieceTimer = 0
+    // kept out of the undo history and the change listener: loading is not an edit
+    const appendPiece = (view: EditorView) => {
+      const doc = crepe.editor.ctx.get(parserCtx)(pending.shift()!)
+      const pos = tailKey.getState(view.state)!
+      const tr = view.state.tr.insert(pos, doc.content)
+      view.dispatch(tr.setMeta(tailKey, pos + doc.content.size).setMeta('addToHistory', false))
+    }
+    const loaded = (view: EditorView) => {
+      // nothing but loading changed the document: its markdown is still the stored text
+      if (!edited) {
+        cachedDoc = view.state.doc
+        cachedMd = value
+      }
+    }
+    const loadNextPiece = () => {
+      pieceTimer = 0
+      if (destroyed || !pending.length) return
+      const view = crepe.editor.ctx.get(editorViewCtx)
+      if (view.isDestroyed) return
+      appendPiece(view)
+      if (pending.length) pieceTimer = window.setTimeout(loadNextPiece, 0)
+      else loaded(view)
+    }
+    /** Append everything still pending at once: before the document is read, edited or searched. */
+    const flushPending = () => {
+      if (!pending.length) return
+      let view: EditorView
+      try {
+        view = crepe.editor.ctx.get(editorViewCtx)
+      } catch {
+        return // not created yet: the pieces follow once it is
+      }
+      if (view.isDestroyed) return
+      clearTimeout(pieceTimer)
+      pieceTimer = 0
+      while (pending.length) appendPiece(view)
+      loaded(view)
+    }
+
     // Upload pasted / dropped files to the server instead of inlining base64.
     const uploader: Uploader = async (files, schema) => {
       const list = Array.from(files)
@@ -372,12 +450,15 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     // Reads the editor itself, not crepeRef: the page flushes its last save while
     // unmounting, after this component's cleanup ran but before the view is destroyed.
     const getMarkdown = () => {
+      flushPending()
       let doc: PMNode
       try {
         doc = crepe.editor.ctx.get(editorViewCtx).state.doc
       } catch {
         return cachedMd // not created yet, or already destroyed
       }
+      // the editor was gone before all pieces were appended: the rest is still the stored text
+      if (pending.length) return edited ? normalizeCalloutMarkdown(crepe.getMarkdown()).replace(/\n*$/, '\n\n') + pending.join('') : value
       if (doc !== cachedDoc) {
         cachedMd = normalizeCalloutMarkdown(crepe.getMarkdown())
         cachedDoc = doc
@@ -385,7 +466,12 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       return cachedMd
     }
     crepe.on((api) => {
-      api.updated(() => onChangeRef.current?.(getMarkdown))
+      api.updated(() => {
+        // appending the pieces of a long document is not an edit
+        if (!unreported) return
+        unreported = false
+        onChangeRef.current?.(getMarkdown)
+      })
     })
 
     if (readonly) crepe.setReadonly(true)
@@ -406,8 +492,12 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       view.dom.addEventListener('focus', refreshCursor)
       offFocus = () => view.dom.removeEventListener('focus', refreshCursor)
       cachedDoc = view.state.doc
+      if (pending.length) pieceTimer = window.setTimeout(loadNextPiece, 0)
       onReady?.({ getMarkdown })
     })
+    // typing, pasting, dropping, finding (Ctrl+F) or printing work on the whole document
+    const flushEvents = ['keydown', 'paste', 'drop', 'beforeprint', 'qj-editor-flush']
+    if (pending.length) for (const t of flushEvents) window.addEventListener(t, flushPending, true)
 
     // click on a drawing preview opens the board editor
     const onClick = (e: MouseEvent) => {
@@ -440,12 +530,17 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     // a linked document / table was renamed: links still showing its old title follow
     const onRenamed = (e: Event) => {
       if (crepe.readonly || destroyed) return
-      created.then(() => crepe.editor.action((ctx) => followRename(ctx.get(editorViewCtx), (e as CustomEvent<NodeRenamed>).detail)))
+      created.then(() => {
+        flushPending() // links further down follow too
+        crepe.editor.action((ctx) => followRename(ctx.get(editorViewCtx), (e as CustomEvent<NodeRenamed>).detail))
+      })
     }
     window.addEventListener('qj-node-renamed', onRenamed)
 
     return () => {
       destroyed = true
+      clearTimeout(pieceTimer)
+      for (const t of flushEvents) window.removeEventListener(t, flushPending, true)
       offFocus()
       root.removeEventListener('click', onClick)
       window.removeEventListener('qj-node-renamed', onRenamed)
