@@ -16,12 +16,11 @@ import { uploadFile, type NodeRenamed } from '../api'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
 import { docLinkTrigger, followRename, nodeLinkPath, openDocLinkPicker } from './docLinks'
-import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
+import { DIAGRAM_TEMPLATES, isDrawingKind, renderPreview, type DrawingKind } from './previews'
 import { previewBlockKeys } from './previewBlocks'
 import { imageRatioRemark } from './imageRatio'
 import { htmlImagesRemark } from './htmlImages'
 import { Prec } from '@codemirror/state'
-import { codeThemeDark, codeThemeLight } from './codeTheme'
 import { textDiagramView } from './textDiagram'
 import { PROGRESSIVE_MIN, splitMarkdown } from './progressive'
 
@@ -189,11 +188,11 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: '输入 / 唤起菜单，支持 Markdown 语法', mode: 'block' },
         [Crepe.Feature.CodeMirror]: {
-          // Crepe fills in its defaults with lodash defaultsDeep, which merges its oneDark theme
-          // *into* the value given here, in place. Handing it the shared theme objects grew them
-          // on every editor created, until opening a document took seconds. A fresh wrapper
-          // per editor only gets oneDark's two entries attached as unused keys.
-          theme: Prec.default(prefersDark() ? codeThemeDark : codeThemeLight),
+          // No code theme of our own: CodeMirror's default highlighting. Crepe fills in its
+          // defaults with lodash defaultsDeep, which would merge its oneDark theme *into* an
+          // empty value given here; a fresh wrapper only gets oneDark's entries attached as
+          // unused keys (and never the shared objects, which made each new editor slower).
+          theme: Prec.default([]),
           renderPreview,
           previewOnlyByDefault: true,
           searchPlaceholder: '搜索语言',
