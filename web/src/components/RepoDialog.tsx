@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from 'react'
 import { api, uploadFile, type Repo } from '../api'
 import { confirmDialog, Modal, mount, openMenu, toast } from './dialog'
-import { IconDownload, IconEdit, IconShare, IconTrash, IconUpload, RepoMark } from './icons'
+import { IconDownload, IconEdit, IconFolder, IconShare, IconTrash, IconUpload, RepoMark } from './icons'
+import { canPickFolder } from './ImportDialog'
 import { openShareDialog } from './ShareDialog'
 
 const icons = ['📚', '📝', '📖', '💡', '🧠', '💻', '🎨', '🔬', '🌱', '🏠', '🗂️', '📌', '🎯', '🚀', '⭐', '❤️']
@@ -136,8 +137,11 @@ export function editRepoDialog(repo?: Repo): Promise<RepoDetails | null> {
   })
 }
 
-/** Edit / share / export / delete menu for a knowledge base. */
-export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?: () => void) {
+/**
+ * Edit / share / import / export / delete menu for a knowledge base. The import entries
+ * show when `onImport` is given; it must open the file picker right away (user gesture).
+ */
+export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?: () => void, onImport?: (folder: boolean) => void) {
   openMenu(el, [
     {
       label: '编辑信息',
@@ -150,6 +154,8 @@ export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?
       },
     },
     { label: '分享知识库', icon: <IconShare />, onClick: () => openShareDialog({ target_type: 'repo', target_id: r.id, title: r.name }) },
+    { label: '导入 Markdown / zip', icon: <IconUpload />, divider: true, hidden: !onImport, onClick: () => onImport?.(false) },
+    { label: '导入文件夹', icon: <IconFolder />, hidden: !onImport || !canPickFolder, onClick: () => onImport?.(true) },
     { label: '导出为 Markdown (zip)', icon: <IconDownload />, onClick: () => (location.href = `/api/repos/${r.id}/export`) },
     {
       label: '删除知识库',

@@ -218,16 +218,10 @@
   border-radius: var(--radius);
   word-break: break-all;
 }
-.section-head .btn + .btn {
-  margin-left: 8px;
-}
 .side-scroll.tree.file-drop {
   background: var(--c-primary-soft);
   box-shadow: inset 0 0 0 1px var(--c-primary);
   border-radius: var(--radius);
-}
-.side-empty .btn + .btn {
-  margin-top: 8px;
 }
 .side-hint {
   margin: 10px 0 0;

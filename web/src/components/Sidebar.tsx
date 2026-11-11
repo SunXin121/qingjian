@@ -412,7 +412,6 @@ function RepoTree({ repoId }: { repoId: string }) {
               { label: '新建文档', icon: <IconDocPlus />, onClick: () => create(null, 'doc') },
               { label: '新建分组', icon: <IconFolderPlus />, onClick: () => create(null, 'group') },
               { label: '新建多维表格', icon: <IconTable />, onClick: () => create(null, 'table') },
-              ...importItems(null),
             ])
           }
         >
@@ -422,7 +421,15 @@ function RepoTree({ repoId }: { repoId: string }) {
           <button
             className="icon-btn"
             title="知识库设置" aria-label="知识库设置"
-            onClick={(e) => repoMenu(e.currentTarget, repo, () => loadRepos().catch(() => {}), () => navigate('/'))}
+            onClick={(e) =>
+              repoMenu(
+                e.currentTarget,
+                repo,
+                () => loadRepos().catch(() => {}),
+                () => navigate('/'),
+                (folder) => void pickImport(folder).then((picked) => importInto(null, picked)),
+              )
+            }
           >
             <IconMore />
           </button>
@@ -451,10 +458,7 @@ function RepoTree({ repoId }: { repoId: string }) {
             <button className="btn" onClick={() => create(null, 'doc')}>
               <IconDocPlus width={16} height={16} /> 新建第一篇文档
             </button>
-            <button className="btn ghost" onClick={async () => importInto(null, await pickImport(false))}>
-              <IconUpload width={16} height={16} /> 导入 Markdown
-            </button>
-            <p className="side-hint">也可以把文件或文件夹拖到这里</p>
+            <p className="side-hint">也可以从「···」菜单导入 Markdown，或把文件、文件夹拖到这里</p>
           </div>
         )}
         {/* drop zone to move items to the end of root */}
