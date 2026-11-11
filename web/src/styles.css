@@ -520,11 +520,11 @@ mark {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Text glyphs sit slightly below their line-box centre beside the fixed-size icons. */
+/* A 1em line box keeps the glyphs centred on the fixed-size icons beside them;
+   no extra nudge — with the CJK fallback fonts a shift pushes the text above centre. */
 .repo-name > span:last-child,
 .tree-title {
   line-height: 1;
-  transform: translateY(-1px);
 }
 
 /* ---------- tree ---------- */
