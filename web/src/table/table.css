@@ -488,6 +488,49 @@ select.bt-input {
 .bt-expr-bar .btn {
   color: var(--c-text-2);
 }
+.bt-cond-expr.no-lead .bt-expr-bar {
+  padding-left: 0;
+}
+.bt-expr-bar {
+  flex-wrap: wrap;
+}
+.bt-expr-bar select.bt-input {
+  flex: none;
+  width: auto;
+}
+.bt-expr-ok {
+  white-space: nowrap;
+}
+.bt-panel-title .seg {
+  padding: 2px;
+}
+.bt-panel-title .seg button {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.bt-title-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.bt-title-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface-low);
+  font-size: 13px;
+}
+.bt-title-field:not(:has(button)) {
+  padding-right: 8px;
+}
 .bt-expr-error {
   color: var(--c-danger);
   text-align: right;
@@ -1550,40 +1593,6 @@ select.bt-input {
 }
 
 /* hover "+" buttons over the grid: insert a record above / below, or a field to the right */
-.bt-insert {
-  position: absolute;
-  z-index: 5;
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  padding: 0;
-  border: 1px solid var(--c-info);
-  border-radius: 50%;
-  background: var(--c-panel);
-  color: var(--c-info);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  animation: bt-insert-in 0.12s ease-out;
-}
-.bt-insert:hover {
-  background: var(--c-info);
-  color: #fff;
-}
-@keyframes bt-insert-in {
-  from {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-}
-.bt-insert-line {
-  position: absolute;
-  z-index: 4;
-  background: var(--c-info);
-  pointer-events: none;
-}
-
 /* ---------- rating / progress ---------- */
 .bt-rating {
   display: inline-flex;

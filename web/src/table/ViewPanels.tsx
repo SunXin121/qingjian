@@ -2,14 +2,17 @@ import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { openMenu, openPopover } from '../components/dialog'
 import { IconClose, IconEdit, IconPlus } from '../components/icons'
 import { ChoicePicker, Tags } from './editors'
-import { DATE_PRESETS, defaultCondValue, filterOps, kanbanField, kanbanFieldOk, orderedFields } from './engine'
+import { cellValue, DATE_PRESETS, defaultCondValue, displayText, exprField, filterOps, kanbanField, kanbanFieldOk, orderedFields } from './engine'
 import { openFieldEditor } from './FieldEditor'
-import { compileFilter, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from './formula'
+import { compileFilter, compileFormula, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from './formula'
 import { orderIds, useTable, type TableModel } from './model'
 import { coverField } from './GalleryView'
 import { calendarEndField, calendarField, calendarFieldOk } from './CalendarView'
 import { ganttColorOk, ganttDepOk, ganttProgressOk } from './GanttView'
 import { baseField, fieldTypeLabel, isComputed, newId, type Field, type FilterCond, type SortRule, type View } from './types'
+
+/** select value standing for "use an expression" */
+const EXPR = '__expr'
 
 function useView(model: TableModel, viewId: string): [View | undefined, Field[]] {
   const t = useTable(model)
@@ -112,20 +115,67 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
 
 /** A filter condition written as a formula expression (formula.ts). */
 function ExprCond({ model, value, conj, remove, onChange }: { model: TableModel; value: string; conj: ReactNode; remove: ReactNode; onChange: (stored: string) => void }) {
+  return <ExprInput model={model} value={value} lead={conj} trailing={remove} onChange={onChange} mode="filter" />
+}
+
+/**
+ * Formula expression input (formula.ts) with field / function pickers. The text as typed
+ * (field names) is the source while editing; `value` / `onChange` use the stored form,
+ * which references fields by id. `filter` mode reports how many records match, `value`
+ * mode how many distinct values the expression gives.
+ */
+export function ExprInput({
+  model,
+  value,
+  onChange,
+  mode,
+  lead,
+  trailing,
+  extra,
+  placeholder,
+  sample,
+}: {
+  model: TableModel
+  value: string
+  onChange: (stored: string) => void
+  mode: 'filter' | 'value'
+  lead?: ReactNode
+  trailing?: ReactNode
+  /** controls shown in the bar under the input */
+  extra?: ReactNode
+  placeholder?: string
+  /** value mode: show the first non-empty result instead of the number of distinct values */
+  sample?: boolean
+}) {
   const t = useTable(model)
-  // the text as typed is the source while editing; the stored form references fields by id
   const [text, setText] = useState(() => toDisplayExpr(t, value))
   const ref = useRef<HTMLTextAreaElement>(null)
-  const res = text.trim() ? compileFilter(t, toStoredExpr(t, text)) : null
-  const count = useMemo(() => {
+  const stored = text.trim() ? toStoredExpr(t, text) : ''
+  const res = stored ? (mode === 'filter' ? compileFilter(t, stored) : compileFormula(t, stored)) : null
+  const status = useMemo(() => {
     if (!res?.ok) return null
-    let n = 0
-    for (const r of t.records) if (res.test(r)) n++
-    return n
-  }, [res, t.records])
+    if ('test' in res) {
+      let n = 0
+      for (const r of t.records) if (res.test(r)) n++
+      return `符合 ${n} 条记录`
+    }
+    const f = exprField(t, stored)
+    if (!f) return null
+    if (sample) {
+      for (const r of t.records) {
+        const v = displayText(f, cellValue(r, f))
+        if (v) return `示例：${v.length > 24 ? v.slice(0, 24) + '…' : v}`
+      }
+      return null
+    }
+    const seen = new Set<string>()
+    for (const r of t.records) seen.add(displayText(f, cellValue(r, f)))
+    seen.delete('')
+    return `得到 ${seen.size} 个不同的值`
+  }, [res, t, stored, sample])
   const change = (v: string) => {
     setText(v)
-    onChange(toStoredExpr(t, v))
+    onChange(v.trim() ? toStoredExpr(t, v) : '')
   }
   const insert = (s: string, back = 0) => {
     const el = ref.current
@@ -140,19 +190,19 @@ function ExprCond({ model, value, conj, remove, onChange }: { model: TableModel;
     })
   }
   return (
-    <div className="bt-cond-expr">
+    <div className={'bt-cond-expr' + (lead ? '' : ' no-lead')}>
       <div className="bt-cond">
-        {conj}
+        {lead}
         <textarea
           ref={ref}
           className={'bt-input bt-expr-input' + (res && !res.ok ? ' invalid' : '')}
           rows={2}
           spellCheck={false}
           value={text}
-          placeholder={'例如 {价格} > 100 AND CONTAINS({标题}, "bug")'}
+          placeholder={placeholder ?? (mode === 'filter' ? '例如 {价格} > 100 AND CONTAINS({标题}, "bug")' : '例如 YEAR({日期}) & "年" 或 IF({价格} > 100, "高", "低")')}
           onChange={(e) => change(e.target.value)}
         />
-        {remove}
+        {trailing}
       </div>
       <div className="bt-expr-bar">
         <button
@@ -167,11 +217,12 @@ function ExprCond({ model, value, conj, remove, onChange }: { model: TableModel;
         >
           {'{ }'} 插入字段
         </button>
-        <button className="btn ghost sm" onClick={(e) => openPopover(e.currentTarget, (close) => <FormulaHelp onPick={(name) => (close(), insert(name + '()', 1))} />, { width: 380, align: 'left' })}>
+        <button className="btn ghost sm" onClick={(e) => openPopover(e.currentTarget, (close) => <FormulaHelp onPick={(name) => (close(), insert(name + '()', 1))} formula={mode === 'value'} />, { width: 380, align: 'left' })}>
           ƒ 函数与语法
         </button>
+        {extra}
         <span className="spacer" />
-        {res && !res.ok ? <span className="bt-expr-error">{res.error}</span> : count !== null ? <span className="bt-expr-ok">符合 {count} 条记录</span> : null}
+        {res && !res.ok ? <span className="bt-expr-error">{res.error}</span> : status ? <span className="bt-expr-ok">{status}</span> : null}
       </div>
     </div>
   )
@@ -291,35 +342,53 @@ function RulesPanel({ model, viewId, kind }: { model: TableModel; viewId: string
   if (!view) return null
   const rules: SortRule[] = view.config[kind] ?? []
   const set = (r: SortRule[]) => model.updateView(viewId, kind === 'groups' ? { groups: r, collapsed: [] } : { sorts: r })
-  const unused = fields.filter((f) => !rules.some((r) => r.field === f.id) && (kind === 'sorts' || f.type !== 'attachment'))
+  const update = (i: number, patch: Partial<SortRule>) => set(rules.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  const unused = fields.filter((f) => !rules.some((r) => r.expr === undefined && r.field === f.id) && (kind === 'sorts' || f.type !== 'attachment'))
   const max = kind === 'groups' ? 3 : 5
+  const order = (r: SortRule, i: number) => (
+    <select className="bt-input sm" value={r.desc ? '1' : '0'} onChange={(e) => update(i, { desc: e.target.value === '1' })}>
+      <option value="0">升序 A → Z</option>
+      <option value="1">降序 Z → A</option>
+    </select>
+  )
+  const remove = (i: number) => (
+    <button className="icon-btn sm" title="删除" onClick={() => set(rules.filter((_, j) => j !== i))}>
+      <IconClose width={14} height={14} />
+    </button>
+  )
   return (
     <div className="bt-panel">
       <div className="bt-panel-title">{kind === 'sorts' ? '排序' : '分组'}</div>
-      {rules.length === 0 && <div className="bt-panel-empty">{kind === 'sorts' ? '按字段对记录排序' : '按字段把记录分组显示，最多 3 级'}</div>}
-      {rules.map((r, i) => (
-        <div key={r.field + i} className="bt-cond">
-          <FieldSelect fields={fields.filter((f) => f.id === r.field || unused.includes(f))} value={r.field} onChange={(id) => set(rules.map((x, j) => (j === i ? { ...x, field: id } : x)))} />
-          <select className="bt-input sm" value={r.desc ? '1' : '0'} onChange={(e) => set(rules.map((x, j) => (j === i ? { ...x, desc: e.target.value === '1' } : x)))}>
-            <option value="0">升序 A → Z</option>
-            <option value="1">降序 Z → A</option>
-          </select>
-          <button className="icon-btn sm" title="删除" onClick={() => set(rules.filter((_, j) => j !== i))}>
-            <IconClose width={14} height={14} />
+      {rules.length === 0 && <div className="bt-panel-empty">{kind === 'sorts' ? '按字段或表达式对记录排序' : '按字段或表达式把记录分组显示，最多 3 级'}</div>}
+      {rules.map((r, i) =>
+        r.expr !== undefined ? (
+          <ExprInput key={r.id ?? 'e' + i} model={model} value={r.expr} mode="value" trailing={remove(i)} extra={order(r, i)} onChange={(expr) => update(i, { expr })} />
+        ) : (
+          <div key={r.field + i} className="bt-cond">
+            <FieldSelect fields={fields.filter((f) => f.id === r.field || unused.includes(f))} value={r.field} onChange={(id) => update(i, { field: id })} />
+            {order(r, i)}
+            {remove(i)}
+          </div>
+        ),
+      )}
+      {rules.length < max && (
+        <div className="bt-panel-actions">
+          {unused.length > 0 && (
+            <button
+              className="btn ghost sm"
+              onClick={() => {
+                // grouping by a category reads best; fall back to any field
+                const pick = kind === 'groups' ? (unused.find((f) => f.type === 'select') ?? unused.find((f) => f.type === 'checkbox' || f.type === 'multiselect') ?? unused[0]) : unused[0]
+                set([...rules, { field: pick.id }])
+              }}
+            >
+              <IconPlus width={14} height={14} /> {kind === 'sorts' ? '添加排序' : '添加分组'}
+            </button>
+          )}
+          <button className="btn ghost sm" onClick={() => set([...rules, { field: '', expr: '', id: newId() }])}>
+            <IconPlus width={14} height={14} /> 添加表达式
           </button>
         </div>
-      ))}
-      {rules.length < max && unused.length > 0 && (
-        <button
-          className="btn ghost sm bt-panel-add"
-          onClick={() => {
-            // grouping by a category reads best; fall back to any field
-            const pick = kind === 'groups' ? (unused.find((f) => f.type === 'select') ?? unused.find((f) => f.type === 'checkbox' || f.type === 'multiselect') ?? unused[0]) : unused[0]
-            set([...rules, { field: pick.id }])
-          }}
-        >
-          <IconPlus width={14} height={14} /> {kind === 'sorts' ? '添加排序' : '添加分组'}
-        </button>
       )}
     </div>
   )
@@ -334,19 +403,28 @@ export function KanbanPanel({ model, viewId }: { model: TableModel; viewId: stri
   const t = model.data
   const options = fields.filter(kanbanFieldOk)
   const cur = kanbanField(t, view)
+  const isExpr = view.config.kanbanExpr !== undefined
   return (
     <div className="bt-panel">
       <div className="bt-panel-title">看板分组字段</div>
-      <select className="bt-input sm" value={cur?.id ?? ''} onChange={(e) => model.updateView(viewId, { kanbanField: e.target.value })}>
-        {!cur && <option value="">选择分组字段…</option>}
+      <select
+        className="bt-input sm"
+        value={isExpr ? EXPR : (cur?.id ?? '')}
+        onChange={(e) => model.updateView(viewId, e.target.value === EXPR ? { kanbanExpr: '' } : { kanbanField: e.target.value, kanbanExpr: undefined })}
+      >
+        {!cur && !isExpr && <option value="">选择分组字段…</option>}
         {options.map((f) => (
           <option key={f.id} value={f.id}>
             {f.name}（{fieldTypeLabel(f.type)}）
           </option>
         ))}
+        <option value={EXPR}>按表达式分组…</option>
       </select>
+      {isExpr && <ExprInput key={viewId} model={model} value={view.config.kanbanExpr ?? ''} mode="value" onChange={(kanbanExpr) => model.updateView(viewId, { kanbanExpr })} />}
       <div className="bt-panel-empty">
-        {!cur
+        {isExpr
+          ? '每个不同的计算结果一列；结果由表达式自动计算，卡片不能拖到其他列'
+          : !cur
           ? '可按除附件、自动编号外的任意字段分组'
           : cur.type === 'select' || cur.type === 'multiselect'
             ? cur.type === 'multiselect'
@@ -503,12 +581,79 @@ export function CalendarPanel({ model, viewId, gantt }: { model: TableModel; vie
             </option>
           ))}
       </select>
+      <TitleOptions model={model} view={view} fields={fields} />
       {gantt ? (
         <GanttOptions model={model} view={view} fields={fields} />
       ) : (
         <div className="bt-panel-empty">{cur?.type === 'date' ? '拖动记录可修改日期，双击空白处新建记录' : '该字段自动计算，记录不能拖动'}</div>
       )}
     </div>
+  )
+}
+
+/** What a calendar / gantt record shows: some fields joined, or an expression. */
+function TitleOptions({ model, view, fields }: { model: TableModel; view: View; fields: Field[] }) {
+  const cfg = view.config
+  const isExpr = cfg.titleExpr !== undefined
+  const byId = new Map(fields.map((f) => [f.id, f]))
+  const chosen = (cfg.titleFields ?? []).filter((id) => byId.has(id))
+  const shown = chosen.length ? chosen : fields[0] ? [fields[0].id] : []
+  const rest = fields.filter((f) => !shown.includes(f.id) && f.type !== 'attachment')
+  const setFields = (ids: string[]) => model.updateView(view.id, { titleFields: ids.length ? ids : undefined })
+  return (
+    <>
+      <div className="bt-panel-title">
+        显示内容
+        <span className="spacer" />
+        <span className="seg">
+          <button className={isExpr ? '' : 'active'} onClick={() => isExpr && model.updateView(view.id, { titleExpr: undefined })}>
+            字段
+          </button>
+          <button className={isExpr ? 'active' : ''} onClick={() => !isExpr && model.updateView(view.id, { titleExpr: '' })}>
+            表达式
+          </button>
+        </span>
+      </div>
+      {isExpr ? (
+        <ExprInput
+          key={view.id}
+          model={model}
+          value={cfg.titleExpr ?? ''}
+          mode="value"
+          sample
+          placeholder={'例如 {标题} & " - " & {负责人}'}
+          onChange={(titleExpr) => model.updateView(view.id, { titleExpr })}
+        />
+      ) : (
+        <div className="bt-title-fields">
+          {shown.map((id) => (
+            <span key={id} className="bt-title-field">
+              <span className="ellipsis">{byId.get(id)!.name}</span>
+              {shown.length > 1 && (
+                <button className="icon-btn sm" title="移除" onClick={() => setFields(shown.filter((x) => x !== id))}>
+                  <IconClose width={12} height={12} />
+                </button>
+              )}
+            </span>
+          ))}
+          {rest.length > 0 && (
+            <button
+              className="btn ghost sm"
+              onClick={(e) =>
+                openMenu(
+                  e.currentTarget,
+                  rest.map((f) => ({ label: f.name, onClick: () => setFields([...shown, f.id]) })),
+                  { align: 'left', width: 200 },
+                )
+              }
+            >
+              <IconPlus width={14} height={14} /> 添加字段
+            </button>
+          )}
+        </div>
+      )}
+      <div className="bt-panel-empty">{isExpr ? '用表达式组合多个字段，例如拼接文本、格式化日期' : '多个字段的值用「·」连接显示'}</div>
+    </>
   )
 }
 

@@ -17,6 +17,7 @@ import DOMPurify from 'dompurify'
 import './textDiagram.css'
 import { getConfig } from '../api'
 import { toast } from '../components/dialog'
+import { withLangInput } from './langInput'
 import { deleteBlockAt, isPreviewBlock } from './previewBlocks'
 import { DIAGRAM_TEMPLATES, renderTextDiagram, textDiagramLang, type TextDiagramLang } from './previews'
 
@@ -355,9 +356,16 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
       if (isPreviewBlock((nv as any).node)) (nv as any).selected.value = true
       else selectNode?.()
     }
+    // the language is typed into / picked from an input instead of Crepe's button + popup
+    const syncLang = withLangInput(nv as any, view)
     // a code block switched to mermaid / dot is rebuilt as a text diagram
     const update = nv.update?.bind(nv)
-    nv.update = (n: PMNode, ...rest: any[]) => (textDiagramLang(n.attrs.language) ? false : (update?.(n, ...(rest as [any, any])) ?? false))
+    nv.update = (n: PMNode, ...rest: any[]) => {
+      if (textDiagramLang(n.attrs.language)) return false
+      const ok = update?.(n, ...(rest as [any, any])) ?? false
+      if (ok) syncLang()
+      return ok
+    }
     return nv
   }
   return factory

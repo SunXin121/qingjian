@@ -1353,30 +1353,88 @@ a.toc-row:hover > .ellipsis {
 .ink-editor .milkdown .milkdown-code-block .tools .tools-button-group {
   gap: 4px;
 }
-/* keep the language label visible (subtle) so the tools row doesn't read as empty space */
-.ink-editor .milkdown .milkdown-code-block .tools .language-button {
-  opacity: 1;
+/* code language: an input (editor/langInput.ts) instead of Crepe's button + search popup */
+.ink-editor .milkdown .milkdown-code-block .tools > .language-button,
+.ink-editor .milkdown .milkdown-code-block .tools > .language-picker {
+  display: none;
+}
+.ink-editor .milkdown .milkdown-code-block .tools > .ink-lang {
+  display: inline-flex;
   margin-bottom: 4px;
-  padding: 2px 4px 2px 6px;
+}
+.ink-lang-input {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  font-family: var(--font-mono);
-  font-weight: 500;
   color: var(--c-text-3);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
-.ink-editor .milkdown .milkdown-code-block .tools .language-button .expand-icon {
-  opacity: 0;
-  transition: opacity 0.15s;
+.ink-lang-input::placeholder {
+  color: var(--c-text-3);
+  opacity: 0.8;
 }
-.ink-editor .milkdown .milkdown-code-block:hover .tools .language-button .expand-icon {
-  opacity: 1;
+.milkdown-code-block:hover .ink-lang-input:not(:read-only) {
+  border-color: var(--c-border);
 }
-.ink-editor .milkdown .milkdown-code-block .tools .language-button:hover {
+.ink-lang-input:not(:read-only):hover {
   background: var(--c-hover);
   color: var(--c-text-2);
 }
-.ink-editor.readonly .milkdown .milkdown-code-block .tools .language-button .expand-icon {
-  display: none;
+.ink-lang-input:not(:read-only):focus {
+  border-color: var(--c-info);
+  background: var(--c-panel);
+  color: var(--c-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-info) 18%, transparent);
+}
+.ink-lang-input:read-only {
+  cursor: default;
+}
+.ink-lang-menu {
+  position: fixed;
+  z-index: 1000;
+  width: 200px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-panel);
+  box-shadow: var(--shadow);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.ink-lang-item {
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--c-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ink-lang-item.active {
+  background: var(--c-hover);
+}
+.ink-lang-item.current {
+  color: var(--c-info);
+  font-weight: 600;
+}
+.ink-lang-empty {
+  padding: 6px 8px;
+  color: var(--c-text-3);
+  font-family: var(--font);
+  font-size: 12.5px;
 }
 /* diagram / drawing blocks shown as preview only: no code-block chrome, tools float on hover */
 .ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) {
@@ -1404,7 +1462,7 @@ a.toc-row:hover > .ellipsis {
 .ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) > .tools > * {
   pointer-events: auto;
 }
-.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) .language-button {
+.ink-editor .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) .ink-lang-input {
   background: var(--c-panel);
   box-shadow: var(--shadow-sm);
 }
@@ -2377,6 +2435,35 @@ input[type='date'] {
 .share-pw-form {
   display: flex;
   gap: 6px;
+}
+.share-pw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.field .share-pw-head .switch span {
+  display: block;
+}
+.share-pw-input {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.share-pw-input input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+}
+.share-pw-input .btn {
+  flex: none;
+}
+.field .share-pw-off {
+  padding: 8px 0;
+  font-weight: 400;
+  color: var(--c-text-3);
 }
 .share-pw-form input {
   flex: 1;

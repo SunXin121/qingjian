@@ -14,6 +14,25 @@ type Preset = 'never' | '1' | '7' | '30' | 'custom' | ''
 
 const DAY = 86_400_000
 
+/** A random access password: 6 characters without look-alikes (0/O, 1/l/I). */
+export function randomPassword(n = 6) {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'
+  const bytes = crypto.getRandomValues(new Uint8Array(n))
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
+}
+
+/** Password input prefilled with a random password; it can be edited or re-rolled. */
+function PasswordInput({ value, onChange, autoFocus, placeholder }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; placeholder?: string }) {
+  return (
+    <span className="share-pw-input">
+      <input autoFocus={autoFocus} value={value} placeholder={placeholder} autoComplete="off" spellCheck={false} onChange={(e) => onChange(e.target.value.trim())} />
+      <button type="button" className="btn sm" title="重新随机生成" onClick={() => onChange(randomPassword())}>
+        随机生成
+      </button>
+    </span>
+  )
+}
+
 function presetExpiry(p: Preset, custom: string): number | null {
   if (p === 'never' || p === '') return null
   if (p === 'custom') {
@@ -65,7 +84,8 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
   const [share, setShare] = useState<Share | null | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   // creation form / editing state
-  const [password, setPassword] = useState('')
+  const [password, setPassword] = useState(() => randomPassword())
+  const [usePw, setUsePw] = useState(true)
   const [preset, setPreset] = useState<Preset>('never')
   const [custom, setCustom] = useState('')
   const [editingPw, setEditingPw] = useState(false)
@@ -99,14 +119,15 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
   const create = () =>
     run(async () => {
       if (preset === 'custom' && !custom) throw new Error('请选择到期日期')
+      if (usePw && !password) throw new Error('请输入访问密码，或关闭密码保护')
       const sh = await api.createShare({
         target_type: target.target_type,
         target_id: target.target_id,
-        password: password || undefined,
+        password: (usePw && password) || undefined,
         expires_at: presetExpiry(preset, custom),
         view_id: viewId || null,
       })
-      setLastPw(password)
+      setLastPw(usePw ? password : '')
       setPassword('')
       return sh
     })
@@ -140,10 +161,20 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
               {viewPicker(viewId, setViewId)}
             </label>
           )}
-          <label className="field">
-            <span>访问密码（可选）</span>
-            <input value={password} placeholder="留空则无需密码" autoComplete="off" onChange={(e) => setPassword(e.target.value)} />
-          </label>
+          <div className="field">
+            <span className="share-pw-head">
+              访问密码
+              <label className="switch" title={usePw ? '关闭后拿到链接即可访问' : '开启密码保护'}>
+                <input type="checkbox" checked={usePw} onChange={(e) => setUsePw(e.target.checked)} />
+                <span />
+              </label>
+            </span>
+            {usePw ? (
+              <PasswordInput value={password} onChange={setPassword} placeholder="输入访问密码" />
+            ) : (
+              <span className="muted share-pw-off">不设密码，拿到链接即可访问</span>
+            )}
+          </div>
           <label className="field">
             <span>有效期</span>
             <ExpiryPicker
@@ -215,7 +246,13 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
             </div>
             {!editingPw && (
               <div className="share-row-actions">
-                <button className="btn sm" onClick={() => setEditingPw(true)}>
+                <button
+                  className="btn sm"
+                  onClick={() => {
+                    setPassword(randomPassword())
+                    setEditingPw(true)
+                  }}
+                >
                   {share.has_password ? '修改' : '设置'}
                 </button>
                 {share.has_password && (
@@ -251,7 +288,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
                 })
               }}
             >
-              <input autoFocus value={password} placeholder="新密码" autoComplete="off" onChange={(e) => setPassword(e.target.value)} />
+              <PasswordInput autoFocus value={password} onChange={setPassword} placeholder="新密码" />
               <button type="button" className="btn sm" onClick={() => setEditingPw(false)}>
                 取消
               </button>

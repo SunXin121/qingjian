@@ -1,9 +1,9 @@
 // Pure table logic shared by the grid, kanban, record card, embeds and share pages:
 // display text, filtering, sorting, grouping, summaries, parsing pasted text and CSV.
 
-import type { AttachmentValue, Choice, Field, FieldType, FilterCond, FilterOp, Rec, SortRule, SummaryKind, TableData, View } from './types'
+import type { AttachmentValue, Choice, Field, FieldType, FilterCond, FilterOp, Rec, SortRule, SummaryKind, TableData, ValueKind, View } from './types'
 import { baseField, isComputed, isNumeric, newId, ratingMax } from './types'
-import { compileFilter } from './formula'
+import { compileFilter, compileFormula, toCellValue, toDisplayExpr } from './formula'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -24,6 +24,7 @@ export function choiceOf(f: Field, id: unknown): Choice | undefined {
 
 /** Raw value of a field for a record; computed fields derive from record metadata. */
 export function cellValue(r: Rec, f: Field): any {
+  if (f.rt?.values) return f.rt.values.get(r.id)
   switch (f.type) {
     case 'autonumber':
       return r.seq
@@ -314,6 +315,81 @@ export function makeMatcher(t: TableData, v: View): (r: Rec) => boolean {
   return (r) => (any ? tests.some((test) => test(r)) : tests.every((test) => test(r)))
 }
 
+// ---------- expressions as fields ----------
+
+// pseudo fields per table object (a new derived table on every change) and expression
+const exprFields = new WeakMap<TableData, Map<string, Field | null>>()
+
+/**
+ * A formula expression (stored form) as a read-only pseudo field: its values are computed
+ * for every record and read through cellValue, so sorting, grouping, kanban columns and
+ * titles treat it like a formula field. Undefined when the expression is empty or broken.
+ */
+export function exprField(t: TableData, src: string | undefined): Field | undefined {
+  src = src?.trim()
+  if (!src) return undefined
+  let m = exprFields.get(t)
+  if (!m) exprFields.set(t, (m = new Map()))
+  let f = m.get(src)
+  if (f === undefined) {
+    f = null
+    const c = compileFormula(t, src)
+    if (c.ok) {
+      const values = new Map<string, any>()
+      const kinds = new Set<ValueKind>()
+      for (const r of t.records) {
+        const { value, kind } = toCellValue(c.run(r))
+        if (value === undefined) continue
+        values.set(r.id, value)
+        if (kind) kinds.add(kind)
+      }
+      const kind: ValueKind = kinds.size === 1 ? [...kinds][0] : kinds.size === 2 && kinds.has('date') && kinds.has('datetime') ? 'datetime' : 'text'
+      if (kind === 'text') for (const [id, v] of values) if (typeof v !== 'string') values.set(id, Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : String(v))
+      const name = toDisplayExpr(t, src)
+      f = { id: 'expr:' + src, name, type: 'formula', options: { expr: src }, sort: 0, rt: { values } }
+      const base: Field =
+        kind === 'number'
+          ? { ...f, type: 'number', options: {} }
+          : kind === 'date' || kind === 'datetime'
+            ? { ...f, type: 'date', options: { time: kind === 'datetime' } }
+            : kind === 'checkbox'
+              ? { ...f, type: 'checkbox', options: {} }
+              : { ...f, type: 'text', options: {} }
+      f.rt!.base = base
+      f.rt!.kind = kind
+    }
+    if (m.size > 50) m.clear()
+    m.set(src, f)
+  }
+  return f ?? undefined
+}
+
+/** The field a sort / group rule orders by: a table field or an expression's pseudo field. */
+export function ruleField(t: TableData, rule: SortRule, byId?: Map<string, Field>): Field | undefined {
+  if (rule.expr !== undefined) return exprField(t, rule.expr)
+  return byId ? byId.get(rule.field) : t.fields.find((f) => f.id === rule.field)
+}
+
+/** Title shown for a record in calendar / gantt views (fields joined, or an expression). */
+export function titleReader(t: TableData, v: View): (r: Rec) => string {
+  const cfg = v.config
+  if (cfg.titleExpr !== undefined) {
+    const f = exprField(t, cfg.titleExpr)
+    if (f) {
+      const b = baseField(f)
+      return (r) => displayText(b, cellValue(r, f))
+    }
+  }
+  const byId = new Map(t.fields.map((f) => [f.id, f]))
+  let fields = (cfg.titleFields ?? []).map((id) => byId.get(id)).filter((f): f is Field => !!f)
+  if (!fields.length && t.fields[0]) fields = [t.fields[0]]
+  return (r) =>
+    fields
+      .map((f) => displayText(f, cellValue(r, f)).replace(/\s*\n\s*/g, ' '))
+      .filter(Boolean)
+      .join(' · ')
+}
+
 // ---------- sorting ----------
 
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
@@ -356,7 +432,7 @@ function compareKeys(a: number | string | undefined, b: number | string | undefi
 
 export function sortRecords(t: TableData, list: Rec[], rules: SortRule[]): Rec[] {
   const byId = new Map(t.fields.map((f) => [f.id, f]))
-  const rs = rules.map((r) => ({ f: byId.get(r.field)!, desc: !!r.desc })).filter((r) => r.f)
+  const rs = rules.map((r) => ({ f: ruleField(t, r, byId)!, desc: !!r.desc })).filter((r) => r.f)
   if (!rs.length) return list
   const keyed = list.map((r, i) => ({ r, i, k: rs.map(({ f }) => sortKey(f, cellValue(r, f))) }))
   keyed.sort((a, b) => {
@@ -428,7 +504,7 @@ export type GridRow =
 /** Flattens grouped records into header + record rows (records must be sorted by the groups). */
 export function groupRows(t: TableData, records: Rec[], rules: SortRule[], collapsed: Set<string>): GridRow[] {
   const byId = new Map(t.fields.map((f) => [f.id, f]))
-  const fields = rules.map((r) => byId.get(r.field)).filter(Boolean) as Field[]
+  const fields = rules.map((r) => ruleField(t, r, byId)).filter(Boolean) as Field[]
   if (!fields.length) return records.map((rec) => ({ kind: 'record', rec, depth: 0 }))
   const out: GridRow[] = []
   const walk = (list: Rec[], depth: number, prefix: string) => {
@@ -459,7 +535,7 @@ export function groupPaths(t: TableData, rec: Rec, rules: SortRule[]): string[] 
   const out: string[] = []
   let prefix = ''
   for (const r of rules) {
-    const f = byId.get(r.field)
+    const f = ruleField(t, r, byId)
     if (!f) continue
     prefix += '/' + f.id + ':' + groupKey(f, cellValue(rec, f))
     out.push(prefix)
@@ -474,6 +550,7 @@ export const kanbanFieldOk = (f: Field) => f.type !== 'attachment' && f.type !==
 
 /** The field a kanban view groups by: the configured one, else the first select-like field. */
 export function kanbanField(t: TableData, v: View): Field | undefined {
+  if (v.config.kanbanExpr !== undefined) return exprField(t, v.config.kanbanExpr)
   const set = t.fields.find((f) => f.id === v.config.kanbanField && kanbanFieldOk(f))
   return set ?? t.fields.find((f) => f.type === 'select') ?? t.fields.find((f) => f.type === 'multiselect') ?? t.fields.find((f) => f.type === 'checkbox')
 }

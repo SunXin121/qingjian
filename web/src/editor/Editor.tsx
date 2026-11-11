@@ -181,54 +181,54 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
         [Crepe.Feature.BlockEdit]: {
           textGroup: {
             label: '基础',
-            text: { label: '正文 Text' },
-            h1: { label: '一级标题 H1' },
-            h2: { label: '二级标题 H2' },
-            h3: { label: '三级标题 H3' },
-            h4: { label: '四级标题 H4' },
-            h5: { label: '五级标题 H5' },
-            h6: { label: '六级标题 H6' },
-            quote: { label: '引用 Quote' },
-            divider: { label: '分割线 Divider' },
+            text: { label: '正文' },
+            h1: { label: '一级标题' },
+            h2: { label: '二级标题' },
+            h3: { label: '三级标题' },
+            h4: { label: '四级标题' },
+            h5: { label: '五级标题' },
+            h6: { label: '六级标题' },
+            quote: { label: '引用' },
+            divider: { label: '分割线' },
           },
           listGroup: {
             label: '列表',
-            bulletList: { label: '无序列表 Bullet' },
-            orderedList: { label: '有序列表 Ordered' },
-            taskList: { label: '任务列表 Todo' },
+            bulletList: { label: '无序列表' },
+            orderedList: { label: '有序列表' },
+            taskList: { label: '任务列表' },
           },
           advancedGroup: {
             label: '插入',
-            image: { label: '图片 Image' },
-            codeBlock: { label: '代码块 Code' },
-            table: { label: '表格 Table' },
+            image: { label: '图片' },
+            codeBlock: { label: '代码块' },
+            table: { label: '表格' },
             math: null,
           },
           buildMenu: (builder) => {
             builder.getGroup('advanced').addItem('math', {
-              label: '公式 Math LaTeX',
+              label: '公式',
               icon: ICONS.math,
               onRun: (ctx: Ctx) => insertCodeBlock(ctx, 'LaTeX', 'E = mc^2'),
             })
             builder
               .addGroup('drawing', '绘图')
               .addItem('text-diagram', {
-                label: '文本绘图 Mermaid / Graphviz',
+                label: '文本绘图',
                 icon: ICONS.textDiagram,
                 onRun: (ctx: Ctx) => insertCodeBlock(ctx, 'mermaid', DIAGRAM_TEMPLATES.mermaid),
               })
               .addItem('excalidraw', {
-                label: '画板 Excalidraw 手绘',
+                label: '画板',
                 icon: ICONS.board,
                 onRun: (ctx: Ctx) => newDrawing(ctx, 'excalidraw'),
               })
               .addItem('drawio', {
-                label: '流程图 draw.io',
+                label: '流程图',
                 icon: ICONS.drawio,
                 onRun: (ctx: Ctx) => newDrawing(ctx, 'drawio'),
               })
               .addItem('mindmap', {
-                label: '思维导图 Mind map',
+                label: '思维导图',
                 icon: ICONS.mindmap,
                 onRun: (ctx: Ctx) => newDrawing(ctx, 'mindmap'),
               })
@@ -242,7 +242,7 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
               },
             })
             builder.addGroup('data', '数据').addItem('table-embed', {
-              label: '多维表格 Table view',
+              label: '多维表格',
               icon: ICONS.table,
               onRun: (ctx: Ctx) => {
                 ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)
@@ -253,13 +253,13 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
             })
             builder
               .addGroup('callout', '提示块')
-              .addItem('callout-info', { label: '信息 Info', icon: ICONS.info, onRun: (ctx: Ctx) => insertCallout(ctx, 'INFO') })
-              .addItem('callout-warn', { label: '警告 Warning', icon: ICONS.warn, onRun: (ctx: Ctx) => insertCallout(ctx, 'WARNING') })
-              .addItem('callout-success', { label: '成功 Success', icon: ICONS.success, onRun: (ctx: Ctx) => insertCallout(ctx, 'SUCCESS') })
-              .addItem('callout-error', { label: '错误 Error', icon: ICONS.error, onRun: (ctx: Ctx) => insertCallout(ctx, 'ERROR') })
-              .addItem('fold', { label: '折叠块 Fold', icon: ICONS.fold, onRun: (ctx: Ctx) => insertCallout(ctx, 'FOLD') })
+              .addItem('callout-info', { label: '信息', icon: ICONS.info, onRun: (ctx: Ctx) => insertCallout(ctx, 'INFO') })
+              .addItem('callout-warn', { label: '警告', icon: ICONS.warn, onRun: (ctx: Ctx) => insertCallout(ctx, 'WARNING') })
+              .addItem('callout-success', { label: '成功', icon: ICONS.success, onRun: (ctx: Ctx) => insertCallout(ctx, 'SUCCESS') })
+              .addItem('callout-error', { label: '错误', icon: ICONS.error, onRun: (ctx: Ctx) => insertCallout(ctx, 'ERROR') })
+              .addItem('fold', { label: '折叠块', icon: ICONS.fold, onRun: (ctx: Ctx) => insertCallout(ctx, 'FOLD') })
             builder.addGroup('file', '文件').addItem('attachment', {
-              label: '附件 Attachment',
+              label: '附件',
               icon: ICONS.file,
               onRun: (ctx) => {
                 ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)

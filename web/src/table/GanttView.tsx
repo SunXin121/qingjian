@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { IconChevron, IconPlus } from '../components/icons'
 import { addDays, calendarEndField, calendarField, dayOf, dayStr, diffDays, parseDay } from './CalendarView'
-import { cellMatches, cellValue, choiceOf, displayText, groupLabel, groupPaths, groupRows, primaryField, searchNeedle, viewRecords, visibleFields } from './engine'
+import { cellMatches, cellValue, choiceOf, groupLabel, groupPaths, groupRows, searchNeedle, titleReader, viewRecords, visibleFields } from './engine'
 import type { CellChange, TableModel } from './model'
 import { baseField, type Field, type GanttScale, type Rec, type TableData, type View } from './types'
 
@@ -95,7 +95,6 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
   const color = table.fields.find((f) => f.id === cfg.colorField && ganttColorOk(f))
   const progress = table.fields.find((f) => f.id === cfg.progressField && ganttProgressOk(f))
   const dep = table.fields.find((f) => f.id === cfg.depField && ganttDepOk(table)(f))
-  const primary = primaryField(table)
   const needle = searchNeedle(search)
   const records = useMemo(() => {
     const list = viewRecords(table, view, model.sticky)
@@ -248,7 +247,8 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
       </div>
     )
 
-  const title = (r: Rec) => (primary && displayText(primary, cellValue(r, primary))) || '未命名记录'
+  const readTitle = titleReader(table, view)
+  const title = (r: Rec) => readTitle(r) || '未命名记录'
   const xOf = (day: string) => diffDays(day, lo) * dw
   const page = (n: number) => {
     const el = scrollRef.current
@@ -374,7 +374,7 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
         <div className="bt-gantt-canvas" style={{ width: listW + tw }}>
           <div className="bt-gantt-header" style={{ height: HEAD_H }}>
             <div className="bt-gantt-corner" style={{ width: listW }}>
-              {primary?.name}
+              {cfg.titleExpr !== undefined ? '记录' : (cfg.titleFields ?? []).map((id) => table.fields.find((f) => f.id === id)?.name).filter(Boolean).join(' · ') || table.fields[0]?.name}
             </div>
             <div className="bt-gantt-scale" style={{ width: tw }}>
               <div className="bt-gantt-scale-row">

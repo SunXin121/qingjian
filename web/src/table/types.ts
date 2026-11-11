@@ -74,6 +74,8 @@ export interface FieldRuntime {
   titles?: Map<string, string>
   /** lookup / rollup: the field looked up in the linked table */
   target?: Field
+  /** expression pseudo fields (engine.exprField): the values by record id */
+  values?: Map<string, any>
 }
 
 export interface Field {
@@ -115,8 +117,13 @@ export interface FilterCond {
 }
 
 export interface SortRule {
+  /** field id; empty for an expression rule */
   field: string
   desc?: boolean
+  /** formula expression (stored form) the records are sorted / grouped by instead of a field */
+  expr?: string
+  /** expression rules: stable key for the rule's editor */
+  id?: string
 }
 
 export type SummaryKind = 'none' | 'count' | 'filled' | 'empty' | 'unique' | 'percent_filled' | 'sum' | 'avg' | 'min' | 'max' | 'checked'
@@ -138,6 +145,8 @@ export interface ViewConfig {
   summary?: Record<string, SummaryKind>
   /** kanban: field the board is grouped by (any type but attachment / autonumber) */
   kanbanField?: string
+  /** kanban: group by this formula expression (stored form) instead of a field; set (even empty) = expression mode */
+  kanbanExpr?: string
   /** kanban: hide the column for records without a value */
   hideEmptyColumn?: boolean
   /** gallery: attachment field shown as the card cover ('' = no cover) */
@@ -147,6 +156,10 @@ export interface ViewConfig {
   /** calendar: date field records are placed by, and an optional end date */
   dateField?: string
   endField?: string
+  /** calendar / gantt: fields shown as a record's title, joined (default: the primary field) */
+  titleFields?: string[]
+  /** calendar / gantt: formula expression (stored form) shown as the title; set (even empty) = expression mode */
+  titleExpr?: string
   /** gantt: time scale */
   ganttScale?: GanttScale
   /** gantt: single select field the bars are coloured by */

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useState, type DragEvent } from 'react'
 import { openPopover } from '../components/dialog'
 import { IconChevron, IconPlus } from '../components/icons'
-import { cellMatches, cellValue, displayText, fmtDateTime, primaryField, searchNeedle, viewRecords, visibleFields } from './engine'
+import { cellMatches, cellValue, fmtDateTime, searchNeedle, titleReader, viewRecords, visibleFields } from './engine'
 import type { TableModel } from './model'
 import { baseField, type Field, type Rec, type TableData, type View } from './types'
 
@@ -68,7 +68,6 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
   const [month, setMonth] = useState(() => today.slice(0, 7))
   const [drag, setDrag] = useState<{ id: string; from: string } | null>(null)
   const [over, setOver] = useState<string | null>(null)
-  const primary = primaryField(table)
   const writable = !readOnly && field?.type === 'date'
 
   // 6 weeks starting on the Monday on / before the 1st
@@ -119,7 +118,8 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
     )
 
   const ids = records.map((r) => r.id)
-  const title = (r: Rec) => (primary && displayText(primary, cellValue(r, primary))) || '未命名记录'
+  const readTitle = titleReader(table, view)
+  const title = (r: Rec) => readTitle(r) || '未命名记录'
   const shift = (n: number) => {
     const d = parseDay(month + '-01')
     d.setMonth(d.getMonth() + n)

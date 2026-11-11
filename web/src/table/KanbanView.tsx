@@ -65,9 +65,9 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     const fields = table.fields.filter(kanbanFieldOk)
     return (
       <div className="bt-kanban-empty">
-        <p>看板按一个字段把记录分成多列，请选择分组字段。</p>
+        <p>{cfg.kanbanExpr !== undefined ? '分组表达式为空或有误，请在工具栏的「看板设置」中修改，或改为按字段分组。' : '看板按一个字段把记录分成多列，请选择分组字段。'}</p>
         {!readOnly && fields.length > 0 && (
-          <select className="bt-input" value="" onChange={(e) => e.target.value && model.updateView(view.id, { kanbanField: e.target.value })}>
+          <select className="bt-input" value="" onChange={(e) => e.target.value && model.updateView(view.id, { kanbanField: e.target.value, kanbanExpr: undefined })}>
             <option value="">选择分组字段…</option>
             {fields.map((f) => (
               <option key={f.id} value={f.id}>
@@ -83,7 +83,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               openFieldEditor(e.currentTarget, model, {
                 type: 'select',
                 name: '状态',
-                onCreated: (id) => model.updateView(view.id, { kanbanField: id }),
+                onCreated: (id) => model.updateView(view.id, { kanbanField: id, kanbanExpr: undefined }),
               })
             }
           >

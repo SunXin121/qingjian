@@ -10,7 +10,6 @@ import {
   type GridCell,
   type GridColumn,
   type GridKeyEventArgs,
-  type GridMouseEventArgs,
   type GridSelection,
   type Item,
   type Rectangle,
@@ -28,6 +27,7 @@ import {
   displayText,
   groupKey,
   groupLabel,
+  ruleField,
   groupPaths,
   groupRows,
   parseText,
@@ -336,7 +336,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     const data: Record<string, any> = {}
     if (!rec) return data
     for (const g of cfg.groups ?? []) {
-      const f = model.field(g.field)
+      const f = ruleField(table, g)
       if (f && !isComputed(f.type)) data[f.id] = cellValue(rec, f)
     }
     return data
@@ -371,6 +371,8 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   }
   const rowsRef = useRef(rows)
   rowsRef.current = rows
+  const fieldsRef = useRef(fields)
+  fieldsRef.current = fields
 
   // jump to the current search match, expanding the groups it is collapsed in
   const jumpRef = useRef('')
@@ -512,7 +514,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     if (!anchor) return null
     const data: Record<string, any> = {}
     for (const g of cfg.groups ?? []) {
-      const f = model.field(g.field)
+      const f = ruleField(table, g)
       if (!f) continue
       const v = cellValue(anchor, f)
       if (groupKey(f, v) === groupKey(f, cellValue(rec, f))) continue
@@ -610,7 +612,6 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
 
   const onPointerDownCapture = (e: React.PointerEvent) => {
     if (readOnly || e.button !== 0 || typing.current) return
-    if ((e.target as Element).closest('.bt-insert')) return
     const b0 = ref.current?.getBounds(0, 0)
     if (!b0 || e.clientX < b0.x || e.clientX > b0.x + GRIP_W) return
     const { top, bottom } = bodyRange()
@@ -626,85 +627,55 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     startRowDrag(item.rec, e.clientX, e.clientY)
   }
 
-  // ---------- hover insert buttons ----------
-  // Hovering a row's index cell shows a "+" on its top or bottom edge (insert above / below);
-  // hovering a column header shows one on its right edge (insert a field there). The grid
-  // is a canvas, so the buttons are DOM elements placed over it.
-  type Hover = { kind: 'row'; row: number; above: boolean } | { kind: 'col'; col: number }
-  const [hover, setHover] = useState<Hover | null>(null)
-  const [insertHot, setInsertHot] = useState(false)
-  const hideTimer = useRef(0)
-  const keepHover = () => clearTimeout(hideTimer.current)
-  const hideHover = (delay = 150) => {
-    clearTimeout(hideTimer.current)
-    hideTimer.current = window.setTimeout(() => {
-      setHover(null)
-      setInsertHot(false)
-    }, delay)
-  }
-  useEffect(() => () => clearTimeout(hideTimer.current), [])
-
-  const onMouseMove = useCallback(
-    (a: GridMouseEventArgs) => {
-      if (readOnly || a.buttons) return
-      let next: Hover | null = null
-      if (a.kind === 'cell' && a.location[0] === 0 && rowsRef.current[a.location[1]]?.kind === 'record') {
-        next = { kind: 'row', row: a.location[1], above: a.localEventY < a.bounds.height / 2 }
-      } else if (a.kind === 'header' && a.location[0] >= 1) {
-        next = { kind: 'col', col: a.location[0] }
-      }
-      if (!next) return hideHover()
-      keepHover()
-      const n = next
-      setHover((h) =>
-        h && h.kind === n.kind && (h.kind === 'row' ? n.kind === 'row' && h.row === n.row && h.above === n.above : n.kind === 'col' && h.col === n.col) ? h : n,
-      )
-    },
-    [readOnly],
-  )
-
-  /** Button position (relative to the grid wrapper) and the insertion line it previews. */
-  const insertSpot = (): { x: number; y: number; line: React.CSSProperties } | null => {
+  // ---------- double-click on blank space ----------
+  // Double-clicking the blank area under the last row adds a record and starts editing the
+  // cell in the clicked column; double-clicking the blank area right of the last column
+  // adds a field there.
+  const onBlankDoubleClick = (e: React.MouseEvent) => {
+    if (readOnly || dragId || typing.current) return
+    const target = e.target as Element
+    if (target.closest('textarea, input, button')) return
     const g = ref.current
-    const wrap = wrapRef.current
-    if (!hover || !g || !wrap || dragId) return null
-    const wr = wrap.getBoundingClientRect()
-    if (hover.kind === 'row') {
-      const b = g.getBounds(0, hover.row)
-      if (!b) return null
-      const y = hover.above ? b.y : b.y + b.height
-      const { top, bottom } = bodyRange()
-      if (y < top - 1 || y > bottom + 1) return null
-      return { x: b.x - wr.left + GRIP_W / 2 + 1, y: y - wr.top, line: { left: 0, right: 0, top: y - wr.top - 1, height: 2 } }
-    }
-    const b = g.getBounds(hover.col, -1)
-    if (!b) return null
-    const x = b.x + b.width
-    if (x > wr.right - 4) return null
-    const foot = g.getBounds(0, rowsRef.current.length)
-    const bottom = foot ? foot.y + foot.height : wr.bottom
-    return { x: x - wr.left, y: b.y - wr.top + 10, line: { top: b.y - wr.top, height: bottom - b.y, left: x - wr.left - 1, width: 2 } }
-  }
-
-  const onInsertClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const h = hover
-    setHover(null)
-    setInsertHot(false)
-    if (!h) return
-    if (h.kind === 'row') {
-      const rec = recAt(h.row)
-      if (!rec) return
-      if (cfg.sorts?.length) toast('视图已设置排序，新记录会按排序规则显示')
-      addAndFocus(rec, h.above)
+    if (!g) return
+    const rs = rowsRef.current
+    const lastCol = g.getBounds(fields.length, -1)
+    const head = g.getBounds(0, -1)
+    if (!lastCol || !head) return
+    // right of the last column (header or body)
+    if (e.clientX > lastCol.x + lastCol.width && e.clientY >= head.y) {
+      const f = fields.at(-1)
+      openFieldEditor({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY }, model, { viewId: view.id, after: f?.id })
       return
     }
-    const f = fieldAt(h.col)
-    if (!f) return
-    const r = e.currentTarget.getBoundingClientRect()
-    openFieldEditor({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }, model, { viewId: view.id, after: h.col === 1 ? undefined : f.id, first: h.col === 1 })
+    // under the last row, above the summary row
+    const { top, bottom } = bodyRange()
+    const last = rs.length ? g.getBounds(0, rs.length - 1) : undefined
+    const rowsEnd = last ? last.y + last.height : top
+    if (e.clientY <= rowsEnd || e.clientY >= bottom) return
+    let col = 1
+    for (let c = 1; c <= fields.length; c++) {
+      const b = g.getBounds(c, -1)
+      if (b && e.clientX >= b.x && e.clientX < b.x + b.width) col = c
+    }
+    if (cfg.sorts?.length) toast('视图已设置排序，新记录会按排序规则显示')
+    const id = insertRecord(records.at(-1))
+    // the new row is rendered on the next frame; then open the cell for typing
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const row = rowsRef.current.findIndex((r) => r.kind === 'record' && r.rec.id === id)
+        if (row < 0) return
+        ref.current?.scrollTo(col, row)
+        setSelection(cellSelection(col, row))
+        ref.current?.focus()
+        // after the grid has taken focus for the new selection, open the cell editor
+        setTimeout(() => {
+          const f = model.field(fieldsRef.current[col - 1]?.id ?? '')
+          const b = ref.current?.getBounds(col, row)
+          if (f && b && TYPEABLE.has(f.type) && !typing.current) openTyping(col, row, b, '')
+        }, 30)
+      }),
+    )
   }
-
-  const spot = readOnly ? null : insertSpot()
 
   // ---------- columns ----------
 
@@ -788,8 +759,10 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
 
   const openTyping = (col: number, row: number, b: Rectangle, initial: string) => {
     const el = typeRef.current
-    const rec = recAt(row)
-    const f = fieldAt(col)
+    // through the refs: also called a moment after adding a record, from an older render
+    const item = rowsRef.current[row]
+    const rec = item?.kind === 'record' ? item.rec : undefined
+    const f = fieldsRef.current[col - 1]
     if (!el || !rec || !f) return
     typing.current = { rec: rec.id, field: f.id, col, row }
     el.value = initial
@@ -856,30 +829,8 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   )
 
   return (
-    <div className="bt-grid" ref={wrapRef} onContextMenu={(e) => e.preventDefault()} onPointerDownCapture={onPointerDownCapture} onMouseLeave={() => hideHover()}>
+    <div className="bt-grid" ref={wrapRef} onContextMenu={(e) => e.preventDefault()} onPointerDownCapture={onPointerDownCapture} onDoubleClick={onBlankDoubleClick}>
       <div ref={lineRef} className="bt-drop-line" style={{ left: INDEX_W }} />
-      {spot && (
-        <>
-          {insertHot && <div className="bt-insert-line" style={spot.line} />}
-          <button
-            className="bt-insert"
-            style={{ left: spot.x, top: spot.y }}
-            title={hover?.kind === 'row' ? (hover.above ? '在上方插入记录' : '在下方插入记录') : '在右侧插入字段'}
-            aria-label={hover?.kind === 'row' ? '插入记录' : '插入字段'}
-            onMouseEnter={() => {
-              keepHover()
-              setInsertHot(true)
-            }}
-            onMouseLeave={() => {
-              setInsertHot(false)
-              hideHover()
-            }}
-            onClick={onInsertClick}
-          >
-            <IconPlus width={12} height={12} />
-          </button>
-        </>
-      )}
       <div ref={ghostRef} className="bt-drag-ghost ellipsis" />
       <textarea
         ref={typeRef}
@@ -934,8 +885,6 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         onCellActivated={onCellActivated}
         onCellContextMenu={onCellContextMenu}
         onKeyDown={onGridKeyDown}
-        onMouseMove={onMouseMove}
-        onVisibleRegionChanged={() => hover && setHover(null)}
         onHeaderMenuClick={fieldMenu}
         onHeaderContextMenu={(col, e) => {
           e.preventDefault()
