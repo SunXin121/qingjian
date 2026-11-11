@@ -15,6 +15,7 @@ import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callou
 import { docLinkTrigger, followRename, nodeLinkPath, openDocLinkPicker } from './docLinks'
 import { DIAGRAM_TEMPLATES, isDrawingKind, prefersDark, renderPreview, type DrawingKind } from './previews'
 import { previewBlockKeys } from './previewBlocks'
+import { imageRatioRemark } from './imageRatio'
 import { textDiagramView } from './textDiagram'
 
 const ExcalidrawModal = lazy(() => import('./ExcalidrawModal'))
@@ -277,6 +278,7 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       setDrawing({ kind, content })
     }
 
+    crepe.editor.use(imageRatioRemark)
     crepe.editor.use(calloutPlugin)
     // after Crepe's own code-block view: wraps it to give mermaid / dot blocks their own UI
     crepe.editor.use(textDiagramView)
