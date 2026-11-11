@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, NavLink, useMatch, useNavigate } from 'react-router'
 import { api, nodePath, type NodeType, type TreeNode } from '../api'
 import { childrenMap, nodeTitle, useStore } from '../store'
-import { confirmDialog, openMenu, promptText, toast } from './dialog'
+import { confirmDialog, openMenu, promptText, toast, type MenuItem } from './dialog'
+import { canPickFolder, droppedEntries, isFileDrag, pickImport, runImport } from './ImportDialog'
 import { editRepoDialog, repoMenu } from './RepoDialog'
 import { useWindowed } from './useWindowed'
 import {
@@ -27,6 +28,7 @@ import {
   IconTable,
   IconTrash,
   IconUp,
+  IconUpload,
   Logo,
   RepoMark,
 } from './icons'
@@ -137,6 +139,8 @@ function RepoTree({ repoId }: { repoId: string }) {
   const activeId = docMatch?.params.docId ?? tableMatch?.params.tableId
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   const [drag, setDrag] = useState<{ id: string; over?: string; pos?: DropPos } | null>(null)
+  // files dragged in from the desktop: false = none, null = the root, else the node to import into
+  const [fileDrop, setFileDrop] = useState<string | null | false>(false)
   const repo = repos.find((r) => r.id === repoId)
 
   useEffect(() => {
@@ -191,6 +195,25 @@ function RepoTree({ repoId }: { repoId: string }) {
     }
   }
 
+  const importInto = async (parent: string | null, picked: Awaited<ReturnType<typeof pickImport>>) => {
+    if (!picked) return
+    const res = await runImport(repoId, parent, picked)
+    if (!res) return
+    if (parent) setExpandedPersist(new Set([...expanded, parent]))
+    await loadTree(repoId)
+    loadRepos().catch(() => {})
+    if (res.docs === 1 && res.first) {
+      navigate(nodePath(res.first))
+      setSidebarOpen(false)
+    }
+  }
+  const importItems = (parent: string | null): MenuItem[] => [
+    { label: '导入 Markdown / zip', icon: <IconUpload />, divider: true, onClick: async () => importInto(parent, await pickImport(false)) },
+    { label: '导入文件夹', icon: <IconFolder />, hidden: !canPickFolder, onClick: async () => importInto(parent, await pickImport(true)) },
+  ]
+  // dropping desktop files on a table imports next to it
+  const fileTarget = (n: TreeNode) => (n.type === 'table' ? n.parent_id : n.id)
+
   const move = async (node: TreeNode, parent: string | null, sort: number) => {
     try {
       await api.moveNode(node.id, parent, sort)
@@ -225,6 +248,7 @@ function RepoTree({ repoId }: { repoId: string }) {
       { label: '新建子文档', icon: <IconDocPlus />, onClick: () => create(n.id, 'doc') },
       { label: '新建子分组', icon: <IconFolderPlus />, onClick: () => create(n.id, 'group') },
       { label: '新建子多维表格', icon: <IconTable />, onClick: () => create(n.id, 'table') },
+      ...importItems(n.id),
       {
         label: '重命名',
         icon: <IconEdit />,
@@ -258,6 +282,13 @@ function RepoTree({ repoId }: { repoId: string }) {
   }
 
   const onDragOver = (e: DragEvent, n: TreeNode) => {
+    if (!drag && isFileDrag(e.dataTransfer)) {
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'copy'
+      if (fileDrop !== fileTarget(n)) setFileDrop(fileTarget(n))
+      return
+    }
     if (!drag || drag.id === n.id) return
     if (isDescendant(byId, n.id, drag.id)) return
     e.preventDefault()
@@ -266,7 +297,16 @@ function RepoTree({ repoId }: { repoId: string }) {
     const pos: DropPos = y < 0.28 ? 'before' : y > 0.72 ? 'after' : 'inside'
     if (drag.over !== n.id || drag.pos !== pos) setDrag({ ...drag, over: n.id, pos })
   }
+  const onFileDrop = (e: DragEvent, target: string | null) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setFileDrop(false)
+    droppedEntries(e.dataTransfer)
+      .then((picked) => importInto(target, picked))
+      .catch((err) => toast(err.message))
+  }
   const onDrop = (e: DragEvent, n: TreeNode) => {
+    if (!drag && isFileDrag(e.dataTransfer)) return onFileDrop(e, fileTarget(n))
     e.preventDefault()
     if (!drag?.pos || drag.id === n.id) return setDrag(null)
     const node = byId.get(drag.id)
@@ -293,7 +333,7 @@ function RepoTree({ repoId }: { repoId: string }) {
   const renderRow = ({ n, depth }: { n: TreeNode; depth: number }) => {
     const children = kids.get(n.id) ?? []
     const open = expanded.has(n.id)
-    const cls = ['tree-item', n.id === activeId && 'active', drag?.over === n.id && `drop-${drag.pos}`, drag?.id === n.id && 'dragging'].filter(Boolean).join(' ')
+    const cls = ['tree-item', n.id === activeId && 'active', drag?.over === n.id && `drop-${drag.pos}`, fileDrop === n.id && 'drop-inside', drag?.id === n.id && 'dragging'].filter(Boolean).join(' ')
     return (
       <div
         key={n.id}
@@ -372,6 +412,7 @@ function RepoTree({ repoId }: { repoId: string }) {
               { label: '新建文档', icon: <IconDocPlus />, onClick: () => create(null, 'doc') },
               { label: '新建分组', icon: <IconFolderPlus />, onClick: () => create(null, 'group') },
               { label: '新建多维表格', icon: <IconTable />, onClick: () => create(null, 'table') },
+              ...importItems(null),
             ])
           }
         >
@@ -387,7 +428,19 @@ function RepoTree({ repoId }: { repoId: string }) {
           </button>
         )}
       </div>
-      <div className="side-scroll tree">
+      <div
+        className={'side-scroll tree' + (fileDrop === null ? ' file-drop' : '')}
+        onDragOver={(e) => {
+          if (drag || !isFileDrag(e.dataTransfer)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+          if (fileDrop !== null) setFileDrop(null)
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileDrop(false)
+        }}
+        onDrop={(e) => !drag && isFileDrag(e.dataTransfer) && onFileDrop(e, null)}
+      >
         <div ref={win.listRef}>
           <div style={{ height: win.before }} />
           {flat.slice(win.start, win.end).map(renderRow)}
@@ -398,6 +451,10 @@ function RepoTree({ repoId }: { repoId: string }) {
             <button className="btn" onClick={() => create(null, 'doc')}>
               <IconDocPlus width={16} height={16} /> 新建第一篇文档
             </button>
+            <button className="btn ghost" onClick={async () => importInto(null, await pickImport(false))}>
+              <IconUpload width={16} height={16} /> 导入 Markdown
+            </button>
+            <p className="side-hint">也可以把文件或文件夹拖到这里</p>
           </div>
         )}
         {/* drop zone to move items to the end of root */}

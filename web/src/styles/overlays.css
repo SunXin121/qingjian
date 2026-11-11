@@ -176,3 +176,61 @@
 @keyframes rise {
   from { opacity: 0; transform: translateY(8px); }
 }
+
+/* markdown import (ImportDialog.tsx) */
+.import-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(360px, 80vw);
+}
+.import-body p {
+  margin: 0;
+}
+.import-meta {
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+.import-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--c-border);
+  overflow: hidden;
+}
+.import-bar > div {
+  height: 100%;
+  background: var(--c-primary);
+  transition: width 0.2s ease;
+}
+.import-warn {
+  font-size: 13px;
+}
+.import-missing {
+  margin: 0;
+  padding: 8px 12px 8px 26px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--c-text-3);
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  word-break: break-all;
+}
+.section-head .btn + .btn {
+  margin-left: 8px;
+}
+.side-scroll.tree.file-drop {
+  background: var(--c-primary-soft);
+  box-shadow: inset 0 0 0 1px var(--c-primary);
+  border-radius: var(--radius);
+}
+.side-empty .btn + .btn {
+  margin-top: 8px;
+}
+.side-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--c-text-3);
+}

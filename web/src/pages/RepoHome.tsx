@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, formatTime, nodePath, type Repo, type TreeNode } from '../api'
-import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, IconTable, RepoMark } from '../components/icons'
+import { openMenu } from '../components/dialog'
+import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, IconTable, IconUpload, RepoMark } from '../components/icons'
+import { canPickFolder, pickImport, runImport } from '../components/ImportDialog'
 import PageHeader from '../components/PageHeader'
 import { repoMenu } from '../components/RepoDialog'
 import { useWindowed } from '../components/useWindowed'
@@ -37,6 +39,17 @@ export default function RepoHome() {
     const n = await api.createNode(repoId, null, 'doc')
     await loadTree(repoId)
     navigate(`/r/${repoId}/d/${n.id}`)
+  }
+
+  const importFrom = async (folder: boolean) => {
+    const picked = await pickImport(folder)
+    if (!picked) return
+    const res = await runImport(repoId, null, picked)
+    if (!res) return
+    await loadTree(repoId)
+    loadRepos().catch(() => {})
+    reload()
+    if (res.docs === 1 && res.first) navigate(nodePath(res.first))
   }
 
   // the whole directory, flattened and rendered windowed (a repo can hold thousands of docs)
@@ -121,6 +134,20 @@ export default function RepoHome() {
                 <IconList className="section-icon" width={17} height={17} />
                 目录
               </h2>
+              <span className="spacer" />
+              <button
+                className="btn"
+                onClick={(e) =>
+                  canPickFolder
+                    ? openMenu(e.currentTarget, [
+                        { label: '导入 Markdown / zip', icon: <IconUpload />, onClick: () => importFrom(false) },
+                        { label: '导入文件夹', icon: <IconFolder />, onClick: () => importFrom(true) },
+                      ])
+                    : importFrom(false)
+                }
+              >
+                <IconUpload width={16} height={16} /> 导入
+              </button>
               <button className="btn primary" onClick={newDoc}>
                 <IconDocPlus width={16} height={16} /> 新建文档
               </button>
@@ -129,7 +156,7 @@ export default function RepoHome() {
               <div style={{ height: win.before }} />
               {flat.slice(win.start, win.end).map(renderRow)}
               <div style={{ height: win.after }} />
-              {nodes.length === 0 && <div className="empty-state small">知识库还是空的，新建一篇文档开始记录吧。</div>}
+              {nodes.length === 0 && <div className="empty-state small">知识库还是空的，新建一篇文档开始记录，或者导入已有的 Markdown 文件吧。</div>}
             </div>
           </>
         )}

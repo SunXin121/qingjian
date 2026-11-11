@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/repos/{id}", a(s.deleteRepo))
 	mux.Handle("GET /api/repos/{id}/tree", a(s.repoTree))
 	mux.Handle("GET /api/repos/{id}/export", a(s.exportRepo))
+	mux.Handle("POST /api/repos/{id}/import", a(s.importDocs))
 
 	mux.Handle("POST /api/nodes", a(s.createNode))
 	mux.Handle("PATCH /api/nodes/{id}", a(s.updateNode))
