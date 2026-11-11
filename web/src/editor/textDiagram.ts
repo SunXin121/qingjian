@@ -6,7 +6,8 @@
 // and lazy (on-screen only) CodeMirror setup are reused; only the UI around it is replaced.
 // The markdown stays a plain fenced code block.
 
-import { nodeViewCtx, SchemaReady } from '@milkdown/kit/core'
+import type { LanguageDescription } from '@codemirror/language'
+import { defaultValueCtx, nodeViewCtx, SchemaReady } from '@milkdown/kit/core'
 import { CodeMirrorBlock, codeBlockConfig } from '@milkdown/kit/component/code-block'
 import { codeBlockSchema } from '@milkdown/kit/preset/commonmark'
 import type { Node as PMNode } from '@milkdown/kit/prose/model'
@@ -19,7 +20,8 @@ import { getConfig } from '../api'
 import { toast } from '../components/dialog'
 import { withLangInput } from './langInput'
 import { deleteBlockAt, isPreviewBlock } from './previewBlocks'
-import { DIAGRAM_TEMPLATES, renderTextDiagram, textDiagramLang, type TextDiagramLang } from './previews'
+import { DIAGRAM_TEMPLATES, renderTextDiagram, textDiagramLang, warmTextDiagram, type TextDiagramLang } from './previews'
+import { diagramSize, rememberDiagramSize } from './sizeMemo'
 
 const LANGS: { lang: TextDiagramLang; label: string }[] = [
   { lang: 'mermaid', label: 'Mermaid' },
@@ -69,6 +71,8 @@ class TextDiagramView extends Base {
   } | null = null
   /** last successfully rendered diagram, kept on screen while the code has a syntax error */
   private lastHtml = ''
+  /** what lastHtml was rendered from: language + code */
+  private lastHtmlKey = ''
   private renderedKey = ''
   private renderSeq = 0
   private renderTimer: ReturnType<typeof setTimeout> | null = null
@@ -265,6 +269,7 @@ class TextDiagramView extends Base {
       (html) => {
         if (seq !== this.renderSeq) return
         this.lastHtml = sanitize(html)
+        this.lastHtmlKey = lang + '\n' + code
         this.showPreview()
       },
       (e: Error & { title?: string }) => {
@@ -295,6 +300,21 @@ class TextDiagramView extends Base {
       ui.preview.innerHTML = ''
     }
     ui.error.replaceChildren()
+    // a diagram still rendering keeps the height it had last time, so the page does not
+    // jump when it arrives; a rendered one is remembered for next time
+    const key = this.lang + '\n' + this.node.textContent
+    ui.preview.style.minHeight = ''
+    if (!this.editing && !empty && !errorTitle) {
+      if (this.lastHtml) {
+        if (this.lastHtmlKey === key) {
+          const r = ui.preview.getBoundingClientRect()
+          rememberDiagramSize(key, r.width, r.height)
+        }
+      } else {
+        const s = diagramSize(key)
+        if (s) ui.preview.style.minHeight = `${s.height}px`
+      }
+    }
     if (errorTitle && !empty) {
       ui.error.append(el('strong', '', errorTitle), el('pre', '', errorMsg))
     }
@@ -331,33 +351,79 @@ class TextDiagramView extends Base {
   }
 }
 
+// Milkdown's code-block view starts as a bare <pre> and builds CodeMirror (line numbers,
+// highlighting) and its tool row (language, copy) only once an IntersectionObserver reports
+// it near the screen. The observer reports after the frame is painted, so a block that
+// comes into view at once (opening a document, jumping there from the outline or a search,
+// a fast scroll) would be painted bare for a frame, then grow its tool row. Blocks are
+// built here instead: when created and on every scroll, both of which run before the
+// browser paints. The observer stays in charge of tearing far-off blocks down.
+type LazyView = { dom: HTMLElement; initialized?: boolean; initializeCodeMirror?: () => void; destroy?: () => void }
+const NEAR = 200 // px around the viewport, as Milkdown's observer
+const lazyViews = new Set<LazyView>()
+let checkQueued = false
+
+function buildNearViewport() {
+  checkQueued = false
+  const h = window.innerHeight
+  const due: LazyView[] = []
+  // measure all first (one layout), then build
+  for (const nv of lazyViews) {
+    if (nv.initialized || !nv.dom.isConnected) continue
+    const r = nv.dom.getBoundingClientRect()
+    if ((r.width > 0 || r.height > 0) && r.bottom > -NEAR && r.top < h + NEAR) due.push(nv)
+  }
+  for (const nv of due) nv.initializeCodeMirror!()
+}
+
+function trackLazyView(nv: LazyView) {
+  if (typeof nv.initializeCodeMirror !== 'function') return
+  if (!lazyViews.size) {
+    // capture: scrolling inside any container counts, not only the page
+    window.addEventListener('scroll', buildNearViewport, { capture: true, passive: true })
+    window.addEventListener('resize', buildNearViewport, { passive: true })
+  }
+  lazyViews.add(nv)
+  const destroy = nv.destroy?.bind(nv)
+  nv.destroy = () => {
+    lazyViews.delete(nv)
+    if (!lazyViews.size) {
+      window.removeEventListener('scroll', buildNearViewport, { capture: true })
+      window.removeEventListener('resize', buildNearViewport)
+    }
+    destroy?.()
+  }
+  // a microtask: by then ProseMirror has put the block's DOM in the page
+  if (!checkQueued) {
+    checkQueued = true
+    queueMicrotask(buildNearViewport)
+  }
+}
+
 /**
  * Takes over code_block node views: text diagram languages get TextDiagramView, everything
  * else goes to Crepe's stock view. Use after Crepe's CodeMirror feature has been added.
  */
-// Milkdown's code-block view starts as a bare <pre> and builds CodeMirror and its tool row
-// (language, copy) only once an IntersectionObserver reports it on screen, which happens
-// after the first paint: blocks in view would show up bare and grow their tool row a beat
-// later. Those already in view are built right away instead, before the browser paints.
-type LazyView = { dom: HTMLElement; initializeCodeMirror?: () => void }
-const toBuild = new Set<LazyView>()
-function buildIfOnScreen(nv: LazyView) {
-  if (typeof nv.initializeCodeMirror !== 'function') return
-  // a microtask: by then ProseMirror has put the block's DOM in the page
-  if (!toBuild.size) queueMicrotask(buildOnScreen)
-  toBuild.add(nv)
-}
-function buildOnScreen() {
-  const views = [...toBuild]
-  toBuild.clear()
-  const h = window.innerHeight
-  // measure all first (one layout), then build; same 200px margin as Milkdown's observer
-  const visible = views.filter(({ dom }) => {
-    if (!dom.isConnected) return false
-    const r = dom.getBoundingClientRect()
-    return (r.width > 0 || r.height > 0) && r.bottom > -200 && r.top < h + 200
-  })
-  for (const nv of visible) nv.initializeCodeMirror!()
+const FENCE_LANG = /^ {0,3}(?:`{3,}|~{3,})[ \t]*([^\s`{]+)/gm
+
+/**
+ * A language's highlighting is loaded (a separate chunk) the first time a block uses it, so
+ * that block would be painted plain and coloured a frame or more later. This starts loading
+ * the languages a document uses before its editor is created and waits for them briefly:
+ * usually long enough for the first paint to be highlighted, never long enough to hold the
+ * document up on a slow connection.
+ */
+async function preloadLanguages(markdown: string, languages: readonly LanguageDescription[], wait = 120) {
+  const names = new Set<string>()
+  for (const m of markdown.matchAll(FENCE_LANG)) names.add(m[1].toLowerCase())
+  const loads: Promise<unknown>[] = []
+  for (const name of names) {
+    const diagram = textDiagramLang(name)
+    if (diagram) warmTextDiagram(diagram) // not waited for: much larger than a language
+    const lang = languages.find((l) => l.alias.includes(name))
+    if (lang && !lang.support) loads.push(lang.load().catch(() => {}))
+  }
+  if (loads.length) await Promise.race([Promise.all(loads), new Promise((r) => setTimeout(r, wait))])
 }
 
 export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
@@ -368,10 +434,12 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
   const config = ctx.use(codeBlockConfig.key)
   const watch = (w: (c: any) => unknown) => config.on(w)
   if (!stock) console.warn('textDiagramView: stock code-block view not found; code blocks lose highlighting')
+  const initial = ctx.get(defaultValueCtx)
+  if (typeof initial === 'string') await preloadLanguages(initial, config.get().languages ?? [])
   const factory: NodeViewConstructor = (node, view, getPos, decorations, innerDecorations) => {
     if (textDiagramLang(node.attrs.language)) {
       const tv = new TextDiagramView(node, view, getPos, config.get(), watch)
-      buildIfOnScreen(tv as any)
+      trackLazyView(tv as any)
       return tv as any
     }
     const nv = stock
@@ -395,7 +463,7 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
       if (ok) syncLang()
       return ok
     }
-    buildIfOnScreen(nv as any)
+    trackLazyView(nv as any)
     return nv
   }
   return factory

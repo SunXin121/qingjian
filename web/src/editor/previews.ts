@@ -4,6 +4,7 @@
 
 import { renderPlantUML } from '../api'
 import { isDark } from '../theme'
+import { imageSize, rememberImageSize } from './sizeMemo'
 
 export interface DrawingRef {
   scene?: string
@@ -128,6 +129,12 @@ async function renderPlantUMLBlock(code: string): Promise<string> {
   return `<div class="ink-diagram dot plantuml">${svg.replace(/^<\?xml[^>]*>\s*/, '')}</div>`
 }
 
+/** Start loading a text diagram's renderer ahead of the first diagram that needs it. */
+export function warmTextDiagram(lang: TextDiagramLang) {
+  if (lang === 'mermaid') getMermaid().catch(() => {})
+  else if (lang === 'dot') getViz().catch(() => {})
+}
+
 /** Render a text diagram to (unsanitised) HTML; rejects with the syntax error. */
 export async function renderTextDiagram(lang: TextDiagramLang, code: string): Promise<string> {
   const key = lang + ':' + (lang === 'mermaid' && prefersDark() ? 'dark:' : '') + code
@@ -155,9 +162,14 @@ function drawingPreview(content: string, kind: DrawingKind): HTMLElement {
   wrap.setAttribute('data-ink-kind', kind)
   if (ref.svg) {
     const img = document.createElement('img')
-    img.src = `/files/${ref.svg}/${meta.svgName}`
+    const src = `/files/${ref.svg}/${meta.svgName}`
+    img.src = src
     img.alt = meta.label
     img.loading = 'lazy'
+    // reserve the picture's space before it loads (CSS keeps it within the column)
+    const size = imageSize(src)
+    if (size) [img.width, img.height] = size
+    img.addEventListener('load', () => rememberImageSize(img), { once: true })
     wrap.appendChild(img)
   } else {
     const empty = document.createElement('div')

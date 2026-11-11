@@ -23,6 +23,7 @@ import { imageRatioRemark } from './imageRatio'
 import { htmlImagesRemark } from './htmlImages'
 import { Prec } from '@codemirror/state'
 import { textDiagramView } from './textDiagram'
+import { imageSizeView } from './imageBlockView'
 import { PROGRESSIVE_MIN, splitMarkdown } from './progressive'
 
 const ExcalidrawModal = lazy(() => import('./ExcalidrawModal'))
@@ -335,6 +336,8 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     crepe.editor.use(calloutPlugin)
     // after Crepe's own code-block view: wraps it to give mermaid / dot blocks their own UI
     crepe.editor.use(textDiagramView)
+    // after Crepe's image block view: sizes images it has seen before ahead of their loading
+    crepe.editor.use(imageSizeView)
     crepe.editor.use(previewBlockKeys)
     crepe.editor.use(docLinkTrigger)
 
