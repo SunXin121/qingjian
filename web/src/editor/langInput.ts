@@ -20,6 +20,11 @@ interface StockView {
 
 const norm = (s: string) => s.trim().toLowerCase()
 
+const svg = (path: string, cls: string) =>
+  `<svg class="${cls}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`
+const CHEVRON = svg('<path d="m6 9 6 6 6-6"/>', 'ink-lang-caret')
+const CHECK = svg('<path d="M20 6 9 17l-5-5"/>', 'ink-lang-check')
+
 /**
  * Adds the language input to a stock code-block node view, every time its Vue UI is
  * mounted (it is torn down while off screen). Returns a function that brings the input
@@ -67,8 +72,8 @@ export function withLangInput(nv: StockView, view: EditorView): () => void {
 const textWidth = (s: string) => [...s].reduce((n, c) => n + (/[\u2e80-\uffff]/.test(c) ? 2 : 1), 0)
 
 function fit(input: HTMLInputElement) {
-  const n = Math.max(textWidth(input.value || input.placeholder), 3)
-  input.style.width = `calc(${n}ch + 16px)`
+  const n = Math.max(textWidth(input.value || input.placeholder), 2)
+  input.style.width = `calc(${n}ch + 2px)`
 }
 
 function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
@@ -83,6 +88,14 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
   input.value = nv.node.attrs.language ?? ''
   input.readOnly = !view.editable
   wrap.appendChild(input)
+  wrap.insertAdjacentHTML('beforeend', CHEVRON)
+  // the whole chip focuses the input (the caret and padding included)
+  wrap.addEventListener('mousedown', (e) => {
+    if (e.target === input || input.readOnly) return
+    e.preventDefault()
+    if (document.activeElement === input) closeMenu()
+    else input.focus()
+  })
   tools.insertBefore(wrap, tools.firstChild)
   fit(input)
 
@@ -112,7 +125,13 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
     if (!menu) return
     active = i
     menu.querySelectorAll('.ink-lang-item').forEach((el, j) => el.classList.toggle('active', j === i))
-    menu.querySelector('.ink-lang-item.active')?.scrollIntoView({ block: 'nearest' })
+    // scroll only the list, never the page
+    const el = menu.querySelector<HTMLElement>('.ink-lang-item.active')
+    if (!el) return
+    const pad = 4
+    if (el.offsetTop - pad < menu.scrollTop) menu.scrollTop = el.offsetTop - pad
+    else if (el.offsetTop + el.offsetHeight + pad > menu.scrollTop + menu.clientHeight)
+      menu.scrollTop = el.offsetTop + el.offsetHeight + pad - menu.clientHeight
   }
 
   const render = (filter: string) => {
@@ -126,7 +145,7 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
       items = [...items].sort((a, b) => rank(a) - rank(b))
     }
     menu.textContent = ''
-    const cur = norm(current())
+    const cur = norm(resolve(current()))
     if (!items.length) {
       const empty = document.createElement('div')
       empty.className = 'ink-lang-empty'
@@ -135,8 +154,22 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
     }
     items.forEach((l, i) => {
       const el = document.createElement('div')
-      el.className = 'ink-lang-item' + (norm(l.name) === cur ? ' current' : '')
-      el.textContent = l.name
+      const isCur = norm(l.name) === cur
+      el.className = 'ink-lang-item' + (isCur ? ' current' : '')
+      el.setAttribute('role', 'option')
+      const name = document.createElement('span')
+      name.className = 'ink-lang-name'
+      name.textContent = l.name
+      el.appendChild(name)
+      // the shortest alias that differs from the name, as a typing hint
+      const hint = l.alias.filter((a) => norm(a) !== norm(l.name)).sort((a, b) => a.length - b.length)[0]
+      if (hint) {
+        const al = document.createElement('span')
+        al.className = 'ink-lang-alias'
+        al.textContent = hint
+        el.appendChild(al)
+      }
+      if (isCur) el.insertAdjacentHTML('beforeend', CHECK)
       el.addEventListener('mousedown', (e) => e.preventDefault())
       el.addEventListener('mousemove', () => active !== i && highlight(i))
       el.addEventListener('click', () => {
@@ -151,15 +184,15 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
 
   const place = () => {
     if (!menu) return
-    const r = input.getBoundingClientRect()
+    const r = wrap.getBoundingClientRect()
     const below = window.innerHeight - r.bottom
-    menu.style.left = `${Math.min(r.left, window.innerWidth - 220)}px`
-    if (below < 200 && r.top > below) {
+    menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`
+    if (below < 280 && r.top > below) {
       menu.style.top = ''
-      menu.style.bottom = `${window.innerHeight - r.top + 4}px`
+      menu.style.bottom = `${window.innerHeight - r.top + 6}px`
     } else {
       menu.style.bottom = ''
-      menu.style.top = `${r.bottom + 4}px`
+      menu.style.top = `${r.bottom + 6}px`
     }
   }
 
@@ -168,9 +201,12 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
     menu = document.createElement('div')
     menu.className = 'ink-lang-menu'
     menu.setAttribute('role', 'listbox')
+    wrap.classList.add('open')
     document.body.appendChild(menu)
     render('')
     place()
+    const cur = menu.querySelector<HTMLElement>('.ink-lang-item.current')
+    if (cur) menu.scrollTop = cur.offsetTop - (menu.clientHeight - cur.offsetHeight) / 2
     window.addEventListener('scroll', place, true)
     window.addEventListener('resize', place)
   }
@@ -179,6 +215,7 @@ function mountInput(tools: HTMLElement, nv: StockView, view: EditorView) {
     if (!menu) return
     menu.remove()
     menu = null
+    wrap.classList.remove('open')
     active = -1
     window.removeEventListener('scroll', place, true)
     window.removeEventListener('resize', place)

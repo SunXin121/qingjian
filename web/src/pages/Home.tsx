@@ -1,42 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { api, formatTime, nodePath, type RecentDoc, type Repo } from '../api'
-import { confirmDialog, openMenu, toast } from '../components/dialog'
-import { editRepoDialog } from '../components/RepoDialog'
-import { IconClock, IconDoc, IconDownload, IconEdit, IconLibrary, IconMore, IconPlus, IconSearch, IconShare, IconSparkles, IconTable, IconTrash, RepoMark } from '../components/icons'
+import { api, formatTime, nodePath, type RecentDoc } from '../api'
+import { editRepoDialog, repoMenu } from '../components/RepoDialog'
+import { IconClock, IconDoc, IconLibrary, IconMore, IconPlus, IconSearch, IconSparkles, IconTable, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
-import { openShareDialog } from '../components/ShareDialog'
 import { nodeTitle, useStore } from '../store'
-
-export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?: () => void) {
-  openMenu(el, [
-    {
-      label: '编辑信息',
-      icon: <IconEdit />,
-      onClick: async () => {
-        const v = await editRepoDialog(r)
-        if (!v) return
-        await api.updateRepo(r.id, v)
-        after()
-      },
-    },
-    { label: '分享知识库', icon: <IconShare />, onClick: () => openShareDialog({ target_type: 'repo', target_id: r.id, title: r.name }) },
-    { label: '导出为 Markdown (zip)', icon: <IconDownload />, onClick: () => (location.href = `/api/repos/${r.id}/export`) },
-    {
-      label: '删除知识库',
-      icon: <IconTrash />,
-      danger: true,
-      divider: true,
-      onClick: async () => {
-        if (!(await confirmDialog(`确定删除知识库「${r.name}」吗？可在回收站中恢复。`, { danger: true, okText: '删除' }))) return
-        await api.deleteRepo(r.id)
-        toast('已移入回收站')
-        after()
-        onDeleted?.()
-      },
-    },
-  ])
-}
 
 export default function Home() {
   const { repos, loadRepos, setSearchOpen } = useStore()

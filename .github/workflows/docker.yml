@@ -1,11 +1,10 @@
 name: Docker image
 
+# Builds only when a version tag is pushed (git tag v1.2.3 && git push origin v1.2.3),
+# or when started by hand from the Actions tab.
 on:
   push:
-    branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +21,7 @@ jobs:
     env:
       # Docker Hub is optional: set repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN to enable it.
       HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
-      PUSH: ${{ github.event_name != 'pull_request' }}
+      PUSH: 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -53,11 +52,10 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/qingjian
             name=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/qingjian,enable=${{ env.HAS_DOCKERHUB == 'true' }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
-            type=ref,event=pr
 
       - name: Build and push
         uses: docker/build-push-action@v7

@@ -3,7 +3,7 @@ import { Link, NavLink, useMatch, useNavigate } from 'react-router'
 import { api, nodePath, type NodeType, type TreeNode } from '../api'
 import { childrenMap, nodeTitle, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast } from './dialog'
-import { editRepoDialog } from './RepoDialog'
+import { editRepoDialog, repoMenu } from './RepoDialog'
 import { useWindowed } from './useWindowed'
 import {
   IconBack,
@@ -130,7 +130,7 @@ export default function Sidebar() {
 type DropPos = 'before' | 'after' | 'inside'
 
 function RepoTree({ repoId }: { repoId: string }) {
-  const { repos, tree, treeRepoId, loadTree, setSidebarOpen } = useStore()
+  const { repos, tree, treeRepoId, loadTree, loadRepos, setSidebarOpen } = useStore()
   const navigate = useNavigate()
   const docMatch = useMatch('/r/:repoId/d/:docId')
   const tableMatch = useMatch('/r/:repoId/t/:tableId')
@@ -377,6 +377,15 @@ function RepoTree({ repoId }: { repoId: string }) {
         >
           <IconPlus />
         </button>
+        {repo && (
+          <button
+            className="icon-btn"
+            title="知识库设置"
+            onClick={(e) => repoMenu(e.currentTarget, repo, () => loadRepos().catch(() => {}), () => navigate('/'))}
+          >
+            <IconMore />
+          </button>
+        )}
       </div>
       <div className="side-scroll tree">
         <div ref={win.listRef}>

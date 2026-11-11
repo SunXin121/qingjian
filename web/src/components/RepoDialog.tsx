@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from 'react'
-import { uploadFile, type Repo } from '../api'
-import { Modal, mount } from './dialog'
-import { IconUpload, RepoMark } from './icons'
+import { api, uploadFile, type Repo } from '../api'
+import { confirmDialog, Modal, mount, openMenu, toast } from './dialog'
+import { IconDownload, IconEdit, IconShare, IconTrash, IconUpload, RepoMark } from './icons'
+import { openShareDialog } from './ShareDialog'
 
 const icons = ['📚', '📝', '📖', '💡', '🧠', '💻', '🎨', '🔬', '🌱', '🏠', '🗂️', '📌', '🎯', '🚀', '⭐', '❤️']
 const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
@@ -133,4 +134,35 @@ export function editRepoDialog(repo?: Repo): Promise<RepoDetails | null> {
       resolve(value)
     }} />)
   })
+}
+
+/** Edit / share / export / delete menu for a knowledge base. */
+export function repoMenu(el: HTMLElement, r: Repo, after: () => void, onDeleted?: () => void) {
+  openMenu(el, [
+    {
+      label: '编辑信息',
+      icon: <IconEdit />,
+      onClick: async () => {
+        const v = await editRepoDialog(r)
+        if (!v) return
+        await api.updateRepo(r.id, v)
+        after()
+      },
+    },
+    { label: '分享知识库', icon: <IconShare />, onClick: () => openShareDialog({ target_type: 'repo', target_id: r.id, title: r.name }) },
+    { label: '导出为 Markdown (zip)', icon: <IconDownload />, onClick: () => (location.href = `/api/repos/${r.id}/export`) },
+    {
+      label: '删除知识库',
+      icon: <IconTrash />,
+      danger: true,
+      divider: true,
+      onClick: async () => {
+        if (!(await confirmDialog(`确定删除知识库「${r.name}」吗？可在回收站中恢复。`, { danger: true, okText: '删除' }))) return
+        await api.deleteRepo(r.id)
+        toast('已移入回收站')
+        after()
+        onDeleted?.()
+      },
+    },
+  ])
 }

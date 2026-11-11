@@ -20,14 +20,14 @@
 
 ## 部署
 
-推送到 `main` 分支或打 `v*` 标签时，GitHub Actions 会自动构建 `linux/amd64` 和 `linux/arm64` 两种架构的镜像：
+推送 `v*` 标签时（例如 `git tag v1.2.3 && git push origin v1.2.3`），GitHub Actions 会自动构建 `linux/amd64` 和 `linux/arm64` 两种架构的镜像：
 
 | 仓库 | 镜像 | 说明 |
 |---|---|---|
 | GitHub Container Registry | `ghcr.io/sunxin121/qingjian` | 默认推送，不需要额外配置 |
 | Docker Hub | `<用户名>/qingjian` | 在仓库 Secrets 中配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` 后自动推送 |
 
-标签规则：`latest` 跟随 main 分支；`v1.2.3` 标签会生成 `1.2.3` 和 `1.2` 两个镜像标签；另外每次提交都会生成一个 `sha-xxxxxxx` 标签。
+普通推送不会触发构建，也可以在 Actions 页面手动运行。标签规则：`v1.2.3` 标签会生成 `1.2.3`、`1.2` 和 `latest`，另外附带一个 `sha-xxxxxxx` 标签。
 
 ### Docker Compose
 

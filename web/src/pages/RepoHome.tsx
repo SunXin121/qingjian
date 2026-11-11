@@ -3,14 +3,19 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api, formatTime, nodePath, type Repo, type TreeNode } from '../api'
 import { IconDoc, IconDocPlus, IconFolder, IconList, IconMore, IconTable, RepoMark } from '../components/icons'
 import PageHeader from '../components/PageHeader'
+import { repoMenu } from '../components/RepoDialog'
 import { useWindowed } from '../components/useWindowed'
 import { childrenMap, nodeTitle, useStore } from '../store'
-import { repoMenu } from './Home'
 
 export default function RepoHome() {
   const { repoId } = useParams() as { repoId: string }
-  const { tree, treeRepoId, loadTree, loadRepos } = useStore()
+  const { tree, treeRepoId, loadTree, loadRepos, repos } = useStore()
   const [repo, setRepo] = useState<Repo | null>(null)
+  // edits made elsewhere (the sidebar's menu) land in the store's list
+  const listed = repos.find((r) => r.id === repoId)
+  useEffect(() => {
+    if (listed) setRepo((r) => (r && r.id === listed.id ? { ...r, ...listed } : r))
+  }, [listed])
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
