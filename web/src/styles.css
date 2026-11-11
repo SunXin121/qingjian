@@ -245,6 +245,17 @@ mark {
   font-size: 13px;
   border-radius: var(--radius-sm);
 }
+/* On 1x screens 12–13px CJK text centred in an even-height row lands on a half pixel
+   and is rounded down, a visible pixel below its icon. An even line box rounds it up
+   instead. High-DPI screens place the half pixel exactly, so they keep line-height: 1. */
+@media (max-resolution: 1.49dppx) {
+  .btn.sm,
+  .search-trigger > span,
+  .sidebar-settings > span,
+  .stat-label {
+    line-height: 14px;
+  }
+}
 .btn.block {
   width: 100%;
 }
@@ -893,7 +904,11 @@ a.toc-row:hover > .ellipsis {
 .doc-row-title {
   flex: 1;
   font-weight: 500;
+  line-height: 20px; /* 1.5 (21px) leaves the glyphs a pixel below the icon tile */
   transition: color 0.12s;
+}
+.toc-row > .ellipsis {
+  line-height: 20px;
 }
 .doc-row-repo {
   color: var(--c-text-3);
@@ -1291,6 +1306,12 @@ a.toc-row:hover > .ellipsis {
 /* lists: bullets & checkboxes */
 .ink-editor .milkdown .milkdown-list-item-block li .label-wrapper {
   color: var(--c-text-3);
+}
+/* crepe sizes the bullet / checkbox box at 32px, but a list line here is 34px
+   (3px padding + 28px line + 3px), which left markers a pixel above the text */
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper,
+.ink-editor .milkdown .milkdown-list-item-block li .label-wrapper .label {
+  height: 34px;
 }
 .ink-editor .milkdown .milkdown-list-item-block li .label-wrapper svg {
   fill: var(--c-text-3);
