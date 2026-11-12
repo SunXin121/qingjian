@@ -57,3 +57,14 @@ code {
   font-size: 12px;
   color: var(--c-text-3);
 }
+
+/* Sliders provide step controls; keep the paired number fields compact. */
+.setting-number {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.setting-number::-webkit-inner-spin-button,
+.setting-number::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
