@@ -1,6 +1,6 @@
 {
   "name": "qingjian-web-clipper",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -8,7 +8,7 @@
   "scripts": {
     "build": "node build.mjs",
     "build:firefox": "node build.mjs --firefox",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "node scripts/prepare.mjs && tsc --project tsconfig.json --noEmit",
     "test": "node scripts/prepare.mjs && node --test tests/*.test.mjs && bun test ./vendor/edgeever/apps/extension/*.test.mjs",
     "test:upstream": "node scripts/prepare.mjs && bun test ./vendor/edgeever/apps/extension/*.test.mjs",
     "test:browser": "node tests/browser.mjs",

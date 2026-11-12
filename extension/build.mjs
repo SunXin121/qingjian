@@ -1,4 +1,4 @@
-// Qingjian integration build. Vendored EdgeEver source stays byte-for-byte pinned.
+// Qingjian build for the directly adapted EdgeEver clipping sources.
 import './scripts/prepare.mjs'
 import { build as viteBuild, loadConfigFromFile, mergeConfig } from 'vite'
 import { build as bundle } from 'esbuild'

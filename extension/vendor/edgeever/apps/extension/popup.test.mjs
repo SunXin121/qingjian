@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { captureCurrentPage } from "./src/popup";
 import { testConnection } from "./src/extension";
 
-const settings = { instanceUrl: "https://example.com", token: "token", notebookId: "" };
+const settings = { instanceUrl: "https://example.com", password: "test-password", notebookId: "" };
 
 test("area selection requests permission in the click and starts the picker without capturing the page", async () => {
   const { startRegionClip } = await import("./src/popup");
@@ -71,7 +71,7 @@ test("instance permission omits nonstandard ports while connection keeps the con
         globalThis.fetch = async (url, options) => {
           expect(permissionGranted).toBe(true);
           expect(url).toBe(`${instanceUrl}/api/v1/notebooks`);
-          expect(options.headers.Authorization).toBe("Bearer token");
+          expect(options.headers.Authorization).toBe(`Basic ${btoa("admin:test-password")}`);
           return Response.json({ notebooks: [{ id: "inbox", name: "Inbox" }] });
         };
         expect(await testConnection({ ...settings, instanceUrl })).toEqual([{ id: "inbox", name: "Inbox" }]);
@@ -84,7 +84,7 @@ test("instance permission omits nonstandard ports while connection keeps the con
 
 test("missing configuration never requests permissions or capture", async () => {
   await withChrome({}, async () => {
-    await expect(captureCurrentPage({ ...settings, token: "" })).rejects.toThrow("completePluginConfiguration");
+    await expect(captureCurrentPage({ ...settings, password: "" })).rejects.toThrow("completePluginConfiguration");
   });
 });
 

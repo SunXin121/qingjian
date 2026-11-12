@@ -563,7 +563,7 @@ test("still writes the transcript when the outline is refused, unconfigured, inv
     chapters: [],
     cues: [{ start: 0, end: 2, text: "Hello&amp; there" }],
   };
-  const settings = { instanceUrl: "https://notes.example", token: "token" };
+  const settings = { instanceUrl: "https://notes.example", password: "test-password" };
   const respond = (status, payload) => withPage(() => {
     globalThis.fetch = async (url) => {
       expect(String(url)).toBe("https://notes.example/api/v1/ai/video-outline/prepare");
@@ -733,7 +733,7 @@ test("ships the video-note phrases in the extension locales", () => {
   expect(zh.saveVideoNoteToEdgeEver.message).toBe("保存视频笔记到 EdgeEver");
   expect(zh.videoNoteSaved.message).toBe("已保存视频笔记");
   expect(zh.videoTranscriptSaved.message).toBe("已保存字幕，总结未生成");
-  expect(zh.videoTranscriptNeedScope.message).toBe("已保存字幕，总结未生成。请在设置中为 Token 加上 ai:generate，并配置默认模型。");
+  expect(zh.videoTranscriptNeedScope.message).toBe("已保存字幕。请在浏览器中允许访问模型服务，并检查模型设置后重试摘要。");
   expect(zh.videoTranscriptNeedModel.message).toBe("已保存字幕，总结未生成。请先配置默认模型。");
   expect(zh.videoTranscriptTooLong.message).toBe("已保存字幕。这篇太长，没有生成总结。");
   expect(zh.videoInfoSaved.message).toBe("已保存视频信息");
@@ -766,7 +766,7 @@ test("video summaries call the model directly after preparing context", async ()
       return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`);
     };
     const body = { platform: "youtube", title: "Video", author: "Channel", duration: 60, hasChapters: false, blocks: [{ start: 0, text: "Transcript" }] };
-    const result = await postVideoOutline({ instanceUrl: "https://notes.example", token: "token" }, body);
+    const result = await postVideoOutline({ instanceUrl: "https://notes.example", password: "test-password" }, body);
     expect(result).toMatchObject({ ok: true, outline: { tldr: "Summary" } });
     expect(paths).toEqual(["https://notes.example/api/v1/ai/video-outline/prepare", "https://model.example/v1/chat/completions"]);
   });

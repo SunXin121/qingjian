@@ -1,4 +1,5 @@
 {
+  "adminPasswordLabel": { "message": "管理パスワード" },
   "extensionName": {
     "message": "EdgeEver Web Clipper"
   },
@@ -39,7 +40,7 @@
     "message": "情報と診断"
   },
   "diagnosticsDescription": {
-    "message": "拡張機能、ブラウザ、システム、接続の基本情報を表示します。API トークンは含まれません。"
+    "message": "拡張機能、ブラウザ、システム、接続情報を表示します。管理パスワードは含まれません。"
   },
   "extensionVersion": {
     "message": "拡張機能のバージョン"
@@ -92,8 +93,8 @@
   "instanceAddress": {
     "message": "EdgeEver インスタンス URL"
   },
-  "tokenPlaceholder": {
-    "message": "EdgeEver の設定で作成します"
+  "adminPasswordPlaceholder": {
+    "message": "青簡のログインパスワード"
   },
   "defaultNotebook": {
     "message": "既定のノートブック"
@@ -140,7 +141,7 @@
     "message": "設定の保存に失敗しました。"
   },
   "missingSettingsDetails": {
-    "message": "先に拡張機能の設定で EdgeEver のインスタンス URL と API トークンを入力してください。"
+    "message": "拡張機能の設定で青簡の URL と管理パスワードを入力してください。"
   },
   "instancePermissionRequired": {
     "message": "拡張機能が EdgeEver インスタンスへアクセスすることを許可してください。"
@@ -265,7 +266,7 @@
     "message": "サイトへのアクセスが許可されなかったため、画像は保存されていません。"
   },
   "imageResourceScopeRequired": {
-    "message": "この API トークンには添付ファイルの書き込み権限がありません。EdgeEver の設定でフルアクセスのトークンを作成してください。"
+    "message": "添付ファイルを保存できません。管理パスワードを確認して再試行してください。"
   },
   "imageNoteFallbackTitle": {
     "message": "画像"
@@ -490,7 +491,7 @@
     "message": "字幕を保存しました。要約は生成されていません。"
   },
   "videoTranscriptNeedScope": {
-    "message": "字幕を保存しました。要約は生成されていません。設定でトークンに ai:generate を追加し、既定のモデルを選んでください。"
+    "message": "字幕を保存しました。ブラウザでモデルサービスへのアクセスを許可し、モデル設定を確認してください。"
   },
   "videoTranscriptNeedModel": {
     "message": "字幕を保存しました。要約は生成されていません。先に既定のモデルを選んでください。"

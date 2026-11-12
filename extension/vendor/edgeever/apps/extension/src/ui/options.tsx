@@ -35,7 +35,7 @@ export function Options() {
     }).catch(error => { if (active) setFeedback({ message: error instanceof Error ? error.message : t("settingsSaveFailed"), kind: "error" }); });
     return () => { active = false; };
   }, []);
-  const readSettings = () => ({ ...settings, instanceUrl: settings.instanceUrl.trim(), token: settings.token.trim() });
+  const readSettings = () => ({ ...settings, instanceUrl: settings.instanceUrl.trim() });
   async function test() {
     if (busy || !ready) return;
     setBusy(true); setFeedback({ message: t("connecting") });
@@ -88,7 +88,7 @@ export function Options() {
     <form id="settings-form" onSubmit={event => void save(event)} className="mt-6 rounded-xl border border-border bg-card p-4 sm:p-[22px]">
       <fieldset disabled={!ready || busy} className="space-y-4">
         <label className="grid gap-2 text-[13px] font-semibold" htmlFor="instance-url">{t("instanceAddress")}<Input id="instance-url" type="url" placeholder="https://notes.example.com" required value={settings.instanceUrl} onChange={event => field("instanceUrl", event.target.value)} /></label>
-        <label className="grid gap-2 text-[13px] font-semibold" htmlFor="token">API Token<Input id="token" type="password" placeholder={t("tokenPlaceholder")} required value={settings.token} onChange={event => field("token", event.target.value)} /></label>
+        <label className="grid gap-2 text-[13px] font-semibold" htmlFor="password">{t("adminPasswordLabel")}<Input id="password" type="password" placeholder={t("adminPasswordPlaceholder")} required value={settings.password} onChange={event => field("password", event.target.value)} /></label>
         <label className="grid gap-2 text-[13px] font-semibold" htmlFor="notebook-id">{t("defaultNotebook")}<select id="notebook-id" className={selectStyle} value={settings.notebookId} onChange={event => field("notebookId", event.target.value)}>
           <option value="">{t("autoFirstNotebook")}</option>
           {settings.notebookId && !notebooks.some(book => book.id === settings.notebookId) && <option value={settings.notebookId}>{t("defaultNotebook")}</option>}

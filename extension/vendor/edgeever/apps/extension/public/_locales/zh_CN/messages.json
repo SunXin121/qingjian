@@ -1,4 +1,5 @@
 {
+  "adminPasswordLabel": { "message": "管理密码" },
   "extensionName": {
     "message": "EdgeEver 网页剪藏"
   },
@@ -39,7 +40,7 @@
     "message": "关于与诊断信息"
   },
   "diagnosticsDescription": {
-    "message": "查看插件、浏览器、系统和连接信息。不会包含 API Token。"
+    "message": "查看插件、浏览器、系统和连接信息，不包含管理密码。"
   },
   "extensionVersion": {
     "message": "插件版本"
@@ -92,8 +93,8 @@
   "instanceAddress": {
     "message": "EdgeEver 实例地址"
   },
-  "tokenPlaceholder": {
-    "message": "从 EdgeEver 设置中创建"
+  "adminPasswordPlaceholder": {
+    "message": "登录青简时使用的管理密码"
   },
   "defaultNotebook": {
     "message": "默认笔记本"
@@ -140,7 +141,7 @@
     "message": "保存失败。"
   },
   "missingSettingsDetails": {
-    "message": "请先在插件设置中填写 EdgeEver 地址和 API Token。"
+    "message": "请先在插件设置中填写青简地址和管理密码。"
   },
   "instancePermissionRequired": {
     "message": "需要允许插件访问你的 EdgeEver 实例。"
@@ -265,7 +266,7 @@
     "message": "没有获得网站访问权限，图片还没有保存。"
   },
   "imageResourceScopeRequired": {
-    "message": "这个 API Token 没有写入附件的权限。请在 EdgeEver 设置里创建一个完整访问的 Token。"
+    "message": "附件保存失败，请检查管理密码后重试。"
   },
   "imageNoteFallbackTitle": {
     "message": "图片"
@@ -490,7 +491,7 @@
     "message": "已保存字幕，总结未生成"
   },
   "videoTranscriptNeedScope": {
-    "message": "已保存字幕，总结未生成。请在设置中为 Token 加上 ai:generate，并配置默认模型。"
+    "message": "已保存字幕。请在浏览器中允许访问模型服务，并检查模型设置后重试摘要。"
   },
   "videoTranscriptNeedModel": {
     "message": "已保存字幕，总结未生成。请先配置默认模型。"

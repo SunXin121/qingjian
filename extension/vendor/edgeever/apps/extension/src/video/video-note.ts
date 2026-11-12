@@ -1,7 +1,7 @@
 import { buildAiDirectProviderRequest, extractAiDirectStreamDelta } from "@edgeever/shared/ai-generation";
 import { consumeProviderEventStream } from "@edgeever/shared/provider-event-stream";
 import { normalizeVideoOutline, parseVideoOutlineModelText } from "@edgeever/shared/video-outline";
-import { normalizeInstanceUrl } from "../extension";
+import { adminPasswordAuthorization, normalizeInstanceUrl } from "../extension";
 import { chunkTranscript, formatTimestamp, sectionsFromOutline } from "./transcript";
 import type {
   OutlineAttempt,
@@ -190,7 +190,7 @@ const outlineFromJson = (value: unknown): VideoOutline | null => {
 };
 
 export const postVideoOutline = async (
-  settings: { instanceUrl: string; token: string },
+  settings: { instanceUrl: string; password: string },
   body: ReturnType<typeof videoOutlineRequestBody>,
 ): Promise<OutlineAttempt> => {
   if (!body.blocks.length) return { ok: false, reason: "failed" };
@@ -198,7 +198,7 @@ export const postVideoOutline = async (
     const response = await fetch(`${normalizeInstanceUrl(settings.instanceUrl)}/api/v1/ai/video-outline/prepare`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${settings.token}`,
+        Authorization: adminPasswordAuthorization(settings.password),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -287,7 +287,7 @@ export const persistVideoNote = async (input: {
       });
       return note;
     } catch {
-      // A missing write:resources scope or a bad image still leaves the note.
+      // A failed image upload still leaves the note (image links stay remote).
     }
   }
   const plainNote = note.markdown.includes(COVER_PLACEHOLDER)

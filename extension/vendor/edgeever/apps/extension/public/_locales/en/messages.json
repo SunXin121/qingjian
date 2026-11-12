@@ -1,4 +1,5 @@
 {
+  "adminPasswordLabel": { "message": "Admin password" },
   "extensionName": {
     "message": "EdgeEver Web Clipper"
   },
@@ -39,7 +40,7 @@
     "message": "About & diagnostics"
   },
   "diagnosticsDescription": {
-    "message": "View basic extension, browser, system, and connection information. API tokens are never included."
+    "message": "View extension, browser, system and connection information. The admin password is never included."
   },
   "extensionVersion": {
     "message": "Extension version"
@@ -92,8 +93,8 @@
   "instanceAddress": {
     "message": "EdgeEver instance URL"
   },
-  "tokenPlaceholder": {
-    "message": "Create one in EdgeEver settings"
+  "adminPasswordPlaceholder": {
+    "message": "Your Qingjian login password"
   },
   "defaultNotebook": {
     "message": "Default notebook"
@@ -140,7 +141,7 @@
     "message": "Failed to save settings."
   },
   "missingSettingsDetails": {
-    "message": "Enter the EdgeEver instance URL and API token in the extension settings first."
+    "message": "Enter the Qingjian instance URL and admin password in extension settings first."
   },
   "instancePermissionRequired": {
     "message": "Allow the extension to access your EdgeEver instance."
@@ -265,7 +266,7 @@
     "message": "Site access was not allowed, so the image was not saved."
   },
   "imageResourceScopeRequired": {
-    "message": "This API token cannot write attachments. Create a full-access token in EdgeEver settings."
+    "message": "Could not save the attachment. Check the admin password and try again."
   },
   "imageNoteFallbackTitle": {
     "message": "Image"
@@ -490,7 +491,7 @@
     "message": "Saved the captions. No summary was generated."
   },
   "videoTranscriptNeedScope": {
-    "message": "Saved the captions. No summary was generated. Add the ai:generate scope to the token in settings, and choose a default model."
+    "message": "Captions saved. Allow browser access to the model service and check model settings before retrying the summary."
   },
   "videoTranscriptNeedModel": {
     "message": "Saved the captions. No summary was generated. Choose a default model first."

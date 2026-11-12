@@ -205,9 +205,6 @@ const describeCaptureError = (error: unknown) => {
 
 const describeSaveError = (error: unknown) => {
   const message = compactError(error);
-  if (/write:resources/i.test(message)) {
-    return t("imageResourceScopeRequired");
-  }
   if (/failed to fetch|networkerror|load failed|network request/i.test(message)) {
     return t("instanceNetworkFailed");
   }
@@ -375,7 +372,7 @@ const describeImageError = (error: unknown) => {
 
 const ensureClipperReady = async () => {
   const settings = await getSettings();
-  if (!settings.instanceUrl || !settings.token) {
+  if (!settings.instanceUrl || !settings.password) {
     throw new Error(t("completePluginConfiguration"));
   }
   const granted = await chrome.permissions.contains({ origins: [getInstancePermissionPattern(settings.instanceUrl)] });

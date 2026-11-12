@@ -102,7 +102,7 @@ const harness = (options = {}) => {
         onMessage(message, { id: chrome.runtime.id, tab: { id: 7 }, frameId: 0, url: options.senderUrl || currentUrl }, () => {});
       },
     },
-    storage: { local: { get: async () => ({ instanceUrl: "https://edgeever.test", token: "test-token", notebookId: "" }) } },
+    storage: { local: { get: async () => ({ instanceUrl: "https://edgeever.test", password: "test-password", notebookId: "" }) } },
     permissions: { contains: async () => !options.denyInstance },
     declarativeNetRequest: { updateSessionRules:async update=>{
       calls.imageRules.push(update);
@@ -148,7 +148,7 @@ const harness = (options = {}) => {
     delete chrome.contextMenus;
     delete chrome.windows;
   }
-  runInContext(background, createContext({ chrome, fetch: fetchMock, URL, crypto, setTimeout:options.backgroundSetTimeout || setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal, AbortController, Blob, File, FormData, Uint8Array, ArrayBuffer, Response }));
+  runInContext(background, createContext({ chrome, fetch: fetchMock, URL, crypto, TextEncoder, btoa, setTimeout:options.backgroundSetTimeout || setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal, AbortController, Blob, File, FormData, Uint8Array, ArrayBuffer, Response }));
   return {
     installed: () => onInstalled({ reason: "install" }),
     document: window.document,

@@ -211,8 +211,8 @@ func clipImagePlaceholder(md, id string) (string, bool) {
 	return md, found
 }
 
-// Canonicalise genuine local references and check their memo association.
-func clipCanonical(tx *sql.Tx, id, md string) (string, error) {
+// Canonicalise genuine local references to existing native attachments.
+func clipCanonical(tx *sql.Tx, md string) (string, error) {
 	var failure error
 	md = clipTargets(md, func(target string) string {
 		path, suffix := clipTargetPath(target)
@@ -228,8 +228,8 @@ func clipCanonical(tx *sql.Tx, id, md string) (string, error) {
 			return target
 		}
 		var name string
-		if err := tx.QueryRow(`SELECT a.name FROM attachments a JOIN clipper_resources c ON c.resource_id=a.id WHERE c.node_id=? AND a.id=?`, id, rid).Scan(&name); err != nil {
-			failure = clipFail(400, "invalid_resource", "Resource does not belong to this clipper memo")
+		if err := tx.QueryRow(`SELECT name FROM attachments WHERE id=?`, rid).Scan(&name); err != nil {
+			failure = clipFail(400, "invalid_resource", "Resource does not exist")
 			return target
 		}
 		return fileURL(rid, name) + suffix
@@ -239,37 +239,36 @@ func clipCanonical(tx *sql.Tx, id, md string) (string, error) {
 	}
 	return md, nil
 }
-func clipProject(tx *sql.Tx, id, md string) (string, error) {
-	rows, err := tx.Query(`SELECT a.id,a.name FROM attachments a JOIN clipper_resources c ON c.resource_id=a.id WHERE c.node_id=?`, id)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	refs := map[string]string{}
-	for rows.Next() {
-		var rid, name string
-		if err = rows.Scan(&rid, &name); err != nil {
-			return "", err
-		}
-		refs[fileURL(rid, name)] = "/api/v1/resources/" + rid + "/blob"
-	}
-	if err = rows.Err(); err != nil {
-		return "", err
-	}
-	return clipTargets(md, func(target string) string {
+func clipProject(tx *sql.Tx, md string) (string, error) {
+	var failure error
+	md = clipTargets(md, func(target string) string {
 		path, suffix := clipTargetPath(target)
-		if projected, ok := refs[path]; ok {
-			return projected + suffix
+		m := clipNativeURL.FindStringSubmatch(path)
+		if m == nil {
+			return target
+		}
+		var name string
+		err := tx.QueryRow(`SELECT name FROM attachments WHERE id=?`, m[1]).Scan(&name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return target
+		}
+		if err != nil {
+			failure = err
+			return target
+		}
+		if path == fileURL(m[1], name) {
+			return "/api/v1/resources/" + m[1] + "/blob" + suffix
 		}
 		return target
-	}), nil
+	})
+	return md, failure
 }
 func clipLoad(tx *sql.Tx, id string) (*clipMemo, error) {
 	m := &clipMemo{}
 	var tags, md, storedHash, nativeHash string
 	var storedRevision int64
 	var parent sql.NullString
-	err := tx.QueryRow(`SELECT n.id,n.repo_id,n.parent_id,n.title,d.markdown,d.updated_at,n.created_at,c.tags,c.upstream_hash,c.native_hash,c.native_revision FROM clipper_memos c JOIN nodes n ON n.id=c.node_id JOIN repos r ON r.id=n.repo_id JOIN doc_contents d ON d.node_id=n.id WHERE n.id=? AND n.deleted_at IS NULL AND r.deleted_at IS NULL`, id).Scan(&m.ID, &m.NotebookID, &parent, &m.Title, &md, &m.Revision, &m.CreatedAt, &tags, &storedHash, &nativeHash, &storedRevision)
+	err := tx.QueryRow(`SELECT n.id,n.repo_id,n.parent_id,n.title,d.markdown,d.updated_at,n.created_at,COALESCE(c.tags,'[]'),COALESCE(c.upstream_hash,''),COALESCE(c.native_hash,''),COALESCE(c.native_revision,0) FROM nodes n JOIN repos r ON r.id=n.repo_id JOIN doc_contents d ON d.node_id=n.id LEFT JOIN clipper_memos c ON c.node_id=n.id WHERE n.id=? AND n.type='doc' AND n.deleted_at IS NULL AND r.deleted_at IS NULL`, id).Scan(&m.ID, &m.NotebookID, &parent, &m.Title, &md, &m.Revision, &m.CreatedAt, &tags, &storedHash, &nativeHash, &storedRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +279,7 @@ func clipLoad(tx *sql.Tx, id string) (*clipMemo, error) {
 		return nil, err
 	}
 	m.nativeHash = clipHash(md)
-	m.Markdown, err = clipProject(tx, id, md)
+	m.Markdown, err = clipProject(tx, md)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +316,7 @@ func clipCreateTx(tx *sql.Tx, in clipMemoInput, att *Attachment) (*clipMemo, err
 		}
 		in.Markdown, _ = clipImagePlaceholder(strings.ReplaceAll(in.Markdown, "\r\n", "\n"), att.ID)
 	}
-	native, err := clipCanonical(tx, id, in.Markdown)
+	native, err := clipCanonical(tx, in.Markdown)
 	if err != nil {
 		return nil, err
 	}
@@ -403,10 +402,9 @@ func (s *Server) clipperEditSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := clipRandom()
-	auth := r.Context().Value(clipperAuthKey{}).(clipperToken)
 	_, err = tx.Exec(`DELETE FROM clipper_edit_sessions WHERE expires_at<=?`, now())
 	if err == nil {
-		_, err = tx.Exec(`INSERT INTO clipper_edit_sessions(id,node_id,token_hash,revision,content_hash,native_hash,expires_at) VALUES(?,?,?,?,?,?,?)`, id, m.ID, auth.Hash, m.Revision, m.ContentHash, m.nativeHash, now()+30*60*1000)
+		_, err = tx.Exec(`INSERT INTO clipper_edit_sessions(id,node_id,revision,content_hash,native_hash,expires_at) VALUES(?,?,?,?,?,?)`, id, m.ID, m.Revision, m.ContentHash, m.nativeHash, now()+30*60*1000)
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -440,15 +438,14 @@ func (s *Server) clipperSave(w http.ResponseWriter, r *http.Request) {
 		clipRespondError(w, err)
 		return
 	}
-	auth := r.Context().Value(clipperAuthKey{}).(clipperToken)
 	var revision int64
 	var hash, nativeHash string
-	err = tx.QueryRow(`SELECT revision,content_hash,native_hash FROM clipper_edit_sessions WHERE id=? AND node_id=? AND token_hash=? AND expires_at>?`, in.Session, id, auth.Hash, now()).Scan(&revision, &hash, &nativeHash)
+	err = tx.QueryRow(`SELECT revision,content_hash,native_hash FROM clipper_edit_sessions WHERE id=? AND node_id=? AND expires_at>?`, in.Session, id, now()).Scan(&revision, &hash, &nativeHash)
 	if err != nil || revision != in.Revision || hash != in.Hash || m.Revision != revision || m.ContentHash != hash || m.nativeHash != nativeHash {
 		clipError(w, 409, "edit_conflict", "Memo changed or edit session expired; reload before saving")
 		return
 	}
-	native, err := clipCanonical(tx, id, *in.Markdown)
+	native, err := clipCanonical(tx, *in.Markdown)
 	if err != nil {
 		clipRespondError(w, err)
 		return
@@ -483,7 +480,7 @@ func (s *Server) clipperSave(w http.ResponseWriter, r *http.Request) {
 		err = addVersion(tx, id, m.Title, native, t)
 	}
 	if err == nil {
-		_, err = tx.Exec(`UPDATE clipper_memos SET upstream_hash=?,native_hash=?,native_revision=? WHERE node_id=?`, clipHash(*in.Markdown), clipHash(native), t, id)
+		_, err = tx.Exec(`INSERT INTO clipper_memos(node_id,upstream_hash,native_hash,native_revision) VALUES(?,?,?,?) ON CONFLICT(node_id) DO UPDATE SET upstream_hash=excluded.upstream_hash,native_hash=excluded.native_hash,native_revision=excluded.native_revision`, id, clipHash(*in.Markdown), clipHash(native), t)
 	}
 	if err == nil {
 		_, err = tx.Exec(`DELETE FROM clipper_edit_sessions WHERE node_id=?`, id)
@@ -516,7 +513,7 @@ func (s *Server) clipperDelete(w http.ResponseWriter, r *http.Request) {
 		clipRespondError(w, err)
 		return
 	}
-	// Never cascade through native children that the admin may have placed below a clip.
+	// Keep the generic parent invariant: deleting a document must not orphan children.
 	var children int
 	err = tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE parent_id=?`, m.ID).Scan(&children)
 	if err == nil && children > 0 {
@@ -617,7 +614,7 @@ func (s *Server) clipperCreateImage(w http.ResponseWriter, r *http.Request) {
 	s.clipCreateResponse(w, in, att)
 }
 func (s *Server) clipperUpload(w http.ResponseWriter, r *http.Request) {
-	// Authorise before consuming a potentially large multipart body.
+	// Check document existence and type before consuming a large multipart body.
 	tx, err := s.db.Begin()
 	if err != nil {
 		clipRespondError(w, err)
@@ -662,7 +659,7 @@ func (s *Server) clipperUpload(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) clipperBlob(w http.ResponseWriter, r *http.Request) {
 	var name string
-	err := s.db.QueryRow(`SELECT a.name FROM attachments a JOIN clipper_resources c ON c.resource_id=a.id JOIN nodes n ON n.id=c.node_id JOIN repos r ON r.id=n.repo_id WHERE a.id=? AND n.deleted_at IS NULL AND r.deleted_at IS NULL`, r.PathValue("id")).Scan(&name)
+	err := s.db.QueryRow(`SELECT name FROM attachments WHERE id=?`, r.PathValue("id")).Scan(&name)
 	if err != nil {
 		clipRespondError(w, err)
 		return

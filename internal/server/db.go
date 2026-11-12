@@ -163,7 +163,7 @@ CREATE TABLE imgbed_uploads (
   PRIMARY KEY (target, sha256)
 ) WITHOUT ROWID;
 `,
-	// Scoped browser clipper metadata; native nodes remain the source of document content.
+	// Browser clipper metadata; native nodes remain the source of document content.
 	`
 CREATE TABLE clipper_memos (
   node_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
@@ -174,13 +174,12 @@ CREATE TABLE clipper_memos (
 );
 CREATE TABLE clipper_resources (
   resource_id TEXT PRIMARY KEY REFERENCES attachments(id) ON DELETE CASCADE,
-  node_id TEXT NOT NULL REFERENCES clipper_memos(node_id) ON DELETE CASCADE
+  node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE
 );
 CREATE INDEX clipper_resources_node ON clipper_resources(node_id);
 CREATE TABLE clipper_edit_sessions (
   id TEXT PRIMARY KEY,
-  node_id TEXT NOT NULL REFERENCES clipper_memos(node_id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL,
+  node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
   revision INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   native_hash TEXT NOT NULL,

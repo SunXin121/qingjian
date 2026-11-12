@@ -33,9 +33,7 @@ func (s *Server) clipperGetSettings(w http.ResponseWriter, r *http.Request) {
 	var ai map[string]any
 	json.Unmarshal(data, &ai)
 	ai["has_api_key"] = hasKey
-	token := s.clipToken()
-	configured := s.clipTokenValid(token)
-	writeJSON(w, 200, map[string]any{"token_configured": configured, "token_allow_ai": configured && token.AllowAI, "ai": ai})
+	writeJSON(w, 200, map[string]any{"ai": ai})
 }
 func clipValidateAI(c *clipperAI) error {
 	c.BaseURL = strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
@@ -106,11 +104,6 @@ type clipVideoInput struct {
 }
 
 func (s *Server) clipperPrepareAI(w http.ResponseWriter, r *http.Request) {
-	token := r.Context().Value(clipperAuthKey{}).(clipperToken)
-	if !token.AllowAI {
-		clipError(w, 403, "ai_forbidden", "This clipper token does not allow AI preparation")
-		return
-	}
 	c := s.clipAIConfig()
 	if !c.Enabled || c.ModelID == "" || c.BaseURL == "" || c.APIKey == "" {
 		clipError(w, 409, "ai_not_configured", "Enable and configure a video outline model in clipper settings")

@@ -18,5 +18,5 @@
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["vendor/edgeever/apps/extension/src"]
+  "include": ["vendor/edgeever/apps/extension/src", "src/adminPassword.ts"]
 }

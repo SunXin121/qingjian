@@ -1,4 +1,5 @@
 {
+  "adminPasswordLabel": { "message": "Hasło administratora" },
   "extensionName": {
     "message": "EdgeEver Web Clipper"
   },
@@ -39,7 +40,7 @@
     "message": "Informacje i diagnostyka"
   },
   "diagnosticsDescription": {
-    "message": "Wyświetl podstawowe informacje o rozszerzeniu, przeglądarce, systemie i połączeniu. Tokeny API nigdy nie są uwzględniane."
+    "message": "Informacje o rozszerzeniu, przeglądarce, systemie i połączeniu. Hasło administratora nie jest uwzględniane."
   },
   "extensionVersion": {
     "message": "Wersja rozszerzenia"
@@ -92,8 +93,8 @@
   "instanceAddress": {
     "message": "Adres URL instancji EdgeEver"
   },
-  "tokenPlaceholder": {
-    "message": "Utwórz go w ustawieniach EdgeEver"
+  "adminPasswordPlaceholder": {
+    "message": "Hasło logowania do Qingjian"
   },
   "defaultNotebook": {
     "message": "Domyślny notatnik"
@@ -140,7 +141,7 @@
     "message": "Nie udało się zapisać ustawień."
   },
   "missingSettingsDetails": {
-    "message": "Najpierw wpisz adres URL instancji EdgeEver i token API w ustawieniach rozszerzenia."
+    "message": "Najpierw wpisz adres instancji Qingjian i hasło administratora w ustawieniach rozszerzenia."
   },
   "instancePermissionRequired": {
     "message": "Zezwól rozszerzeniu na dostęp do Twojej instancji EdgeEver."
@@ -265,7 +266,7 @@
     "message": "Nie zezwolono na dostęp do witryny, więc obraz nie został zapisany."
   },
   "imageResourceScopeRequired": {
-    "message": "Ten token API nie może zapisywać załączników. Utwórz token z pełnym dostępem w ustawieniach EdgeEver."
+    "message": "Nie można zapisać załącznika. Sprawdź hasło administratora i spróbuj ponownie."
   },
   "imageNoteFallbackTitle": {
     "message": "Obraz"
@@ -490,7 +491,7 @@
     "message": "Zapisano napisy. Nie utworzono podsumowania."
   },
   "videoTranscriptNeedScope": {
-    "message": "Zapisano napisy. Nie utworzono podsumowania. W ustawieniach dodaj do tokena zakres ai:generate i wybierz domyślny model."
+    "message": "Zapisano napisy. Zezwól przeglądarce na dostęp do usługi modelu i sprawdź ustawienia modelu."
   },
   "videoTranscriptNeedModel": {
     "message": "Zapisano napisy. Nie utworzono podsumowania. Najpierw wybierz domyślny model."

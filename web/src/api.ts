@@ -199,8 +199,6 @@ export interface ClipperAIConfig {
 }
 
 export interface ClipperSettings {
-  token_configured: boolean
-  token_allow_ai: boolean
   ai: ClipperAIConfig
 }
 
@@ -246,8 +244,6 @@ export const api = {
 
   clipperSettings: () => request<ClipperSettings>('GET', '/api/clipper/settings'),
   saveClipperSettings: (ai: ClipperAIConfig) => request<ClipperSettings>('PUT', '/api/clipper/settings', { ai }),
-  createClipperToken: (allow_ai: boolean) => request<{ token: string; allow_ai: boolean }>('POST', '/api/clipper/token', { allow_ai }),
-  revokeClipperToken: () => request('DELETE', '/api/clipper/token'),
 
   repos: () => request<Repo[]>('GET', '/api/repos'),
   repo: (id: string) => request<Repo>('GET', `/api/repos/${id}`),

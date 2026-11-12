@@ -32,7 +32,7 @@ await new Promise((done) => reservation.listen(0, '127.0.0.1', done))
 const serverPort = reservation.address().port
 await new Promise((done) => reservation.close(done))
 const serverURL = `http://127.0.0.1:${serverPort}`
-const localPassword = 'qingjian-browser-fixture'
+const localPassword = ' 管理:剪藏密码 '
 let serverLog = ''
 const server = spawn('go', ['run', './cmd/qingjian'], {
   cwd: projectRoot, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
@@ -58,7 +58,6 @@ try {
   }
   await json('POST', '/api/auth/login', { password: localPassword })
   const repo = await json('POST', '/api/repos', { name: '扩展浏览器验收' })
-  const issued = await json('POST', '/api/clipper/token', { allow_ai: false })
   const testExtension = join(temp, 'extension')
   await cp(join(extensionRoot, 'dist'), testExtension, { recursive: true })
   const manifestPath = join(testExtension, 'manifest.json')
@@ -75,12 +74,10 @@ try {
   await browser.addCookies((await admin.storageState()).cookies)
   const setup = await browser.newPage()
   await setup.goto(`${serverURL}/clip`)
-  await setup.getByRole('button', { name: '重新生成令牌', exact: true }).click()
-  const displayedToken = setup.getByLabel('新剪藏令牌', { exact: true })
-  await displayedToken.waitFor()
-  issued.token = await displayedToken.inputValue()
-  assert.ok(issued.token.length >= 40)
-  checks.push('Qingjian setup UI generates a scoped token')
+  await setup.getByText('连接浏览器扩展', { exact: true }).waitFor()
+  assert.equal(await setup.getByRole('button', { name: /令牌/ }).count(), 0)
+  assert.equal((await admin.post('/api/clipper/token', { data: {} })).status(), 404)
+  checks.push('setup uses the login password with no token management')
   await setup.getByText('视频摘要模型', { exact: true }).click()
   for (const [provider, base] of [['anthropic', 'https://api.anthropic.com/v1'], ['gemini', 'https://generativelanguage.googleapis.com/v1beta']]) {
     await setup.getByLabel('服务协议').selectOption(provider)
@@ -98,7 +95,7 @@ try {
   await options.goto(`chrome-extension://${extensionId}/options.html`)
   await options.locator('#instance-url').waitFor()
   await options.locator('#instance-url').fill(serverURL)
-  await options.locator('#token').fill(issued.token)
+  await options.locator('#password').fill(localPassword)
   await options.locator('#test').click()
   await options.waitForFunction(() => document.querySelector('#status')?.getAttribute('data-kind') === 'success')
   await options.locator('#notebook-id').selectOption(repo.id)
@@ -156,12 +153,12 @@ try {
   await page.locator('#edgeever-region-picker').waitFor({ state: 'detached' })
   assert.equal((await docs()).length, 3)
   checks.push('Escape cancels without creating a note')
-  await json('DELETE', '/api/clipper/token')
+  await options.evaluate(() => chrome.storage.local.set({ password: 'incorrect-password' }))
   await page.bringToFront()
   const rejected = await options.evaluate(() => chrome.runtime.sendMessage({ type: 'captureCurrentPage' }))
   assert.equal(rejected?.ok, false)
   assert.equal((await docs()).length, 3)
-  checks.push('revoking token prevents subsequent extension writes')
+  checks.push('wrong admin password prevents extension writes')
   console.log(JSON.stringify({ passed: checks.length, checks }, null, 2))
 } finally {
   await browser?.close()
