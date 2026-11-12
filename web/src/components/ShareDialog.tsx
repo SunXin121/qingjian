@@ -27,6 +27,8 @@ export interface ShareTarget {
   target_type: 'node' | 'repo'
   target_id: string
   title: string
+  /** node targets: doc | table | group */
+  node_type?: string
   /** tables: the views a link may be restricted to */
   views?: { id: string; name: string }[]
 }
@@ -158,7 +160,8 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
       return sh
     })
 
-  const kind = target.target_type === 'repo' ? '知识库' : target.views ? '表格' : '文档'
+  const folder = target.node_type === 'group'
+  const kind = target.target_type === 'repo' ? '知识库' : folder ? '分组' : target.views || target.node_type === 'table' ? '表格' : '文档'
   const viewPicker = (value: string, onChange: (v: string) => void) => (
     <select className={cn(selectClass, 'w-auto min-w-36')} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">全部视图</option>
@@ -179,7 +182,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
         <ModalBody className="flex flex-col gap-4">
           <p className="m-0 rounded-md bg-inset px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-2">
             创建链接后，任何拿到链接的人都可以<strong className="font-semibold text-ink">只读</strong>访问这个{kind}
-            {target.target_type === 'repo' ? '（含目录中的全部文档）' : ''}。
+            {target.target_type === 'repo' ? '（含目录中的全部文档）' : folder ? '（含其中的全部文档和子分组）' : ''}。
           </p>
           {target.views && (
             <label className="flex flex-col gap-1.5">

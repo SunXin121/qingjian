@@ -17,7 +17,8 @@ const (
 	shareCookieMaxAge = 7 * 24 * time.Hour
 )
 
-// Share is a read-only public link to a single document or a whole repo.
+// Share is a read-only public link to a single document or table, a folder (group node,
+// with everything below it) or a whole repo.
 type Share struct {
 	Token       string  `json:"token"`
 	TargetType  string  `json:"target_type"` // node | repo
@@ -118,8 +119,8 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 			httpError(w, 404, "文档不存在")
 			return
 		}
-		if n.Type != "doc" && n.Type != "table" {
-			httpError(w, 400, "只能分享文档、多维表格或知识库")
+		if !nodeTypes[n.Type] {
+			httpError(w, 400, "只能分享文档、多维表格、分组或知识库")
 			return
 		}
 		if in.ViewID != nil && (*in.ViewID == "" || n.Type != "table") {
@@ -374,6 +375,8 @@ func (s *Server) shareInfo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out["repo"] = map[string]any{"name": repo.Name, "description": repo.Description, "updated_at": repo.UpdatedAt}
+	} else if sh.NodeType == "group" {
+		out["node_type"] = sh.NodeType
 	} else {
 		out["doc_id"] = sh.TargetID
 		out["node_type"] = sh.NodeType
@@ -386,20 +389,79 @@ func (s *Server) shareTree(w http.ResponseWriter, r *http.Request) {
 	if sh == nil {
 		return
 	}
-	if sh.TargetType != "repo" {
+	folder := sh.TargetType == "node" && sh.NodeType == "group"
+	if sh.TargetType != "repo" && !folder {
 		httpError(w, 404, "not found")
 		return
 	}
-	nodes, err := s.treeNodes(sh.TargetID)
+	nodes, err := s.treeNodes(sh.RepoID)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
+	}
+	if folder {
+		nodes = subtree(nodes, sh.TargetID)
 	}
 	out := make([]publicNode, 0, len(nodes))
 	for _, n := range nodes {
 		out = append(out, publicNode{n.ID, n.ParentID, n.Type, n.Title, n.Sort, n.UpdatedAt})
 	}
 	writeJSON(w, 200, out)
+}
+
+// subtree keeps the nodes below root (in their order), with root's children made
+// top-level: a shared folder shows as a tree of its own.
+func subtree(nodes []Node, root string) []Node {
+	kids := map[string][]int{}
+	for i, n := range nodes {
+		if n.ParentID != nil {
+			kids[*n.ParentID] = append(kids[*n.ParentID], i)
+		}
+	}
+	keep := map[int]bool{}
+	var walk func(id string)
+	walk = func(id string) {
+		for _, i := range kids[id] {
+			keep[i] = true
+			walk(nodes[i].ID)
+		}
+	}
+	walk(root)
+	out := make([]Node, 0, len(keep))
+	for i, n := range nodes {
+		if !keep[i] {
+			continue
+		}
+		if *n.ParentID == root {
+			n.ParentID = nil
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// shareScope is an SQL condition on `n` (a nodes row) selecting the nodes the share
+// exposes: the shared node, everything below a shared folder, or a shared repo's nodes.
+func shareScope(sh *Share) (string, []any) {
+	switch {
+	case sh.TargetType == "repo":
+		return `n.repo_id = ?`, []any{sh.TargetID}
+	case sh.NodeType == "group":
+		return `n.id IN (WITH RECURSIVE sub(id) AS (
+  SELECT id FROM nodes WHERE parent_id = ? AND deleted_at IS NULL
+  UNION ALL SELECT x.id FROM nodes x JOIN sub ON x.parent_id = sub.id WHERE x.deleted_at IS NULL
+) SELECT id FROM sub)`, []any{sh.TargetID}
+	default:
+		return `n.id = ?`, []any{sh.TargetID}
+	}
+}
+
+// shareCovers reports whether the node is alive and visible through the share.
+func (s *Server) shareCovers(sh *Share, id string) bool {
+	cond, args := shareScope(sh)
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM nodes n WHERE n.id = ? AND n.deleted_at IS NULL AND `+cond, append([]any{id}, args...)...).Scan(&n)
+	return err == nil && n > 0
 }
 
 func (s *Server) shareDoc(w http.ResponseWriter, r *http.Request) {
@@ -409,7 +471,7 @@ func (s *Server) shareDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	d, err := s.loadDoc(id)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && !shareCovers(sh, d)) {
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !s.shareCovers(sh, d.ID)) {
 		httpError(w, 404, "文档不存在")
 		return
 	} else if err != nil {
@@ -419,16 +481,8 @@ func (s *Server) shareDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"id": d.ID, "title": d.Title, "markdown": d.Markdown, "updated_at": d.ContentUpdatedAt})
 }
 
-// shareCovers reports whether the (alive) doc is visible through the share.
-func shareCovers(sh *Share, d *Doc) bool {
-	if sh.TargetType == "node" {
-		return d.ID == sh.TargetID
-	}
-	return d.RepoID == sh.TargetID
-}
-
 // shareTable serves a table visible through the share: the shared table itself, any
-// table of a shared repo, or a table embedded in a shared document.
+// table of a shared repo or folder, or a table embedded in a shared document.
 func (s *Server) shareTable(w http.ResponseWriter, r *http.Request) {
 	sh := s.activeShare(w, r, true)
 	if sh == nil {
@@ -471,22 +525,13 @@ func (s *Server) shareTable(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) shareCoversTable(sh *Share, n *Node) bool {
-	if sh.TargetType == "node" && sh.TargetID == n.ID {
-		return true
-	}
-	if sh.TargetType == "repo" && sh.TargetID == n.RepoID {
+	if s.shareCovers(sh, n.ID) {
 		return true
 	}
 	// embedded in a document the share exposes
-	var rows *sql.Rows
-	var err error
-	pattern := "%" + n.ID + "%"
-	if sh.TargetType == "node" {
-		rows, err = s.db.Query(`SELECT markdown FROM doc_contents WHERE node_id = ? AND markdown LIKE ?`, sh.TargetID, pattern)
-	} else {
-		rows, err = s.db.Query(`SELECT d.markdown FROM doc_contents d JOIN nodes x ON x.id = d.node_id
-WHERE x.repo_id = ? AND x.deleted_at IS NULL AND d.markdown LIKE ?`, sh.TargetID, pattern)
-	}
+	cond, args := shareScope(sh)
+	rows, err := s.db.Query(`SELECT d.markdown FROM doc_contents d JOIN nodes n ON n.id = d.node_id
+WHERE n.deleted_at IS NULL AND d.markdown LIKE ? AND `+cond, append([]any{"%" + n.ID + "%"}, args...)...)
 	if err != nil {
 		return false
 	}

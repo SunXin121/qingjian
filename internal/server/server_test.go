@@ -226,6 +226,74 @@ func TestShareRepo(t *testing.T) {
 	}
 }
 
+func TestShareFolder(t *testing.T) {
+	e := newEnv(t)
+	repoID, outside := e.repoWithDoc("outside")
+	mk := func(parent any, typ, title, md string) string {
+		_, n := e.do(e.admin, "POST", "/api/nodes", map[string]any{"repo_id": repoID, "parent_id": parent, "type": typ, "title": title, "markdown": md})
+		return n["id"].(string)
+	}
+	folder := mk(nil, "group", "F", "")
+	inDoc := mk(folder, "doc", "in", "```plantuml\n@startuml\nA -> B\n@enduml\n```")
+	sub := mk(folder, "group", "S", "")
+	deep := mk(sub, "doc", "deep", "")
+	table := mk(sub, "table", "T", "")
+
+	_, sh := e.do(e.admin, "POST", "/api/shares", map[string]any{"target_type": "node", "target_id": folder})
+	token, _ := sh["token"].(string)
+	if token == "" || sh["node_type"] != "group" {
+		t.Fatalf("create folder share: %v", sh)
+	}
+	v := newClient()
+	code, info := e.do(v, "GET", "/api/s/"+token, nil)
+	if code != 200 || info["node_type"] != "group" || info["title"] != "F" {
+		t.Fatalf("info: %d %v", code, info)
+	}
+	_, raw := e.raw(v, "GET", "/api/s/"+token+"/tree", nil)
+	var tree []publicNode
+	json.Unmarshal(raw, &tree)
+	parents := map[string]*string{}
+	for _, n := range tree {
+		parents[n.ID] = n.ParentID
+	}
+	if len(tree) != 4 || parents[inDoc] != nil || parents[sub] != nil || parents[deep] == nil || *parents[deep] != sub {
+		t.Fatalf("tree: %s", raw)
+	}
+	for _, id := range []string{inDoc, deep} {
+		if code, _ := e.do(v, "GET", "/api/s/"+token+"/docs/"+id, nil); code != 200 {
+			t.Fatalf("doc in folder: %d", code)
+		}
+	}
+	if code, _ := e.do(v, "GET", "/api/s/"+token+"/tables/"+table, nil); code != 200 {
+		t.Fatalf("table in folder: %d", code)
+	}
+	if code, _ := e.do(v, "GET", "/api/s/"+token+"/docs/"+outside, nil); code != 404 {
+		t.Fatalf("doc outside the folder leaked: %d", code)
+	}
+	if ok, _ := e.srv.shareHasText(e.srv.mustShare(t, token), "@startuml\nA -> B\n@enduml"); !ok {
+		t.Fatal("plantuml in a folder doc not covered")
+	}
+	// moving a doc out of the folder takes it out of the share
+	e.do(e.admin, "POST", "/api/nodes/"+deep+"/move", map[string]any{"parent_id": nil, "sort": 99})
+	if code, _ := e.do(v, "GET", "/api/s/"+token+"/docs/"+deep, nil); code != 404 {
+		t.Fatalf("moved-out doc still shared: %d", code)
+	}
+	// deleting the folder takes the share down
+	e.do(e.admin, "DELETE", "/api/nodes/"+folder, nil)
+	if code, _ := e.do(v, "GET", "/api/s/"+token, nil); code != 404 {
+		t.Fatalf("share of deleted folder: %d", code)
+	}
+}
+
+func (s *Server) mustShare(t *testing.T, token string) *Share {
+	t.Helper()
+	sh, err := s.loadShare(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sh
+}
+
 func TestAttachmentCleanup(t *testing.T) {
 	e := newEnv(t)
 	used := e.upload("a.png", "image-a")

@@ -58,7 +58,7 @@ export default function SharePage() {
       </div>
     )
   if (state === 'password') return <PasswordGate token={token} onDone={load} />
-  if (info!.type === 'repo') return <SharedRepo token={token} info={info!} />
+  if (info!.type === 'repo' || info!.node_type === 'group') return <SharedRepo token={token} info={info!} />
   if (info!.node_type === 'table')
     return (
       <div className="page share-page table-page">
@@ -225,7 +225,7 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
 
   useEffect(() => {
     setSidebarOpen(false)
-    if (!docId) document.title = `${info.repo?.name ?? info.title} - 青简`
+    if (!docId) document.title = `${info.repo?.name ?? (info.title || '未命名分组')} - 青简`
   }, [docId, info])
 
   const kids = useMemo(() => childrenMap(nodes ?? []), [nodes])
@@ -318,7 +318,9 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
 
   const header = (extra: React.ReactNode) => <ShareHeader onMenu={() => setSidebarOpen(true)}>{extra}</ShareHeader>
 
-  const repoName = info.repo?.name ?? info.title
+  // a shared folder shows like a repo of its own
+  const folder = info.type !== 'repo'
+  const repoName = info.repo?.name ?? (info.title || (folder ? '未命名分组' : '未命名知识库'))
   return (
     <div className="share-shell flex min-h-dvh bg-editor">
       <aside
@@ -393,7 +395,7 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
                 <div style={{ height: tocWin.before }} />
                 {tocRows.slice(tocWin.start, tocWin.end).map(renderTocRow)}
                 <div style={{ height: tocWin.after }} />
-                {nodes?.length === 0 && <EmptyState title="这个知识库还没有文档" className="py-12" />}
+                {nodes?.length === 0 && <EmptyState title={folder ? '这个分组还没有文档' : '这个知识库还没有文档'} className="py-12" />}
               </div>
             </div>
           </>

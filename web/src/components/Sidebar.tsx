@@ -5,6 +5,7 @@ import { childrenMap, nodeTitle, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast, type MenuItem } from './dialog'
 import { canPickFolder, droppedEntries, isFileDrag, pickImport, runImport } from './ImportDialog'
 import { editRepoDialog, repoMenu } from './RepoDialog'
+import { openShareDialog } from './ShareDialog'
 import { Caption, cn, IconButton, Kbd } from './ui'
 import { useWindowed } from './useWindowed'
 import {
@@ -305,6 +306,12 @@ function RepoTree({ repoId }: { repoId: string }) {
           await api.renameNode(n.id, t, { type: n.type, title: n.title })
           await loadTree(repoId)
         },
+      },
+      {
+        label: '分享分组',
+        icon: <IconShare />,
+        hidden: n.type !== 'group',
+        onClick: () => openShareDialog({ target_type: 'node', target_id: n.id, node_type: 'group', title: nodeTitle(n) }),
       },
       { label: '上移', icon: <IconUp />, hidden: i <= 0, onClick: () => move(n, ...placement(siblings[i - 1], 'before')) },
       { label: '下移', icon: <IconDown />, hidden: i >= siblings.length - 1, onClick: () => move(n, ...placement(siblings[i + 1], 'after')) },

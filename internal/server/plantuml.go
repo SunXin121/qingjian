@@ -186,14 +186,9 @@ func (s *Server) fetchPlantUML(ctx context.Context, src string) (svg string, syn
 // nested in lists or callouts carry in the markdown).
 func (s *Server) shareHasText(sh *Share, src string) (bool, error) {
 	first := strings.TrimSpace(strings.SplitN(src, "\n", 2)[0])
-	q := `SELECT c.markdown FROM doc_contents c JOIN nodes n ON n.id = c.node_id
-WHERE n.deleted_at IS NULL AND n.type = 'doc' AND instr(c.markdown, ?) > 0 AND `
-	if sh.TargetType == "node" {
-		q += `n.id = ?`
-	} else {
-		q += `n.repo_id = ?`
-	}
-	rows, err := s.db.Query(q, first, sh.TargetID)
+	cond, args := shareScope(sh)
+	rows, err := s.db.Query(`SELECT c.markdown FROM doc_contents c JOIN nodes n ON n.id = c.node_id
+WHERE n.deleted_at IS NULL AND n.type = 'doc' AND instr(c.markdown, ?) > 0 AND `+cond, append([]any{first}, args...)...)
 	if err != nil {
 		return false, err
 	}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, formatTime, nodePath, shareURL, type Share } from '../api'
 import { confirmDialog, copyText, openMenu, toast } from '../components/dialog'
-import { IconBook, IconCopy, IconDoc, IconEye, IconLink, IconLock, IconMore, IconSettings, IconTable, IconTrash, IconUnlink } from '../components/icons'
+import { IconBook, IconCopy, IconDoc, IconEye, IconFolder, IconLink, IconLock, IconMore, IconSettings, IconTable, IconTrash, IconUnlink } from '../components/icons'
 import { Crumb, PageBody, PageTitle, RowIcon, RowList, rowClass } from '../components/page'
 import PageHeader, { Crumbs } from '../components/PageHeader'
 import { Badge, EmptyState, IconButton, Loading, type Tone } from '../components/ui'
@@ -25,7 +25,7 @@ export default function Shares() {
         hidden: !sh.target_alive,
         onClick: async () => {
           const views = sh.node_type === 'table' ? (await api.table(sh.target_id).catch(() => null))?.views.map((v) => ({ id: v.id, name: v.name })) : undefined
-          openShareDialog({ target_type: sh.target_type, target_id: sh.target_id, title: shareTitle(sh), views }, load)
+          openShareDialog({ target_type: sh.target_type, target_id: sh.target_id, node_type: sh.node_type, title: shareTitle(sh), views }, load)
         },
       },
       {
@@ -59,7 +59,7 @@ export default function Shares() {
         </Crumbs>
       </PageHeader>
       <PageBody>
-        <PageTitle sub="所有对外公开的只读链接。在文档页右上角或知识库菜单中可以创建分享。">分享管理</PageTitle>
+        <PageTitle sub="所有对外公开的只读链接。在文档页右上角、目录中分组的菜单或知识库菜单中可以创建分享。">分享管理</PageTitle>
         {!list ? (
           <Loading />
         ) : list.length === 0 ? (
@@ -70,10 +70,11 @@ export default function Shares() {
           <RowList>
             {list.map((sh) => {
               const st = shareState(sh)
-              const target = sh.target_type === 'repo' ? `/r/${sh.target_id}` : nodePath({ id: sh.target_id, repo_id: sh.repo_id, type: sh.node_type })
+              const target =
+                sh.target_type === 'repo' ? `/r/${sh.target_id}` : sh.node_type === 'group' ? `/r/${sh.repo_id}` : nodePath({ id: sh.target_id, repo_id: sh.repo_id, type: sh.node_type })
               return (
                 <div key={sh.token} className={rowClass + ' py-2.5'}>
-                  <RowIcon accent={sh.target_type === 'repo'}>{sh.target_type === 'repo' ? <IconBook /> : sh.node_type === 'table' ? <IconTable /> : <IconDoc />}</RowIcon>
+                  <RowIcon accent={sh.target_type === 'repo'}>{sh.target_type === 'repo' ? <IconBook /> : sh.node_type === 'table' ? <IconTable /> : sh.node_type === 'group' ? <IconFolder /> : <IconDoc />}</RowIcon>
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
                       {sh.target_alive ? (
