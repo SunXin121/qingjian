@@ -1,5 +1,7 @@
-/** Browser-local reading preferences. Font names refer to fonts installed on this device. */
-export const PROSE_FONTS = {
+import { ONLINE_FONT_OPTIONS } from './fontCatalog'
+
+/** Browser-local reading preferences, with optional web fonts loaded on selection. */
+export const LOCAL_FONTS = {
   sans: { label: '无衬线', stack: 'var(--font-ui)' },
   serif: { label: '衬线 / 宋体', stack: 'var(--font-serif)' },
   kai: { label: '楷体', stack: '"LXGW WenKai", "Kaiti SC", "KaiTi", "STKaiti", var(--font-serif)' },
@@ -7,6 +9,7 @@ export const PROSE_FONTS = {
   mono: { label: '等宽', stack: 'var(--font-mono)' },
   custom: { label: '自定义本机字体', stack: 'var(--font-ui)' },
 } as const
+export const PROSE_FONTS = { ...LOCAL_FONTS, ...ONLINE_FONT_OPTIONS }
 export type ProseFont = keyof typeof PROSE_FONTS
 export const PROSE_WIDTHS = {
   narrow: { label: '窄', px: 660 },

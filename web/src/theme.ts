@@ -1,3 +1,4 @@
+import { ensureOnlineFont } from './fontLoader'
 import { DEFAULT_TYPOGRAPHY, normalizeTypography, proseFontStack, PROSE_WIDTHS, type Typography } from './typography'
 export { PROSE_WIDTHS } from './typography'
 export type { ProseFont, ProseWidth } from './typography'
@@ -94,6 +95,7 @@ function apply() {
   root.dataset.accent = a.accent
   root.dataset.background = a.background
   root.style.setProperty('--prose-font', proseFontStack(a))
+  void ensureOnlineFont(a.proseFont)
   root.style.setProperty('--prose-size', `${a.proseSize}px`)
   root.style.setProperty('--prose-line', String(a.proseLine))
   root.style.setProperty('--prose-tracking', `${a.proseTracking}em`)

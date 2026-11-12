@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, formatSize, getConfig, resetConfig, type ClientConfig, type ImgbedConfig, type StorageStats } from '../api'
 import { confirmDialog, toast } from '../components/dialog'
@@ -7,7 +7,9 @@ import { Crumb, PageBody } from '../components/page'
 import PageHeader, { Crumbs } from '../components/PageHeader'
 import { Button, cn, Field, inputClass, Loading, Segmented } from '../components/ui'
 import { ACCENTS, getAppearance, getThemeMode, PROSE_WIDTHS, setAppearance, setThemeMode, type Appearance, type ThemeMode } from '../theme'
-import { DEFAULT_TYPOGRAPHY, EMPHASIS_STYLES, HEADING_STYLES, PROSE_FONTS, QUOTE_STYLES, TYPOGRAPHY_RANGES } from '../typography'
+import { DEFAULT_TYPOGRAPHY, EMPHASIS_STYLES, HEADING_STYLES, LOCAL_FONTS, QUOTE_STYLES, TYPOGRAPHY_RANGES } from '../typography'
+import { FONT_GROUPS, ONLINE_FONTS } from '../fontCatalog'
+import { ensureOnlineFont, getFontStatus, subscribeFontStatus } from '../fontLoader'
 
 const SECTIONS = [
   { id: 'appearance', label: '外观', icon: <IconPalette /> },
@@ -89,13 +91,13 @@ const THEMES: { value: ThemeMode; title: string; icon: ReactNode }[] = [
 function AppearancePanel() {
   const [theme, setTheme] = useState(getThemeMode)
   const [a, setA] = useState(getAppearance)
+  const fontStatus = useSyncExternalStore(subscribeFontStatus, () => getFontStatus(a.proseFont))
   const update = (patch: Partial<Appearance>) => {
     setAppearance(patch)
     setA(getAppearance())
   }
   return (
-    <div className="flex flex-col gap-8">
-      <Panel title="外观" desc="保存在当前浏览器中，不同设备可以分别设置。">
+      <Panel title="外观" desc="主题、颜色与正文排版在这里统一调整，即时生效并保存在当前浏览器中。">
         <Row label="主题" hint="深色模式会在夜间减少刺眼的亮光。">
           <Segmented
             label="主题"
@@ -172,13 +174,18 @@ function AppearancePanel() {
             </button>
           ))}
         </Row>
-      </Panel>
-
-      <Panel title="阅读与写作" desc="即时生效于文档正文和分享页；字体使用当前设备已安装的字体，缺失时自动回退。">
-        <Row label="正文字体">
-          <select aria-label="正文字体" className={cn(inputClass, 'h-9 w-44')} value={a.proseFont} onChange={(e) => update({ proseFont: e.target.value as Appearance['proseFont'] })}>
-            {Object.entries(PROSE_FONTS).map(([value, font]) => <option key={value} value={value}>{font.label}</option>)}
+        <Row label="正文字体" hint={<span role="status" aria-live="polite">{fontStatus === 'loading' ? '正在加载字体，暂时使用系统字体…' : fontStatus === 'error' ? '字体暂时无法加载，已回退到系统字体。' : fontStatus === 'loaded' ? '字体已就绪。西文字体不包含的中文字形使用系统字体。' : '在线字体选中后自动加载；本机字体需在当前设备安装。'}</span>}>
+          <select aria-label="正文字体" className={cn(inputClass, 'h-9 w-52 max-w-full')} value={a.proseFont} onChange={(e) => update({ proseFont: e.target.value as Appearance['proseFont'] })}>
+            <optgroup label="系统与本机">
+              {Object.entries(LOCAL_FONTS).map(([value, font]) => <option key={value} value={value}>{font.label}</option>)}
+            </optgroup>
+            {FONT_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.ids.map((id) => <option key={id} value={id}>{ONLINE_FONTS[id].label}</option>)}
+              </optgroup>
+            ))}
           </select>
+          {fontStatus === 'error' && <Button onClick={() => void ensureOnlineFont(a.proseFont, true)}>重试</Button>}
         </Row>
         {a.proseFont === 'custom' && (
           <Row label="本机字体名称" hint="输入一个已安装的字体名称，例如 LXGW WenKai、思源黑体或 Microsoft YaHei。">
@@ -193,7 +200,7 @@ function AppearancePanel() {
         ] as const).map(([key, label, unit]) => (
           <Row key={key} label={label} hint={key === 'paragraphSpace' ? '在原有段落留白基础上增加距离。' : undefined}>
             <input type="range" {...TYPOGRAPHY_RANGES[key]} value={a[key]} aria-label={label} onChange={(e) => update({ [key]: e.target.valueAsNumber })} className="w-28 accent-(--accent) sm:w-36" />
-            <input key={a[key]} type="number" {...TYPOGRAPHY_RANGES[key]} defaultValue={a[key]} aria-label={`${label}数值`} onBlur={(e) => { if (Number.isFinite(e.target.valueAsNumber)) update({ [key]: e.target.valueAsNumber }); e.target.value = String(getAppearance()[key]) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} className={cn(inputClass, 'tabular h-9 w-20 text-right')} />
+            <input key={a[key]} type="number" {...TYPOGRAPHY_RANGES[key]} defaultValue={a[key]} aria-label={`${label}数值`} onBlur={(e) => { if (Number.isFinite(e.target.valueAsNumber)) update({ [key]: e.target.valueAsNumber }); e.target.value = String(getAppearance()[key]) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} className={cn(inputClass, 'tabular h-9 w-24 text-right')} />
             <span className="w-5 text-[12px] text-ink-3">{unit}</span>
           </Row>
         ))}
@@ -218,21 +225,21 @@ function AppearancePanel() {
           <Button onClick={() => update(DEFAULT_TYPOGRAPHY)}>恢复默认</Button>
         </Row>
         <div className="border-t border-line-subtle py-4">
-          <div className="mb-2 text-[11.5px] font-medium text-ink-4">效果预览</div>
+          <div id="appearance-preview" className="mb-2 text-[11.5px] font-medium text-ink-4">效果预览</div>
           <div className="overflow-hidden rounded-lg border border-line-subtle bg-editor px-5 py-4">
             <div className="ink-editor typography-preview mx-auto" style={{ maxWidth: 'var(--prose-width)' }}>
               <div className="milkdown"><div className="ProseMirror">
-                <h2>山中问答</h2>
-                <p>问余何意栖碧山，笑而不答心自闲。桃花流水窅然去，别有天地非人间。</p>
-                <p>写下此刻的想法，让<strong>重要的文字</strong>清晰可见。Typography brings rhythm to reading，中英文与 <code>inline code</code> 会像这样排在一起。</p>
-                <h3>留一点空白</h3>
-                <blockquote><p>在文字之间，找到适合自己的阅读节奏。</p></blockquote>
+                <h2>让知识慢慢生长</h2>
+                <p>读完一本书，最值得留下的往往不是摘抄，而是它与自己经历相遇的那一刻。把这些想法写下来，再回头看，零散的记录就有了彼此的联系。</p>
+                <p>本周阅读：Designing Data-Intensive Applications，第 3 章，进度 75%。整理了 12 条笔记，也找到了一个值得继续追问的问题。</p>
+                <h3>从记录到行动</h3>
+                <p>每篇笔记只围绕<strong>一个清晰的问题</strong>展开，用自己的话解释，再补上例子与出处。使用 <a href="https://commonmark.org/" target="_blank" rel="noreferrer">Markdown</a> 时，可以用 <code>[[相关笔记]]</code> 把新想法接到已有的知识上。</p>
+                <blockquote><p>值得留下的，不只是结论，还有抵达结论的过程。</p></blockquote>
               </div></div>
             </div>
           </div>
         </div>
       </Panel>
-    </div>
   )
 }
 
