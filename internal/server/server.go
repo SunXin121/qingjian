@@ -239,8 +239,10 @@ func (s *Server) pageCSP() string {
 		"media-src 'self' data: blob: https: http:",
 		// esm.sh: Excalidraw lists its CDN as the second source of every font face; the
 		// bundled fonts are used, but the browser reports each blocked alternative
-		"font-src 'self' data: https://esm.sh",
-		"connect-src 'self' data: blob: https://cloudflareinsights.com",
+		// Online body fonts and their fallback sources (web/src/fontCatalog.ts).
+		"font-src 'self' data: https://esm.sh https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com",
+		// Font subset manifests are fetched before registering their font faces.
+		"connect-src 'self' data: blob: https://cloudflareinsights.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com",
 		"worker-src 'self' blob:",
 		"frame-src " + frames,
 		"object-src 'none'",
