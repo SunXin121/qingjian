@@ -98,7 +98,7 @@ function apply() {
   void ensureOnlineFont(a.proseFont)
   root.style.setProperty('--prose-size', `${a.proseSize}px`)
   root.style.setProperty('--prose-line', String(a.proseLine))
-  root.style.setProperty('--prose-tracking', `${a.proseTracking}em`)
+  root.style.setProperty('--prose-tracking', `${a.proseTrackingPx}px`)
   root.style.setProperty('--prose-paragraph-space', `${a.paragraphSpace}px`)
   root.style.setProperty('--prose-align', a.textAlign)
   root.dataset.proseHeading = a.headingStyle

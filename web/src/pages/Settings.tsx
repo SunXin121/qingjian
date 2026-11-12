@@ -195,7 +195,7 @@ function AppearancePanel() {
         {([
           ['proseSize', '正文字号', 'px'],
           ['proseLine', '行高', '倍'],
-          ['proseTracking', '字间距', 'em'],
+          ['proseTrackingPx', '字间距', 'px'],
           ['paragraphSpace', '额外段间距', 'px'],
         ] as const).map(([key, label, unit]) => (
           <Row key={key} label={label} hint={key === 'paragraphSpace' ? '在原有段落留白基础上增加距离。' : undefined}>

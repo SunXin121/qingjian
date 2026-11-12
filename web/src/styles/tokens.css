@@ -36,7 +36,7 @@
   --prose-font: var(--font-ui);
   --prose-size: 16px;
   --prose-line: 1.65;
-  --prose-tracking: -0.005em;
+  --prose-tracking: 0px;
   --prose-width: 760px;
 
   --safe-b: env(safe-area-inset-bottom, 0px);

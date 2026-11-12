@@ -27,7 +27,7 @@ export interface Typography {
   proseSize: number
   proseLine: number
   proseWidth: ProseWidth
-  proseTracking: number
+  proseTrackingPx: number
   paragraphSpace: number
   textAlign: 'left' | 'justify'
   headingStyle: keyof typeof HEADING_STYLES
@@ -36,13 +36,13 @@ export interface Typography {
 }
 export const DEFAULT_TYPOGRAPHY: Typography = {
   proseFont: 'sans', customFont: '', proseSize: 16, proseLine: 1.65, proseWidth: 'normal',
-  proseTracking: -0.005, paragraphSpace: 0, textAlign: 'left',
+  proseTrackingPx: 0, paragraphSpace: 0, textAlign: 'left',
   headingStyle: 'default', quoteStyle: 'default', emphasisStyle: 'default',
 }
 export const TYPOGRAPHY_RANGES = {
   proseSize: { min: 12, max: 32, step: 1 },
   proseLine: { min: 1.2, max: 2.5, step: 0.05 },
-  proseTracking: { min: -0.02, max: 0.12, step: 0.005 },
+  proseTrackingPx: { min: -1, max: 6, step: 0.1 },
   paragraphSpace: { min: 0, max: 32, step: 1 },
 } as const
 

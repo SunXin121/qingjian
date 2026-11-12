@@ -14,13 +14,13 @@ describe('reading preferences', () => {
   it('clamps sizes, keeps zero spacing and rejects invalid numbers and inherited keys', () => {
     expect(normalizeTypography({
       proseFont: 'toString', proseWidth: '__proto__', headingStyle: 'constructor',
-      proseSize: 100, proseLine: -1, paragraphSpace: 0, proseTracking: Infinity,
+      proseSize: 100, proseLine: -1, paragraphSpace: 0, proseTrackingPx: Infinity,
     })).toEqual({ ...DEFAULT_TYPOGRAPHY, proseSize: 32, proseLine: 1.2 })
-    expect(normalizeTypography({ proseLine: NaN, paragraphSpace: 500, proseTracking: -4 })).toMatchObject({
-      proseLine: 1.65, paragraphSpace: 32, proseTracking: -0.02,
+    expect(normalizeTypography({ proseLine: NaN, paragraphSpace: 500, proseTrackingPx: -4 })).toMatchObject({
+      proseLine: 1.65, paragraphSpace: 32, proseTrackingPx: -1,
     })
-    expect(normalizeTypography({ proseLine: 1.777, proseTracking: 0.013 })).toMatchObject({
-      proseLine: 1.8, proseTracking: 0.015,
+    expect(normalizeTypography({ proseLine: 1.777, proseTrackingPx: 0.53 })).toMatchObject({
+      proseLine: 1.8, proseTrackingPx: 0.5,
     })
   })
 
