@@ -19,7 +19,7 @@ export const PROSE_WIDTHS = {
 } as const
 export type ProseWidth = keyof typeof PROSE_WIDTHS
 export const HEADING_STYLES = { default: '简洁', bar: '侧边色条', numbered: '自动编号' } as const
-export const QUOTE_STYLES = { default: '简洁', dashed: '虚线边框', accent: '强调色条', minimal: '上下细线' } as const
+export const QUOTE_STYLES = { default: '简洁', dashed: '虚线边框', accent: '主题色条', minimal: '上下细线' } as const
 export const EMPHASIS_STYLES = { default: '加粗', marker: '荧光标记' } as const
 export interface Typography {
   proseFont: ProseFont

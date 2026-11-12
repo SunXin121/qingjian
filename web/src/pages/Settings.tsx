@@ -108,8 +108,8 @@ function AppearancePanel() {
             }}
           />
         </Row>
-        <Row label="强调色">
-          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="强调色">
+        <Row label="主题色">
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="主题色">
             {ACCENTS.map((x) => (
               <button
                 key={x.id}
@@ -147,7 +147,7 @@ function AppearancePanel() {
               {a.accent === 'custom' && <IconCheck width={13} height={13} strokeWidth={2.5} />}
               <input
                 type="color"
-                aria-label="自定义强调色"
+                aria-label="自定义主题色"
                 className="absolute inset-0 size-full cursor-pointer opacity-0"
                 value={a.customAccent}
                 onChange={(e) => update({ accent: 'custom', customAccent: e.target.value })}
