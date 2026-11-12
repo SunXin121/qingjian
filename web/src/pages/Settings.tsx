@@ -32,11 +32,10 @@ function Row({ label, hint, children, className }: { label: ReactNode; hint?: Re
   )
 }
 
-function Panel({ title, desc, children }: { title: string; desc?: ReactNode; children: ReactNode }) {
+function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="animate-rise">
       <h2 className="m-0 text-[17px] font-semibold text-ink">{title}</h2>
-      {desc && <p className="mt-1.5 mb-0 text-[12.5px] leading-relaxed text-ink-3">{desc}</p>}
       <div className="mt-4 rounded-lg border border-line-subtle bg-surface px-4 shadow-card md:px-5">{children}</div>
     </section>
   )
@@ -97,8 +96,8 @@ function AppearancePanel() {
     setA(getAppearance())
   }
   return (
-      <Panel title="外观" desc="主题、颜色与正文排版在这里统一调整，即时生效并保存在当前浏览器中。">
-        <Row label="主题" hint="深色模式会在夜间减少刺眼的亮光。">
+      <Panel title="外观">
+        <Row label="主题">
           <Segmented
             label="主题"
             value={theme}
@@ -109,7 +108,7 @@ function AppearancePanel() {
             }}
           />
         </Row>
-        <Row label="强调色" hint="按钮、选中项和链接使用的颜色。最后一个可以自定义。">
+        <Row label="强调色">
           <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="强调色">
             {ACCENTS.map((x) => (
               <button
@@ -157,7 +156,7 @@ function AppearancePanel() {
             {a.accent === 'custom' && <span className="font-mono text-[11.5px] text-ink-3 uppercase">{a.customAccent}</span>}
           </div>
         </Row>
-        <Row label="背景" hint="暖纸色更柔和，纯白更干净。">
+        <Row label="背景">
           {(['paper', 'white'] as const).map((bg) => (
             <button
               key={bg}
@@ -174,7 +173,7 @@ function AppearancePanel() {
             </button>
           ))}
         </Row>
-        <Row label="正文字体" hint={<span role="status" aria-live="polite">{fontStatus === 'loading' ? '正在加载字体，暂时使用系统字体…' : fontStatus === 'error' ? '字体暂时无法加载，已回退到系统字体。' : fontStatus === 'loaded' ? '字体已就绪。西文字体不包含的中文字形使用系统字体。' : '在线字体选中后自动加载；本机字体需在当前设备安装。'}</span>}>
+        <Row label="正文字体" hint={fontStatus === 'loading' || fontStatus === 'error' ? <span role="status" aria-live="polite">{fontStatus === 'loading' ? '正在加载字体…' : '加载失败，已使用系统字体。'}</span> : undefined}>
           <select aria-label="正文字体" className={cn(inputClass, 'h-9 w-52 max-w-full')} value={a.proseFont} onChange={(e) => update({ proseFont: e.target.value as Appearance['proseFont'] })}>
             <optgroup label="系统与本机">
               {Object.entries(LOCAL_FONTS).map(([value, font]) => <option key={value} value={value}>{font.label}</option>)}
@@ -188,7 +187,7 @@ function AppearancePanel() {
           {fontStatus === 'error' && <Button onClick={() => void ensureOnlineFont(a.proseFont, true)}>重试</Button>}
         </Row>
         {a.proseFont === 'custom' && (
-          <Row label="本机字体名称" hint="输入一个已安装的字体名称，例如 LXGW WenKai、思源黑体或 Microsoft YaHei。">
+          <Row label="本机字体名称">
             <input aria-label="本机字体名称" className={cn(inputClass, 'h-9 w-52')} maxLength={100} value={a.customFont} placeholder="例如 LXGW WenKai" onChange={(e) => update({ customFont: e.target.value })} />
           </Row>
         )}
@@ -198,7 +197,7 @@ function AppearancePanel() {
           ['proseTrackingPx', '字间距', 'px'],
           ['paragraphSpace', '额外段间距', 'px'],
         ] as const).map(([key, label, unit]) => (
-          <Row key={key} label={label} hint={key === 'paragraphSpace' ? '在原有段落留白基础上增加距离。' : undefined}>
+          <Row key={key} label={label}>
             <input type="range" {...TYPOGRAPHY_RANGES[key]} value={a[key]} aria-label={label} onChange={(e) => update({ [key]: e.target.valueAsNumber })} className="w-28 accent-(--accent) sm:w-36" />
             <input key={a[key]} type="number" {...TYPOGRAPHY_RANGES[key]} defaultValue={a[key]} aria-label={`${label}数值`} onBlur={(e) => { if (Number.isFinite(e.target.valueAsNumber)) update({ [key]: e.target.valueAsNumber }); e.target.value = String(getAppearance()[key]) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} className={cn(inputClass, 'tabular h-9 w-24 text-right')} />
             <span className="w-5 text-[12px] text-ink-3">{unit}</span>
@@ -221,7 +220,7 @@ function AppearancePanel() {
         <Row label="强调样式">
           <Segmented label="强调样式" value={a.emphasisStyle} options={(Object.keys(EMPHASIS_STYLES) as (keyof typeof EMPHASIS_STYLES)[]).map((value) => ({ value, label: EMPHASIS_STYLES[value] }))} onChange={(emphasisStyle) => update({ emphasisStyle })} />
         </Row>
-        <Row label="恢复默认排版" hint="重置字体和排版设置。">
+        <Row label="恢复默认排版">
           <Button onClick={() => update(DEFAULT_TYPOGRAPHY)}>恢复默认</Button>
         </Row>
         <div className="border-t border-line-subtle py-4">
@@ -271,7 +270,7 @@ function StoragePanel() {
   }
 
   return (
-    <Panel title="存储空间" desc="全部数据都在服务器的 data 目录：数据库和按内容去重的附件。">
+    <Panel title="存储空间">
       {stats ? (
         <>
           <div className="grid grid-cols-2 gap-2.5 py-4 lg:grid-cols-4">
@@ -282,7 +281,7 @@ function StoragePanel() {
           </div>
           <Row
             label="清理未引用附件"
-            hint={`未引用附件指已不在任何文档（含回收站）和历史版本中出现的文件。最近 ${stats.grace_hours} 小时内上传的文件不会被清理。`}
+            hint="仅清理未被文档或历史版本引用的附件。"
           >
             <Button icon={<IconSparkles width={14} height={14} />} loading={cleaning} disabled={stats.unreferenced === 0} onClick={cleanup}>
               {cleaning ? '清理中…' : '清理'}
@@ -308,7 +307,7 @@ function AboutPanel() {
     ['draw.io', config?.drawio_url ?? '—'],
   ]
   return (
-    <Panel title="关于" desc="青简 Qingjian · 个人自托管的在线知识库。">
+    <Panel title="关于">
       {rows.map(([k, v]) => (
         <Row key={k} label={k}>
           <span className="max-w-72 truncate font-mono text-[12px] text-ink-2">{v}</span>
@@ -408,18 +407,7 @@ function ImgbedCard() {
   const selectClass = cn(inputClass, 'h-10 appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23888%27 stroke-width=%272%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E")] bg-[length:12px] bg-[right_10px_center] bg-no-repeat pr-8 md:h-9')
   const text = cn(inputClass, 'h-10 md:h-9')
   return (
-    <Panel
-      title="图床"
-      desc={
-        <>
-          配置{' '}
-          <a className="text-accent hover:underline" href="https://cfbed.sanyue.de/" target="_blank" rel="noreferrer">
-            CloudFlare ImgBed
-          </a>{' '}
-          后，导出 Markdown 时可以选择把图片和附件上传到图床，导出的文档直接引用图床链接，无需再打包压缩包。
-        </>
-      }
-    >
+    <Panel title="图床">
       {!saved ? (
         <Loading className="py-10" />
       ) : (
@@ -459,7 +447,7 @@ function ImgbedCard() {
               </select>
             </Field>
           </div>
-          <Row label="上传记录" hint={`已上传过的文件会被记住，重复导出不会重复上传（已记录 ${uploaded} 个）。`} className="border-t">
+          <Row label={`上传记录（${uploaded}）`} className="border-t">
             <Button disabled={uploaded === 0} onClick={forget}>
               清除上传记录
             </Button>
