@@ -18,6 +18,7 @@ const TablePage = lazy(loadTablePage)
 const SharePage = lazy(() => import('./pages/SharePage'))
 const Shares = lazy(() => import('./pages/Shares'))
 const Settings = lazy(() => import('./pages/Settings'))
+const WebClipper = lazy(() => import('./pages/WebClipper'))
 
 /**
  * Fetch and evaluate the editor and table chunks while the app sits idle. Evaluating
@@ -118,6 +119,7 @@ function AuthGate() {
           <Route path="trash" element={<Trash />} />
           <Route path="shares" element={<Shares />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="clip" element={<WebClipper />} />
           <Route path="r/:repoId" element={<RepoHome />} />
           <Route path="r/:repoId/d/:docId" element={<DocPage />} />
           <Route path="r/:repoId/t/:tableId" element={<TablePage />} />

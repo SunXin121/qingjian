@@ -234,8 +234,8 @@ export const api = {
   deleteRepo: (id: string) => request('DELETE', `/api/repos/${id}`),
   tree: (repoId: string) => request<TreeNode[]>('GET', `/api/repos/${repoId}/tree`),
 
-  createNode: (repo_id: string, parent_id: string | null, type: NodeType, title = '') =>
-    request<TreeNode>('POST', '/api/nodes', { repo_id, parent_id, type, title }),
+  createNode: (repo_id: string, parent_id: string | null, type: NodeType, title = '', markdown?: string) =>
+    request<TreeNode>('POST', '/api/nodes', { repo_id, parent_id, type, title, markdown }),
   /** Renames a node; with `prev`, editors showing links to it follow (see Editor.tsx). */
   renameNode: async (id: string, title: string, prev?: { type: NodeType; title: string }) => {
     const n = await request<TreeNode>('PATCH', `/api/nodes/${id}`, { title })

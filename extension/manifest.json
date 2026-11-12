@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "青简网页剪藏",
+  "version": "0.1.0",
+  "description": "提取网页正文、选区或整页，以 Markdown 保存到自己的青简知识库。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "剪藏到青简", "default_popup": "popup.html" },
+  "minimum_chrome_version": "120"
+}
