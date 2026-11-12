@@ -1,3 +1,7 @@
+import { DEFAULT_TYPOGRAPHY, normalizeTypography, proseFontStack, PROSE_WIDTHS, type Typography } from './typography'
+export { PROSE_WIDTHS } from './typography'
+export type { ProseFont, ProseWidth } from './typography'
+
 /**
  * Appearance: light / dark theme, accent colour, page background and reading style.
  *
@@ -9,18 +13,12 @@
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type Accent = 'cinnabar' | 'teal' | 'indigo' | 'celadon' | 'amber' | 'wisteria' | 'ink' | 'custom'
 export type Background = 'paper' | 'white'
-export type ProseFont = 'sans' | 'serif'
-export type ProseWidth = 'narrow' | 'normal' | 'wide'
 
-export interface Appearance {
+export interface Appearance extends Typography {
   accent: Accent
   /** the colour picked for the 'custom' accent, as #rrggbb */
   customAccent: string
   background: Background
-  proseFont: ProseFont
-  proseSize: number
-  proseLine: number
-  proseWidth: ProseWidth
 }
 
 export const ACCENTS: { id: Exclude<Accent, 'custom'>; name: string; swatch: string }[] = [
@@ -33,11 +31,6 @@ export const ACCENTS: { id: Exclude<Accent, 'custom'>; name: string; swatch: str
   { id: 'ink', name: '松烟', swatch: 'oklch(30% 0.008 70)' },
 ]
 
-export const PROSE_WIDTHS: Record<ProseWidth, { label: string; px: number }> = {
-  narrow: { label: '窄', px: 660 },
-  normal: { label: '标准', px: 760 },
-  wide: { label: '宽', px: 920 },
-}
 
 const KEY = 'qj.theme'
 const APPEARANCE_KEY = 'qj.appearance'
@@ -45,10 +38,7 @@ const DEFAULT_APPEARANCE: Appearance = {
   accent: 'cinnabar',
   customAccent: '#2f7d6d',
   background: 'paper',
-  proseFont: 'sans',
-  proseSize: 16,
-  proseLine: 1.65,
-  proseWidth: 'normal',
+  ...DEFAULT_TYPOGRAPHY,
 }
 const HEX = /^#[0-9a-f]{6}$/i
 /* browser chrome colour (mobile address bar), matching the sidebar */
@@ -71,14 +61,10 @@ export function getThemeMode(): ThemeMode {
 export function getAppearance(): Appearance {
   try {
     const raw = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || '{}') as Partial<Appearance>
-    const a = { ...DEFAULT_APPEARANCE, ...raw }
+    const a = { ...DEFAULT_APPEARANCE, ...raw, ...normalizeTypography(raw) }
     if (a.accent !== 'custom' && !ACCENTS.some((x) => x.id === a.accent)) a.accent = DEFAULT_APPEARANCE.accent
     if (!HEX.test(String(a.customAccent))) a.customAccent = DEFAULT_APPEARANCE.customAccent
     if (a.background !== 'white') a.background = 'paper'
-    if (a.proseFont !== 'serif') a.proseFont = 'sans'
-    if (!(a.proseWidth in PROSE_WIDTHS)) a.proseWidth = 'normal'
-    a.proseSize = Math.min(20, Math.max(14, Math.round(Number(a.proseSize) || 16)))
-    a.proseLine = Math.min(2, Math.max(1.4, Math.round((Number(a.proseLine) || 1.65) * 20) / 20))
     return a
   } catch {
     return { ...DEFAULT_APPEARANCE }
@@ -107,10 +93,15 @@ function apply() {
   root.dataset.theme = theme
   root.dataset.accent = a.accent
   root.dataset.background = a.background
-  root.style.setProperty('--prose-font', a.proseFont === 'serif' ? 'var(--font-serif)' : 'var(--font-ui)')
+  root.style.setProperty('--prose-font', proseFontStack(a))
   root.style.setProperty('--prose-size', `${a.proseSize}px`)
   root.style.setProperty('--prose-line', String(a.proseLine))
-  root.style.setProperty('--prose-tracking', a.proseFont === 'serif' ? '0' : '-0.005em')
+  root.style.setProperty('--prose-tracking', `${a.proseTracking}em`)
+  root.style.setProperty('--prose-paragraph-space', `${a.paragraphSpace}px`)
+  root.style.setProperty('--prose-align', a.textAlign)
+  root.dataset.proseHeading = a.headingStyle
+  root.dataset.proseQuote = a.quoteStyle
+  root.dataset.proseEmphasis = a.emphasisStyle
   // a custom accent is set inline; tokens.css derives hover and tints from it
   if (a.accent === 'custom') {
     root.style.setProperty('--accent-custom', a.customAccent)
@@ -119,7 +110,7 @@ function apply() {
     root.style.removeProperty('--accent-custom')
     root.style.removeProperty('--accent-contrast')
   }
-  root.style.setProperty('--prose-width', `${PROSE_WIDTHS[a.proseWidth].px}px`)
+  root.style.setProperty('--prose-width', a.proseWidth === 'full' ? '100%' : `${PROSE_WIDTHS[a.proseWidth].px}px`)
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove())
   const meta = document.createElement('meta')
   meta.name = 'theme-color'

@@ -1,0 +1,61 @@
+/* Shared by the editor, read-only documents and the settings preview. */
+.ink-editor .milkdown .ProseMirror p {
+  padding-bottom: calc(3px + var(--prose-paragraph-space, 0px));
+}
+.ink-editor .milkdown .ProseMirror p:not(td p, th p) {
+  text-align: var(--prose-align, left);
+}
+.ink-editor.typography-preview .milkdown .ProseMirror {
+  min-height: 0;
+}
+.ink-editor.typography-preview .milkdown .ProseMirror blockquote {
+  position: relative;
+}
+.ink-editor.typography-preview .milkdown .ProseMirror blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+
+[data-prose-heading='bar'] .ink-editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.65em;
+}
+/* Number headings in document order, including documents that skip heading levels. */
+[data-prose-heading='numbered'] .ink-editor .milkdown .ProseMirror {
+  counter-reset: prose-heading;
+}
+[data-prose-heading='numbered'] .ink-editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  counter-increment: prose-heading;
+}
+[data-prose-heading='numbered'] .ink-editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)::before {
+  content: counter(prose-heading) '. ';
+}
+[data-prose-heading='numbered'] .ink-editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)::before {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-prose-quote='dashed'] .ink-editor .milkdown .ProseMirror blockquote:not(.ink-callout) {
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+[data-prose-quote='accent'] .ink-editor .milkdown .ProseMirror blockquote:not(.ink-callout) {
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--accent-soft);
+  padding: 12px 16px;
+}
+[data-prose-quote='minimal'] .ink-editor .milkdown .ProseMirror blockquote:not(.ink-callout) {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 12px 4px;
+}
+:is([data-prose-quote='dashed'], [data-prose-quote='accent'], [data-prose-quote='minimal']) .ink-editor .milkdown .ProseMirror blockquote:not(.ink-callout)::before {
+  display: none;
+}
+[data-prose-emphasis='marker'] .ink-editor .milkdown .ProseMirror strong {
+  background: linear-gradient(transparent 55%, color-mix(in srgb, var(--accent) 24%, transparent) 55%);
+  border-radius: 2px;
+}

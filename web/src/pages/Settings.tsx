@@ -7,6 +7,7 @@ import { Crumb, PageBody } from '../components/page'
 import PageHeader, { Crumbs } from '../components/PageHeader'
 import { Button, cn, Field, inputClass, Loading, Segmented } from '../components/ui'
 import { ACCENTS, getAppearance, getThemeMode, PROSE_WIDTHS, setAppearance, setThemeMode, type Appearance, type ThemeMode } from '../theme'
+import { DEFAULT_TYPOGRAPHY, EMPHASIS_STYLES, HEADING_STYLES, PROSE_FONTS, QUOTE_STYLES, TYPOGRAPHY_RANGES } from '../typography'
 
 const SECTIONS = [
   { id: 'appearance', label: '外观', icon: <IconPalette /> },
@@ -173,59 +174,61 @@ function AppearancePanel() {
         </Row>
       </Panel>
 
-      <Panel title="阅读与写作" desc="文档正文和分享页的排版。">
+      <Panel title="阅读与写作" desc="即时生效于文档正文和分享页；字体使用当前设备已安装的字体，缺失时自动回退。">
         <Row label="正文字体">
-          <Segmented
-            label="正文字体"
-            value={a.proseFont}
-            options={[
-              { value: 'sans', label: '无衬线' },
-              { value: 'serif', label: '衬线' },
-            ]}
-            onChange={(v) => update({ proseFont: v })}
-          />
+          <select aria-label="正文字体" className={cn(inputClass, 'h-9 w-44')} value={a.proseFont} onChange={(e) => update({ proseFont: e.target.value as Appearance['proseFont'] })}>
+            {Object.entries(PROSE_FONTS).map(([value, font]) => <option key={value} value={value}>{font.label}</option>)}
+          </select>
         </Row>
-        <Row label="正文字号">
-          <input
-            type="range"
-            min={14}
-            max={20}
-            step={1}
-            value={a.proseSize}
-            aria-label="正文字号"
-            onChange={(e) => update({ proseSize: +e.target.value })}
-            className="w-40 accent-(--accent)"
-          />
-          <span className="tabular w-10 text-right text-[12px] text-ink-3">{a.proseSize}px</span>
-        </Row>
-        <Row label="行高">
-          <input
-            type="range"
-            min={1.4}
-            max={2}
-            step={0.05}
-            value={a.proseLine}
-            aria-label="行高"
-            onChange={(e) => update({ proseLine: +e.target.value })}
-            className="w-40 accent-(--accent)"
-          />
-          <span className="tabular w-10 text-right text-[12px] text-ink-3">{a.proseLine.toFixed(2)}</span>
-        </Row>
+        {a.proseFont === 'custom' && (
+          <Row label="本机字体名称" hint="输入一个已安装的字体名称，例如 LXGW WenKai、思源黑体或 Microsoft YaHei。">
+            <input aria-label="本机字体名称" className={cn(inputClass, 'h-9 w-52')} maxLength={100} value={a.customFont} placeholder="例如 LXGW WenKai" onChange={(e) => update({ customFont: e.target.value })} />
+          </Row>
+        )}
+        {([
+          ['proseSize', '正文字号', 'px'],
+          ['proseLine', '行高', '倍'],
+          ['proseTracking', '字间距', 'em'],
+          ['paragraphSpace', '额外段间距', 'px'],
+        ] as const).map(([key, label, unit]) => (
+          <Row key={key} label={label} hint={key === 'paragraphSpace' ? '在原有段落留白基础上增加距离。' : undefined}>
+            <input type="range" {...TYPOGRAPHY_RANGES[key]} value={a[key]} aria-label={label} onChange={(e) => update({ [key]: e.target.valueAsNumber })} className="w-28 accent-(--accent) sm:w-36" />
+            <input key={a[key]} type="number" {...TYPOGRAPHY_RANGES[key]} defaultValue={a[key]} aria-label={`${label}数值`} onBlur={(e) => { if (Number.isFinite(e.target.valueAsNumber)) update({ [key]: e.target.valueAsNumber }); e.target.value = String(getAppearance()[key]) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} className={cn(inputClass, 'tabular h-9 w-20 text-right')} />
+            <span className="w-5 text-[12px] text-ink-3">{unit}</span>
+          </Row>
+        ))}
         <Row label="内容宽度">
-          <Segmented
-            label="内容宽度"
-            value={a.proseWidth}
-            options={(Object.keys(PROSE_WIDTHS) as (keyof typeof PROSE_WIDTHS)[]).map((k) => ({ value: k, label: PROSE_WIDTHS[k].label }))}
-            onChange={(v) => update({ proseWidth: v })}
-          />
+          <Segmented label="内容宽度" value={a.proseWidth} options={(Object.keys(PROSE_WIDTHS) as (keyof typeof PROSE_WIDTHS)[]).map((k) => ({ value: k, label: PROSE_WIDTHS[k].label }))} onChange={(v) => update({ proseWidth: v })} />
+        </Row>
+        <Row label="正文对齐">
+          <Segmented label="正文对齐" value={a.textAlign} options={[{ value: 'left', label: '左对齐' }, { value: 'justify', label: '两端对齐' }]} onChange={(v) => update({ textAlign: v })} />
+        </Row>
+        <Row label="标题样式">
+          <Segmented label="标题样式" value={a.headingStyle} options={(Object.keys(HEADING_STYLES) as (keyof typeof HEADING_STYLES)[]).map((value) => ({ value, label: HEADING_STYLES[value] }))} onChange={(headingStyle) => update({ headingStyle })} />
+        </Row>
+        <Row label="引用样式">
+          <select aria-label="引用样式" className={cn(inputClass, 'h-9 w-44')} value={a.quoteStyle} onChange={(e) => update({ quoteStyle: e.target.value as Appearance['quoteStyle'] })}>
+            {Object.entries(QUOTE_STYLES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </Row>
+        <Row label="强调样式">
+          <Segmented label="强调样式" value={a.emphasisStyle} options={(Object.keys(EMPHASIS_STYLES) as (keyof typeof EMPHASIS_STYLES)[]).map((value) => ({ value, label: EMPHASIS_STYLES[value] }))} onChange={(emphasisStyle) => update({ emphasisStyle })} />
+        </Row>
+        <Row label="恢复默认排版" hint="重置字体和排版设置。">
+          <Button onClick={() => update(DEFAULT_TYPOGRAPHY)}>恢复默认</Button>
         </Row>
         <div className="border-t border-line-subtle py-4">
           <div className="mb-2 text-[11.5px] font-medium text-ink-4">效果预览</div>
-          <div className="rounded-lg border border-line-subtle bg-editor px-5 py-4 text-ink" style={{ fontFamily: 'var(--prose-font)', fontSize: 'var(--prose-size)', lineHeight: 'var(--prose-line)', letterSpacing: 'var(--prose-tracking)' }}>
-            <div className="mb-1 text-[1.25em] font-semibold">山中问答</div>
-            问余何意栖碧山，笑而不答心自闲。桃花流水窅然去，别有天地非人间。中英文与
-            <code className="mx-1 rounded-[4px] bg-active px-1.5 py-0.5 font-mono text-[0.86em] text-[color-mix(in_oklab,var(--accent)_80%,var(--text-primary))]">inline code</code>
-            会像这样排在一起。
+          <div className="overflow-hidden rounded-lg border border-line-subtle bg-editor px-5 py-4">
+            <div className="ink-editor typography-preview mx-auto" style={{ maxWidth: 'var(--prose-width)' }}>
+              <div className="milkdown"><div className="ProseMirror">
+                <h2>山中问答</h2>
+                <p>问余何意栖碧山，笑而不答心自闲。桃花流水窅然去，别有天地非人间。</p>
+                <p>写下此刻的想法，让<strong>重要的文字</strong>清晰可见。Typography brings rhythm to reading，中英文与 <code>inline code</code> 会像这样排在一起。</p>
+                <h3>留一点空白</h3>
+                <blockquote><p>在文字之间，找到适合自己的阅读节奏。</p></blockquote>
+              </div></div>
+            </div>
           </div>
         </div>
       </Panel>
