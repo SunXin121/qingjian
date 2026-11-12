@@ -93,6 +93,7 @@ func (s *Server) Close() error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	a := s.requireAdmin
+	s.registerClipper(mux)
 
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@/*": ["vendor/edgeever/apps/web/src/*"],
+      "@edgeever/shared": ["vendor/edgeever/packages/shared/src/types.ts"]
+    },
+    "types": ["node", "vite/client"]
+  },
+  "include": ["vendor/edgeever/apps/extension/src"]
+}

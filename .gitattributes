@@ -1,0 +1,2 @@
+# Preserve the pinned upstream snapshot byte for byte, including its EOF spacing.
+extension/vendor/edgeever/** whitespace=-blank-at-eof

@@ -52,7 +52,7 @@ async function openDraft(serverInput, draftInput) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (sender.id !== chrome.runtime.id || sender.tab) return
+  if (sender.id !== chrome.runtime.id || sender.tab || !['qj-clip', 'qj-retry'].includes(message.type)) return
   const run = async () => {
     if (message.type === 'qj-retry') {
       const { lastClip } = await chrome.storage.local.get('lastClip')

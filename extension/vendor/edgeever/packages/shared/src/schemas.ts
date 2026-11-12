@@ -1,0 +1,685 @@
+import { isValidMemoShareSlug, PUBLISHED_NOTE_BODY_FONTS } from "./sharing";
+import { z } from "zod";
+import {
+  MAX_NOTE_PROSE_CSS_BYTES,
+  NOTE_PROSE_PALETTE_CHOICES,
+} from "./note-prose";
+import {
+  AI_ACTIONS,
+  AI_ATTACHMENT_MEDIA_TYPES,
+  AI_PROMPT_PARAMETER_KINDS,
+  AI_PROMPT_RESULT_MODES,
+  AI_TARGET_LANGUAGES,
+  AI_TONES,
+  MAX_AI_ATTACHMENTS,
+  MAX_AI_ATTACHMENTS_TOTAL_BYTES,
+  MAX_AI_ATTACHMENT_BYTES,
+  MAX_AI_TEXT_ATTACHMENT_BYTES,
+  getBase64DecodedByteLength,
+  isAiTextAttachment,
+} from "./ai-assistant";
+import { AI_MODEL_OUTPUT_BUDGET_LIMITS, type AiModelOutputBudgetField } from "./ai-output-budgets";
+import { AI_MODEL_CAPABILITY_MAX_TOKENS, AI_MODEL_CAPABILITY_SOURCES } from "./ai-model-capabilities";
+
+export const NotebookCreateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  parentId: z.string().trim().min(1).nullable().optional(),
+});
+
+export const NotebookUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  parentId: z.string().trim().min(1).nullable().optional(),
+  sortOrder: z.number().int().optional(),
+  icon: z.string().trim().regex(/^[a-z][a-z0-9-]{0,79}$/).nullable().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  colorTarget: z.enum(["icon", "name", "both"]).optional(),
+  isBold: z.boolean().optional(),
+  iconInverted: z.boolean().optional(),
+  rowInverted: z.boolean().optional(),
+});
+
+export const MemoCreateSchema = z.object({
+  notebookId: z.string().trim().min(1),
+  title: z.string().trim().max(160).optional(),
+  contentJson: z.unknown().optional(),
+  contentMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
+});
+
+export const MemoUpdateSchema = z.object({
+  expectedRevision: z.number().int().min(0).optional(),
+  expectedContentHash: z.string().length(64).optional(),
+  editSessionId: z.string().trim().min(1).optional(),
+  notebookId: z.string().trim().min(1).optional(),
+  title: z.string().trim().max(160).optional(),
+  isPinned: z.boolean().optional(),
+  contentJson: z.unknown().optional(),
+  contentMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
+  allowDestructiveOverwrite: z.boolean().optional(),
+});
+
+export const TemplateCreateSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(500).optional(),
+  memoId: z.string().trim().min(1).optional(),
+  title: z.string().trim().max(160).nullable().optional(),
+  contentMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+}).refine((input) => input.memoId || input.contentMarkdown !== undefined, {
+  message: "memoId or contentMarkdown is required",
+});
+
+export const TemplateUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  title: z.string().trim().max(160).nullable().optional(),
+  contentMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const TemplateUseSchema = z.object({
+  notebookId: z.string().trim().min(1),
+  // The client's UI language. Default templates nobody edited are used in
+  // this language; without it every template is used as stored.
+  locale: z.string().trim().min(1).max(64).optional(),
+});
+
+const ScheduledPluginCommandPayloadSchema = z.object({
+  pluginId: z.string().trim().min(3).max(200),
+  commandId: z.string().trim().min(1).max(200),
+});
+
+export const ScheduledTaskCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  taskType: z.literal("plugin-command"),
+  taskPayload: ScheduledPluginCommandPayloadSchema,
+  cronExpression: z.string().trim().min(1).max(160),
+  timezone: z.string().trim().min(1).max(80),
+  executorDeviceId: z.string().trim().min(16).max(160),
+  missedRunPolicy: z.enum(["run-once", "skip"]).default("run-once"),
+  isEnabled: z.boolean().default(true),
+});
+
+export const ScheduledTaskUpdateSchema = ScheduledTaskCreateSchema.omit({
+  taskType: true,
+  taskPayload: true,
+  executorDeviceId: true,
+}).partial().extend({
+  taskPayload: ScheduledPluginCommandPayloadSchema.optional(),
+  executorDeviceId: z.string().trim().min(16).max(160).optional(),
+}).refine((input) => Object.values(input).some((value) => value !== undefined), {
+  message: "At least one field is required.",
+});
+
+export const PluginScheduleUpsertSchema = z.object({
+  pluginId: z.string().trim().min(3).max(200),
+  scheduleKey: z.string().trim().regex(/^[a-z0-9][a-z0-9._-]*$/i).max(120),
+  name: z.string().trim().min(1).max(120),
+  commandId: z.string().trim().min(1).max(200),
+  cronExpression: z.string().trim().min(1).max(160),
+  timezone: z.string().trim().min(1).max(80),
+  executorDeviceId: z.string().trim().min(16).max(160),
+  missedRunPolicy: z.enum(["run-once", "skip"]).default("run-once"),
+  isEnabled: z.boolean().optional(),
+});
+
+export const ScheduledTaskClaimSchema = z.object({
+  scheduledFor: z.string().datetime(),
+  executorDeviceId: z.string().trim().min(16).max(160),
+});
+
+export const ScheduledTaskFinishSchema = z.object({
+  executorDeviceId: z.string().trim().min(16).max(160),
+  status: z.enum(["succeeded", "failed"]),
+  errorMessage: z.string().trim().max(2_000).nullable().optional(),
+});
+
+const httpUrl = z.string().trim().max(2000).refine((value) => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}, { message: "URL must use http or https." });
+
+export const WorkspaceExtensionUpsertSchema = z.object({
+  type: z.enum(["plugin", "theme"]),
+  version: z.string().trim().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).max(80),
+  enabled: z.boolean(),
+  installedAt: z.string().datetime(),
+  manifestUrl: httpUrl,
+  sourceKind: z.enum(["marketplace", "github", "manifest"]),
+  verified: z.boolean(),
+  repositoryUrl: httpUrl.max(500).nullable().optional(),
+  releaseTag: z.string().trim().min(1).max(80).nullable().optional(),
+  publisher: z.literal("edgeever").nullable().optional(),
+}).refine((input) => {
+  if (input.sourceKind === "github") return Boolean(input.repositoryUrl);
+  if (input.sourceKind === "marketplace") return Boolean(input.repositoryUrl || input.manifestUrl);
+  return true;
+}, { message: "GitHub and marketplace extensions require a source URL." });
+
+export const MoveMemosSchema = z.object({
+  memoIds: z.array(z.string().trim().min(1)).min(1).max(100),
+  notebookId: z.string().trim().min(1),
+});
+
+export const DeleteMemosSchema = z.object({
+  memoIds: z.array(z.string().trim().min(1)).min(1).max(100),
+  permanent: z.boolean().optional(),
+});
+
+export const DuplicateMemoSchema = z.object({
+  notebookId: z.string().trim().min(1).optional(),
+  title: z.string().trim().max(160).optional(),
+});
+
+export const MergeMemosSchema = z.object({
+  memoIds: z.array(z.string().trim().min(1)).min(2).max(50),
+  notebookId: z.string().trim().min(1).optional(),
+  title: z.string().trim().max(160).optional(),
+});
+
+export const LoginSchema = z.object({
+  username: z.string().trim().min(1).max(80),
+  password: z.string().min(1).max(512),
+  deviceId: z.string().trim().min(16).max(160).optional(),
+  // The client's resolved UI locale. Used once, to localize a new workspace's
+  // default notebooks and notes at its first sign-in.
+  locale: z.string().trim().min(1).max(35).optional(),
+});
+
+const TotpCodeField = z.string().trim().min(6).max(12);
+const RecoveryCodeField = z.string().trim().min(10).max(32);
+
+export const LoginMfaSchema = z.object({
+  challengeToken: z.string().trim().min(16).max(128),
+  code: TotpCodeField.optional(),
+  recoveryCode: RecoveryCodeField.optional(),
+  deviceId: z.string().trim().min(16).max(160).optional(),
+  locale: z.string().trim().min(1).max(35).optional(),
+}).refine((input) => Boolean(input.code) !== Boolean(input.recoveryCode), {
+  message: "Provide either an authenticator code or a recovery code.",
+  path: ["code"],
+});
+
+/** Identity check before enabling (password) or changing TOTP (password + code). */
+export const TotpReauthSchema = z.object({
+  password: z.string().min(1).max(512).optional(),
+  code: TotpCodeField.optional(),
+  /** Alternative to `code` when the authenticator is unavailable; it is consumed. */
+  recoveryCode: RecoveryCodeField.optional(),
+});
+
+/** Opaque id the server issued for one enrollment flow or one batch of recovery codes. */
+const TotpFlowIdField = z.string().trim().min(8).max(80);
+
+/** Step 2 of enrollment: the authenticator code, for the setup the client was shown. */
+export const TotpSetupVerifySchema = z.object({
+  setupId: TotpFlowIdField,
+  code: TotpCodeField,
+});
+
+/** Last step of enrollment or of regenerating codes: the batch the user saved. */
+export const TotpBatchConfirmSchema = z.object({
+  batchId: TotpFlowIdField,
+});
+
+export const LoginDeviceSessionUpdateSchema = z.object({
+  label: z.string().trim().max(80).nullable(),
+});
+
+export const ChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(512),
+    newPassword: z.string().min(8).max(512),
+    confirmPassword: z.string().min(8).max(512),
+  })
+  .refine((input) => input.newPassword === input.confirmPassword, {
+    message: "New passwords do not match.",
+    path: ["confirmPassword"],
+  });
+
+export const UserCreateSchema = z.object({
+  username: z.string().trim().min(1).max(80),
+  displayName: z.string().trim().max(80).nullable().optional(),
+  password: z.string().min(8).max(512),
+});
+
+export const UserUpdateSchema = z
+  .object({
+    displayName: z.string().trim().max(80).nullable().optional(),
+    password: z.string().min(8).max(512).optional(),
+    isDisabled: z.boolean().optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, "At least one field is required.");
+
+export const ApiTokenCreateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  scopes: z.array(z.string().trim().min(1).max(80)).min(1).max(32),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
+export const TagRenameSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
+export const ResourceUpdateSchema = z.object({
+  filename: z.string().trim().min(1).max(160),
+});
+
+const ObjectStorageEndpointSchema = z.string().trim().url().max(500).refine(
+  (value) => value.startsWith("https://") || value.startsWith("http://"),
+  "Object storage endpoint must use HTTP or HTTPS.",
+);
+
+export const ObjectStorageSettingsUpdateSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("builtin") }),
+  z.object({
+    provider: z.literal("s3"),
+    displayName: z.string().trim().min(1).max(80),
+    endpoint: ObjectStorageEndpointSchema,
+    region: z.string().trim().min(1).max(80),
+    bucket: z.string().trim().min(1).max(255),
+    accessKeyId: z.string().trim().min(1).max(256),
+    secretAccessKey: z.string().min(1).max(1024).optional(),
+    forcePathStyle: z.boolean().default(true),
+    objectPrefix: z.string().trim().max(500).default(""),
+  }),
+]);
+
+export const ObjectStorageConnectionTestSchema = z.object({
+  endpoint: ObjectStorageEndpointSchema,
+  region: z.string().trim().min(1).max(80),
+  bucket: z.string().trim().min(1).max(255),
+  accessKeyId: z.string().trim().min(1).max(256),
+  secretAccessKey: z.string().min(1).max(1024).optional(),
+  forcePathStyle: z.boolean().default(true),
+  objectPrefix: z.string().trim().max(500).default(""),
+});
+
+export const AiProviderSchema = z.enum(["openai-compatible", "anthropic", "google"]);
+
+export const AiTranscriptionStandardSchema = z.enum(["openai-compatible"]);
+
+const rejectUnsafeAiBaseUrl = (value: string, context: z.RefinementCtx) => {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    context.addIssue({ code: "custom", message: "AI Base URL must be a valid URL." });
+    return;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    context.addIssue({ code: "custom", message: "AI Base URL must use HTTP or HTTPS." });
+  }
+  if (url.username || url.password) {
+    context.addIssue({ code: "custom", message: "AI Base URL must not contain credentials." });
+  }
+};
+
+const AiBaseUrlSchema = z.string().trim().url().max(500).superRefine(rejectUnsafeAiBaseUrl);
+
+const AiTranscriptionProviderBaseUrlSchema = z.string().trim().min(1).max(500).superRefine((value, context) => {
+  if (!z.string().url().safeParse(value).success) {
+    context.addIssue({ code: "custom", message: "AI Base URL must be a valid URL." });
+    return;
+  }
+  rejectUnsafeAiBaseUrl(value, context);
+});
+
+export const AiTranscriptionProviderCreateSchema = z.object({
+  provider: AiTranscriptionStandardSchema.default("openai-compatible"),
+  displayName: z.string().trim().min(1).max(80),
+  baseUrl: AiTranscriptionProviderBaseUrlSchema,
+  apiKey: z.string().trim().min(1).max(4096),
+  isEnabled: z.boolean().default(true),
+  initialModelId: z.string().trim().min(1).max(200).optional(),
+});
+
+export const AiTranscriptionProviderUpdateSchema = z.object({
+  provider: AiTranscriptionStandardSchema.default("openai-compatible"),
+  displayName: z.string().trim().min(1).max(80),
+  baseUrl: AiTranscriptionProviderBaseUrlSchema,
+  apiKey: z.string().trim().min(1).max(4096).optional(),
+  isEnabled: z.boolean().default(true),
+});
+
+export const AiTranscriptionModelCreateSchema = z.object({
+  modelId: z.string().trim().min(1).max(200),
+  displayName: z.string().trim().min(1).max(80).optional(),
+});
+
+export const AiTranscriptionDefaultModelUpdateSchema = z.object({
+  modelConfigId: z.string().trim().min(1).nullable(),
+});
+
+const AiProviderConfigFieldsSchema = z.object({
+  provider: AiProviderSchema,
+  displayName: z.string().trim().min(1).max(80),
+  baseUrl: AiBaseUrlSchema,
+  isEnabled: z.boolean().default(true),
+});
+
+export const AiProviderConfigCreateSchema = AiProviderConfigFieldsSchema.extend({
+  apiKey: z.string().min(1).max(4096),
+  initialModelId: z.string().trim().min(1).max(200).optional(),
+});
+
+export const AiProviderConfigUpdateSchema = AiProviderConfigFieldsSchema.extend({
+  apiKey: z.string().min(1).max(4096).optional(),
+});
+
+export const AiProviderConnectionTestSchema = z.object({
+  modelId: z.string().trim().min(1).max(200),
+  provider: AiProviderSchema.optional(),
+  baseUrl: AiBaseUrlSchema.optional(),
+  apiKey: z.string().min(1).max(4096).optional(),
+});
+
+const aiModelOutputBudget = (field: AiModelOutputBudgetField) => z.number()
+  .int()
+  .min(AI_MODEL_OUTPUT_BUDGET_LIMITS[field].min)
+  .max(AI_MODEL_OUTPUT_BUDGET_LIMITS[field].max)
+  .nullable()
+  .optional();
+
+const aiModelOutputBudgetShape = {
+  generationMaxOutputTokens: aiModelOutputBudget("generationMaxOutputTokens"),
+  tagSuggestionMaxOutputTokens: aiModelOutputBudget("tagSuggestionMaxOutputTokens"),
+  companionMaxOutputTokens: aiModelOutputBudget("companionMaxOutputTokens"),
+};
+
+export const AiModelConfigCreateSchema = z.object({
+  modelId: z.string().trim().min(1).max(200),
+  displayName: z.string().trim().min(1).max(200).optional(),
+  ...aiModelOutputBudgetShape,
+});
+
+const aiCapabilityTokens = z.number().int().positive().max(AI_MODEL_CAPABILITY_MAX_TOKENS).nullable();
+
+/** Limits a client read from the provider for one model; checked against the saved model and endpoint. */
+export const AiModelCapabilitiesReportSchema = z.object({
+  provider: AiProviderSchema,
+  modelId: z.string().trim().min(1).max(200),
+  baseUrl: z.string().trim().min(1).max(2048),
+  /** The provider configuration the limits were read for (its `updated_at`). */
+  configVersion: z.string().trim().min(1).max(64),
+  maxOutputTokens: aiCapabilityTokens,
+  maxInputTokens: aiCapabilityTokens,
+  contextWindowTokens: aiCapabilityTokens,
+  source: z.enum(AI_MODEL_CAPABILITY_SOURCES),
+}).strict();
+
+/** An omitted field keeps its current value; `null` restores the EdgeEver default. */
+export const AiModelConfigUpdateSchema = z.object(aiModelOutputBudgetShape)
+  .strict()
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: "At least one model setting is required.",
+  });
+
+export const AiDefaultModelUpdateSchema = z.object({
+  modelConfigId: z.string().trim().min(1).nullable(),
+});
+
+export const AiAttachmentSchema = z.object({
+  // oxlint-disable-next-line no-control-regex -- rejects control characters in attachment filenames
+  filename: z.string().trim().min(1).max(255).regex(/^[^\u0000-\u001F\u007F]+$/),
+  mediaType: z.enum(AI_ATTACHMENT_MEDIA_TYPES),
+  base64Data: z.string().min(1).max(Math.ceil(MAX_AI_ATTACHMENT_BYTES / 3) * 4),
+}).superRefine((attachment, context) => {
+  const byteLength = getBase64DecodedByteLength(attachment.base64Data);
+  if (byteLength === null) {
+    context.addIssue({ code: "custom", path: ["base64Data"], message: "Attachment data must be valid base64." });
+    return;
+  }
+  const limit = isAiTextAttachment(attachment.mediaType)
+    ? MAX_AI_TEXT_ATTACHMENT_BYTES
+    : MAX_AI_ATTACHMENT_BYTES;
+  if (byteLength > limit) {
+    context.addIssue({ code: "custom", path: ["base64Data"], message: "The attachment is too large." });
+  }
+});
+
+export const AiGenerateSchema = z.object({
+  action: z.enum(AI_ACTIONS),
+  promptId: z.string().trim().min(1).max(200).optional(),
+  locale: z.string().trim().min(2).max(35).optional(),
+  title: z.string().trim().max(160).default(""),
+  contentMarkdown: z.string().max(300_000),
+  stream: z.boolean().default(false),
+  targetLanguage: z.enum(AI_TARGET_LANGUAGES).optional(),
+  tone: z.enum(AI_TONES).optional(),
+  instruction: z.string().trim().min(1).max(2_000).optional(),
+  attachments: z.array(AiAttachmentSchema).max(MAX_AI_ATTACHMENTS).default([]),
+  /** The client can send a request without an output limit when none is known (#652). */
+  allowUnboundedOutput: z.boolean().optional(),
+  /**
+   * The client can run a long source-sized task in parts (#652). When one request cannot finish
+   * it, prepare returns `segments` instead of a request. `depth` > 0 re-splits a part that was cut off.
+   */
+  segmentation: z.object({ depth: z.number().int().min(0).max(2).default(0) }).strict().optional(),
+  /** This request is one part of a long note, with context from the parts before it. */
+  segment: z.object({
+    index: z.number().int().min(0).max(199),
+    count: z.number().int().min(1).max(200),
+    headingPath: z.array(z.string().max(200)).max(6).default([]),
+    previousSourceTail: z.string().max(1_000).optional(),
+    previousOutputTail: z.string().max(1_000).optional(),
+  }).strict().refine((segment) => segment.index < segment.count, { message: "The part index is out of range." }).optional(),
+  /** Continue a result that was cut off: the end of what was written so far. */
+  continuation: z.object({
+    round: z.number().int().min(1).max(3),
+    previousOutput: z.string().min(1).max(20_000),
+  }).strict().optional(),
+}).superRefine((input, context) => {
+  if (input.continuation && (input.segment || input.segmentation)) {
+    context.addIssue({ code: "custom", path: ["continuation"], message: "A continuation cannot be split into parts." });
+  }
+  if (!input.promptId && input.action === "translate" && !input.targetLanguage) {
+    context.addIssue({ code: "custom", path: ["targetLanguage"], message: "A target language is required for translation." });
+  }
+  if (!input.promptId && input.action === "change-tone" && !input.tone) {
+    context.addIssue({ code: "custom", path: ["tone"], message: "A tone is required when changing tone." });
+  }
+  if (!input.promptId && input.action === "custom" && !input.instruction) {
+    context.addIssue({ code: "custom", path: ["instruction"], message: "An instruction is required for a custom action." });
+  }
+  const canGenerateWithoutSource = input.action === "custom" && Boolean(input.instruction || input.promptId);
+  if (!input.title && !input.contentMarkdown.trim() && input.attachments.length === 0 && !canGenerateWithoutSource) {
+    context.addIssue({ code: "custom", path: ["contentMarkdown"], message: "Note content is required." });
+  }
+  const totalAttachmentBytes = input.attachments.reduce(
+    (total, attachment) => total + (getBase64DecodedByteLength(attachment.base64Data) ?? 0),
+    0,
+  );
+  if (totalAttachmentBytes > MAX_AI_ATTACHMENTS_TOTAL_BYTES) {
+    context.addIssue({ code: "custom", path: ["attachments"], message: "The attachments are too large in total." });
+  }
+});
+
+export const AiTagSuggestionsRequestSchema = z.object({
+  title: z.string().trim().max(160).default(""),
+  contentMarkdown: z.string().max(300_000),
+  currentTags: z.array(z.string().trim().min(1).max(200)).max(24).default([]),
+  locale: z.string().trim().min(2).max(35).optional(),
+}).superRefine((input, context) => {
+  if (!input.title && !input.contentMarkdown.trim()) {
+    context.addIssue({
+      code: "custom",
+      path: ["contentMarkdown"],
+      message: "Note content is required.",
+    });
+  }
+});
+
+export const AiPromptTemplateCreateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(200).optional(),
+  instruction: z.string().trim().min(1).max(2_000),
+  parameterKind: z.enum(AI_PROMPT_PARAMETER_KINDS).default("none"),
+  resultMode: z.enum(AI_PROMPT_RESULT_MODES).default("both"),
+});
+
+export const AiPromptTemplateUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  description: z.string().trim().max(200).nullable().optional(),
+  instruction: z.string().trim().min(1).max(2_000).optional(),
+  parameterKind: z.enum(AI_PROMPT_PARAMETER_KINDS).optional(),
+  resultMode: z.enum(AI_PROMPT_RESULT_MODES).optional(),
+}).refine((input) => Object.values(input).some((value) => value !== undefined), {
+  message: "At least one field is required.",
+});
+
+export const SharePasswordUpdateSchema = z.object({
+  passwordProtected: z.boolean(),
+});
+
+export const MemoShareUpdateSchema = z.object({
+  passwordProtected: z.boolean().optional(),
+  password: z.string().trim().min(4).max(64).optional(),
+  slug: z.string().trim().toLowerCase().refine(isValidMemoShareSlug).nullable().optional(),
+  showUpdatedAt: z.boolean().optional(),
+  showBranding: z.boolean().optional(),
+  /** ISO instant with an offset, or null to remove the expiry. The server rejects past instants. */
+  expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+}).refine((input) => input.passwordProtected !== undefined || input.password !== undefined || input.slug !== undefined || input.showUpdatedAt !== undefined || input.showBranding !== undefined || input.expiresAt !== undefined, {
+  message: "At least one field is required.",
+});
+export const NotebookShareUpdateSchema = SharePasswordUpdateSchema;
+
+export const NoteBodyFontUpdateSchema = z.object({
+  bodyFont: z.enum(PUBLISHED_NOTE_BODY_FONTS).nullable(),
+});
+
+const noteProseHexColor = z.string().regex(/^#[0-9a-f]{6}$/i);
+const noteProseCustomColorSetSchema = z.object({
+  background: noteProseHexColor,
+  text: noteProseHexColor,
+  muted: noteProseHexColor,
+  heading: noteProseHexColor,
+  accent: noteProseHexColor,
+  soft: noteProseHexColor,
+  codeBackground: noteProseHexColor,
+  border: noteProseHexColor,
+});
+
+export const NoteProseUpdateSchema = z.object({
+  fontSize: z.union([z.literal(14), z.literal(16), z.literal(18), z.literal(20)]).nullable().optional(),
+  lineHeight: z.union([z.literal(1.5), z.literal(1.65), z.literal(2)]).nullable().optional(),
+  palette: z.union([z.enum(NOTE_PROSE_PALETTE_CHOICES), z.literal("orange")])
+    .transform((value) => value === "orange" ? "clay" as const : value).nullable().optional(),
+  customCss: z.string().refine((value) => new TextEncoder().encode(value).byteLength <= MAX_NOTE_PROSE_CSS_BYTES).nullable().optional(),
+  customColors: z.object({
+    light: noteProseCustomColorSetSchema,
+    dark: noteProseCustomColorSetSchema,
+  }).nullable().optional(),
+}).refine((input) => Object.values(input).some((value) => value !== undefined), {
+  message: "At least one field is required.",
+});
+
+export const PublicShareUnlockSchema = z.object({
+  password: z.string().min(1).max(64),
+});
+
+export const TableFormFieldSchema = z.object({
+  fieldId: z.string().trim().min(1).max(80),
+  required: z.boolean(),
+});
+
+export const TableFormUpdateSchema = z.object({
+  enabled: z.boolean(),
+  passwordProtected: z.boolean(),
+  rotatePassword: z.boolean().optional(),
+  title: z.string().trim().max(120),
+  description: z.string().trim().max(1000),
+  submitLabel: z.string().trim().max(40),
+  fields: z.array(TableFormFieldSchema).max(40),
+});
+
+export const PublicTableFormSubmissionSchema = z.object({
+  cells: z.record(z.string().max(80), z.unknown()),
+});
+
+export type TableFormFieldSetting = z.infer<typeof TableFormFieldSchema>;
+
+export type TableFormSettings = {
+  enabled: boolean;
+  token: string;
+  passwordProtected: boolean;
+  password?: string;
+  title: string;
+  description: string;
+  submitLabel: string;
+  fields: TableFormFieldSetting[];
+};
+
+export type PublicTableFormField = {
+  id: string;
+  name: string;
+  type: "text" | "number" | "checkbox" | "date" | "select" | "url" | "attachment";
+  required: boolean;
+  options?: string[];
+};
+
+export type PublicTableForm = {
+  passwordRequired: boolean;
+  title: string;
+  description: string;
+  submitLabel: string;
+  full: boolean;
+  fields: PublicTableFormField[];
+};
+
+export type NotebookCreateInput = z.infer<typeof NotebookCreateSchema>;
+export type NotebookUpdateInput = z.infer<typeof NotebookUpdateSchema>;
+export type MemoCreateInput = z.infer<typeof MemoCreateSchema>;
+export type MemoUpdateInput = z.infer<typeof MemoUpdateSchema>;
+export type TemplateCreateInput = z.infer<typeof TemplateCreateSchema>;
+export type TemplateUpdateInput = z.infer<typeof TemplateUpdateSchema>;
+export type ScheduledTaskCreateInput = z.input<typeof ScheduledTaskCreateSchema>;
+export type ScheduledTaskUpdateInput = z.infer<typeof ScheduledTaskUpdateSchema>;
+export type PluginScheduleUpsertInput = z.input<typeof PluginScheduleUpsertSchema>;
+export type ScheduledTaskClaimInput = z.infer<typeof ScheduledTaskClaimSchema>;
+export type ScheduledTaskFinishInput = z.infer<typeof ScheduledTaskFinishSchema>;
+export type WorkspaceExtensionUpsertInput = z.infer<typeof WorkspaceExtensionUpsertSchema>;
+export type MoveMemosInput = z.infer<typeof MoveMemosSchema>;
+export type DeleteMemosInput = z.infer<typeof DeleteMemosSchema>;
+export type MergeMemosInput = z.infer<typeof MergeMemosSchema>;
+export type LoginInput = z.infer<typeof LoginSchema>;
+export type LoginMfaInput = z.infer<typeof LoginMfaSchema>;
+export type TotpReauthInput = z.infer<typeof TotpReauthSchema>;
+export type TotpSetupVerifyInput = z.infer<typeof TotpSetupVerifySchema>;
+export type TotpBatchConfirmInput = z.infer<typeof TotpBatchConfirmSchema>;
+export type LoginDeviceSessionUpdateInput = z.infer<typeof LoginDeviceSessionUpdateSchema>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
+export type UserCreateInput = z.infer<typeof UserCreateSchema>;
+export type UserUpdateInput = z.infer<typeof UserUpdateSchema>;
+export type ApiTokenCreateInput = z.infer<typeof ApiTokenCreateSchema>;
+export type TagRenameInput = z.infer<typeof TagRenameSchema>;
+export type ResourceUpdateInput = z.infer<typeof ResourceUpdateSchema>;
+export type ObjectStorageSettingsUpdateInput = z.infer<typeof ObjectStorageSettingsUpdateSchema>;
+export type ObjectStorageConnectionTestInput = z.infer<typeof ObjectStorageConnectionTestSchema>;
+export type AiProviderConfigCreateInput = z.infer<typeof AiProviderConfigCreateSchema>;
+export type AiProviderConfigUpdateInput = z.infer<typeof AiProviderConfigUpdateSchema>;
+export type AiProviderConnectionTestInput = z.infer<typeof AiProviderConnectionTestSchema>;
+export type AiModelConfigCreateInput = z.infer<typeof AiModelConfigCreateSchema>;
+export type AiModelConfigUpdateInput = z.infer<typeof AiModelConfigUpdateSchema>;
+export type AiModelCapabilitiesReportInput = z.infer<typeof AiModelCapabilitiesReportSchema>;
+export type AiDefaultModelUpdateInput = z.infer<typeof AiDefaultModelUpdateSchema>;
+export type AiGenerateInput = z.input<typeof AiGenerateSchema>;
+export type AiAttachmentInput = z.infer<typeof AiAttachmentSchema>;
+export type AiTagSuggestionsRequestInput = z.infer<typeof AiTagSuggestionsRequestSchema>;
+export type AiPromptTemplateCreateInput = z.input<typeof AiPromptTemplateCreateSchema>;
+export type AiPromptTemplateUpdateInput = z.infer<typeof AiPromptTemplateUpdateSchema>;
+export type MemoShareUpdateInput = z.infer<typeof MemoShareUpdateSchema>;
+export type PublicShareUnlockInput = z.infer<typeof PublicShareUnlockSchema>;
+export type TableFormUpdateInput = z.infer<typeof TableFormUpdateSchema>;
+export type PublicTableFormSubmissionInput = z.infer<typeof PublicTableFormSubmissionSchema>;

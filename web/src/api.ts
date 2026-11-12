@@ -187,6 +187,23 @@ export interface ClientConfig {
   imgbed: boolean
 }
 
+export interface ClipperAIConfig {
+  enabled: boolean
+  provider: 'openai' | 'anthropic' | 'gemini'
+  base_url: string
+  model_id: string
+  api_key: string
+  has_api_key?: boolean
+  max_output_tokens: number
+  clear_api_key?: boolean
+}
+
+export interface ClipperSettings {
+  token_configured: boolean
+  token_allow_ai: boolean
+  ai: ClipperAIConfig
+}
+
 export class ApiError extends Error {
   status: number
   data: any
@@ -216,7 +233,8 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   }
   if (!res.ok) {
     if (res.status === 401 && !url.startsWith('/api/auth/') && !url.startsWith('/api/s/')) authEvents.dispatchEvent(new Event('unauthorized'))
-    throw new ApiError(res.status, data?.error || res.statusText || '请求失败', data)
+    const message = typeof data?.error === 'string' ? data.error : data?.error?.message
+    throw new ApiError(res.status, message || res.statusText || '请求失败', data)
   }
   return data as T
 }
@@ -225,6 +243,11 @@ export const api = {
   me: () => request<{ admin: boolean }>('GET', '/api/auth/me'),
   login: (password: string) => request<{ ok: boolean }>('POST', '/api/auth/login', { password }),
   logout: () => request('POST', '/api/auth/logout'),
+
+  clipperSettings: () => request<ClipperSettings>('GET', '/api/clipper/settings'),
+  saveClipperSettings: (ai: ClipperAIConfig) => request<ClipperSettings>('PUT', '/api/clipper/settings', { ai }),
+  createClipperToken: (allow_ai: boolean) => request<{ token: string; allow_ai: boolean }>('POST', '/api/clipper/token', { allow_ai }),
+  revokeClipperToken: () => request('DELETE', '/api/clipper/token'),
 
   repos: () => request<Repo[]>('GET', '/api/repos'),
   repo: (id: string) => request<Repo>('GET', `/api/repos/${id}`),

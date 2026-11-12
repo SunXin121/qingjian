@@ -6,6 +6,7 @@ import { Scissors } from 'lucide-react'
 import { api, type TreeNode } from '../api'
 import { CLIP_DRAFT_KEY, CLIP_EVENT, clipMarkdown, parseClipDraft, type ClipDraft } from '../clipper'
 import PageHeader from '../components/PageHeader'
+import ClipperSetup from '../components/ClipperSetup'
 import { PageBody, PageTitle } from '../components/page'
 import { Button, EmptyState, Field, Input, Segmented, Textarea, inputClass } from '../components/ui'
 import { childrenMap, nodeTitle, useStore } from '../store'
@@ -121,16 +122,19 @@ export default function WebClipper() {
     <div>
       <PageHeader />
       <PageBody>
-        <PageTitle sub="从浏览器收集内容，以 Markdown 保存到知识库。">网页剪藏</PageTitle>
+        <PageTitle sub="剪藏正文、页面区域、图片和平台内容，保存到自己的知识库。">网页剪藏</PageTitle>
         {error && <p role="alert" className="mb-4 rounded-md border border-line bg-surface p-3 text-[13px] text-danger">{error}</p>}
         {!draft ? (
+          <>
+          <ClipperSetup />
           <div className="rounded-lg border border-line-subtle bg-surface p-6">
-            <EmptyState icon={<Scissors />} title="等待浏览器发送剪藏内容">
-              在 Chrome / Edge 中安装「青简网页剪藏」扩展，填写本站地址，打开想保存的网页后点击扩展。
+            <EmptyState icon={<Scissors />} title="预览后保存">
+              在扩展中选择「预览 / 整页 / 仅链接」，可以在这里编辑草稿并选择目录；扩展的「剪藏当前页面」和右键菜单会直接保存。
             </EmptyState>
             <Field label="本站地址"><Input readOnly value={window.location.origin} onFocus={(e) => e.currentTarget.select()} /></Field>
-            <p className="mt-4 text-[13px] leading-relaxed text-ink-3">扩展源码位于项目的 extension 目录。构建后在浏览器的扩展管理页开启开发者模式，加载 extension/dist。支持正文、选中内容、整页和仅链接。</p>
+            <p className="mt-4 text-[13px] leading-relaxed text-ink-3">没有安装扩展时，请先按照项目 extension/README.md 构建并加载。Chrome / Edge 使用 extension/dist，Firefox 使用 extension/dist-firefox。</p>
           </div>
+          </>
         ) : (
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
