@@ -36,6 +36,10 @@ export function withLangInput(nv: StockView, view: EditorView): () => void {
   const attach = () => {
     const tools = nv.dom.querySelector<HTMLElement>(':scope > .tools')
     if (!tools || tools.querySelector('.ink-lang')) return
+    // Crepe's own button and popup are replaced (and hidden by CSS). Taken out of the page:
+    // on every mount the popup positions itself under the button (floating-ui), which reads
+    // their style and layout, forcing a layout of the whole page per code block.
+    for (const el of tools.querySelectorAll(':scope > .language-button, :scope > .language-picker')) el.remove()
     ui = mountInput(tools, nv, view)
   }
   const detach = () => {

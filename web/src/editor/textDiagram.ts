@@ -6,7 +6,8 @@
 // and lazy (on-screen only) CodeMirror setup are reused; only the UI around it is replaced.
 // The markdown stays a plain fenced code block.
 
-import type { LanguageDescription } from '@codemirror/language'
+import type { LanguageDescription, LanguageSupport } from '@codemirror/language'
+import type { Extension } from '@codemirror/state'
 import { defaultValueCtx, nodeViewCtx, SchemaReady } from '@milkdown/kit/core'
 import { CodeMirrorBlock, codeBlockConfig } from '@milkdown/kit/component/code-block'
 import { codeBlockSchema } from '@milkdown/kit/preset/commonmark'
@@ -357,11 +358,42 @@ class TextDiagramView extends Base {
 // comes into view at once (opening a document, jumping there from the outline or a search,
 // a fast scroll) would be painted bare for a frame, then grow its tool row. Blocks are
 // built here instead: when created and on every scroll, both of which run before the
-// browser paints. The observer stays in charge of tearing far-off blocks down.
-type LazyView = { dom: HTMLElement; initialized?: boolean; initializeCodeMirror?: () => void; destroy?: () => void }
+// browser paints, and the ones a screen or two away while the page is idle, so scrolling
+// there does not have to build them. The observer stays in charge of tearing far-off
+// blocks down, later than it would (a block rebuilt costs more than one kept).
+type LazyView = { dom: HTMLElement; node: PMNode; cm?: unknown; initialized?: boolean; initializeCodeMirror?: () => void; destroy?: () => void }
 const NEAR = 200 // px around the viewport, as Milkdown's observer
+/** screens above and below the viewport built while the page is idle */
+const AHEAD = 2
+;(CodeMirrorBlock as unknown as { TEARDOWN_DELAY: number }).TEARDOWN_DELAY = 30_000
 const lazyViews = new Set<LazyView>()
 let checkQueued = false
+let idleQueued = false
+
+function scheduleIdleBuild() {
+  if (idleQueued || typeof requestIdleCallback !== 'function') return
+  idleQueued = true
+  requestIdleCallback(buildAhead)
+}
+
+/** Build the blocks near the viewport, nearest first, in idle time only. */
+function buildAhead(deadline: IdleDeadline) {
+  idleQueued = false
+  const h = window.innerHeight
+  const due: [number, LazyView][] = []
+  for (const nv of lazyViews) {
+    if (nv.initialized || !nv.dom.isConnected) continue
+    const r = nv.dom.getBoundingClientRect()
+    if (!r.width && !r.height) continue
+    const dist = r.bottom < 0 ? -r.bottom : Math.max(0, r.top - h)
+    if (dist < AHEAD * h) due.push([dist, nv])
+  }
+  due.sort((a, b) => a[0] - b[0])
+  for (const [, nv] of due) {
+    if (deadline.timeRemaining() < 5) return scheduleIdleBuild()
+    nv.initializeCodeMirror!()
+  }
+}
 
 function buildNearViewport() {
   checkQueued = false
@@ -374,10 +406,88 @@ function buildNearViewport() {
     if ((r.width > 0 || r.height > 0) && r.bottom > -NEAR && r.top < h + NEAR) due.push(nv)
   }
   for (const nv of due) nv.initializeCodeMirror!()
+  scheduleIdleBuild()
 }
 
-function trackLazyView(nv: LazyView) {
+/** The parts of CodeMirror's (internal) DOM observer used by quietPageScroll. */
+interface CmObserver {
+  onScroll: (e: Event) => void
+  scrollTargets: EventTarget[]
+  win: Window
+}
+interface Cm {
+  observer?: CmObserver
+  scrollDOM: HTMLElement
+  viewport: { from: number; to: number }
+  state: { doc: { length: number } }
+}
+
+/**
+ * Every CodeMirror listens to scrolling of the window and of each scrollable element around
+ * it, and on every scroll event reads the layout and measures itself in place (not in an
+ * animation frame). One editor per code block makes that dozens of forced layouts per scroll
+ * event, each one undoing the last one's writes: scrolling past code stutters. A code block
+ * grows with its content instead of scrolling, so the page scrolling only matters to one
+ * that renders part of its lines (taller than the window plus CodeMirror's margin); the
+ * others ignore it. Its own (horizontal) scrolling is handled as before, and entering or
+ * leaving the screen is still reported by CodeMirror's IntersectionObserver.
+ */
+function quietPageScroll(view: Cm | undefined) {
+  const obs = view?.observer
+  if (!view || !obs || typeof obs.onScroll !== 'function' || !Array.isArray(obs.scrollTargets) || !obs.win) return
+  const own = obs.onScroll
+  const quiet = (e: Event) => {
+    if (e.target === view.scrollDOM || view.viewport.from > 0 || view.viewport.to < view.state.doc.length) own(e)
+  }
+  // CodeMirror adds and removes the listener through this property, which now holds `quiet`
+  obs.onScroll = quiet
+  for (const t of [...obs.scrollTargets, obs.win]) {
+    t.removeEventListener('scroll', own)
+    t.addEventListener('scroll', quiet)
+  }
+}
+
+/** The (private) language members of Milkdown's CodeMirrorBlock used by trackLazyView. */
+interface LanguageMembers {
+  languageConf?: { of: (ext: Extension) => Extension }
+  languageName?: string
+}
+
+/** A loaded language for a fence name, looked up like Milkdown's LanguageLoader. */
+type LoadedLanguage = (name: string) => LanguageSupport | undefined
+
+function loadedLanguages(languages: readonly LanguageDescription[]): LoadedLanguage {
+  const byAlias = new Map<string, LanguageDescription>()
+  for (const l of languages) for (const a of l.alias) byAlias.set(a, l)
+  return (name) => byAlias.get(name.toLowerCase())?.support
+}
+
+function trackLazyView(nv: LazyView, loaded?: LoadedLanguage) {
   if (typeof nv.initializeCodeMirror !== 'function') return
+  // the observer of Milkdown's base class calls this through the instance as well
+  const init = nv.initializeCodeMirror.bind(nv)
+  nv.initializeCodeMirror = () => {
+    if (nv.initialized) return
+    // Milkdown creates CodeMirror without a language and adds it in a second update once
+    // its loader's promise resolves. That update highlights the block again and reads the
+    // DOM selection, which forces a layout of the whole page: one per block built. A
+    // language already loaded goes into the first state instead (its compartment, so a
+    // later language change reconfigures it as usual).
+    const lm = nv as LazyView & LanguageMembers
+    const name: string = nv.node.attrs.language ?? ''
+    const support = loaded && name ? loaded(name) : undefined
+    const conf = lm.languageConf
+    if (support && conf && typeof conf.of === 'function') {
+      lm.languageConf = { of: () => conf.of(support) }
+      lm.languageName = name // the update Milkdown runs after creating CodeMirror sees nothing to do
+    }
+    try {
+      init()
+    } finally {
+      if (conf) lm.languageConf = conf
+    }
+    quietPageScroll(nv.cm as Cm | undefined)
+  }
   if (!lazyViews.size) {
     // capture: scrolling inside any container counts, not only the page
     window.addEventListener('scroll', buildNearViewport, { capture: true, passive: true })
@@ -436,6 +546,7 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
   if (!stock) console.warn('textDiagramView: stock code-block view not found; code blocks lose highlighting')
   const initial = ctx.get(defaultValueCtx)
   if (typeof initial === 'string') await preloadLanguages(initial, config.get().languages ?? [])
+  const loaded = loadedLanguages(config.get().languages ?? [])
   const factory: NodeViewConstructor = (node, view, getPos, decorations, innerDecorations) => {
     if (textDiagramLang(node.attrs.language)) {
       const tv = new TextDiagramView(node, view, getPos, config.get(), watch)
@@ -463,7 +574,7 @@ export const textDiagramView = $viewAsync(codeBlockSchema.node, async (ctx) => {
       if (ok) syncLang()
       return ok
     }
-    trackLazyView(nv as any)
+    trackLazyView(nv as any, loaded)
     return nv
   }
   return factory
