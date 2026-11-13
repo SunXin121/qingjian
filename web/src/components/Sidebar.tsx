@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, NavLink, useMatch, useNavigate } from 'react-router'
-import { Scissors } from 'lucide-react'
 import { api, nodePath, type NodeType, type TreeNode } from '../api'
 import { childrenMap, nodeTitle, useStore } from '../store'
 import { confirmDialog, openMenu, promptText, toast, type MenuItem } from './dialog'
@@ -99,9 +98,6 @@ export default function Sidebar() {
           <nav className="flex flex-col gap-px px-2">
             <SideLink to="/" end icon={<IconHome />}>
               首页
-            </SideLink>
-            <SideLink to="/clip" icon={<Scissors />}>
-              网页剪藏
             </SideLink>
             <SideLink to="/shares" icon={<IconShare />}>
               分享管理

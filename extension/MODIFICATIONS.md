@@ -4,12 +4,12 @@ This extension derives from EdgeEver Web Clipper and its required shared/UI modu
 
 Qingjian modifications:
 
-- The extension settings, HTTP client, popup/background readiness checks and video outline requests directly use the existing Qingjian admin password. There is no separate API token, scope system, old credential fallback or credential migration.
+- The extension settings, HTTP client and popup/background readiness checks directly use the existing Qingjian admin password. There is no separate API token, scope system, old credential fallback or credential migration.
 - Settings labels and diagnostics in all four locales describe admin-password authentication. Corresponding upstream-derived tests use the same authentication contract.
 - `src/adminPassword.ts` encodes UTF-8 HTTP Basic credentials, preserving spaces, colons and non-ASCII passwords.
 - `build.mjs` changes generated branding, icons, version, source/privacy links and Firefox identity. The builds belong to Qingjian and are not official EdgeEver builds.
-- The preview, whole-page and link workflows remain available from the extra preview entry. Their message namespace is separate from direct-save clipping.
-- The Go server stores documents/images using native Qingjian data, provides protected edit sessions for concurrent-content checks, and prepares optional video model requests. Admin passwords have no clipper-specific document or model permissions.
-- Qingjian's `/clip` page provides connection instructions and optional video model settings, plus draft preview/editing.
+- All clipping saves directly to the configured notebook or group. The legacy preview entry, draft handoff and Qingjian `/clip` page have been removed.
+- Video clipping saves available transcripts, timestamps, chapters, cover images and metadata without requesting an AI summary. Model configuration endpoints and the extension's model permission UI have been removed. Unused upstream outline helpers and their fixtures remain for upstream reference and are excluded from the shipped background bundle.
+- The Go server stores documents/images using native Qingjian data and provides protected edit sessions for concurrent-content checks.
 
 Corresponding source and build instructions are included in https://github.com/sunxin121/qingjian/tree/main/extension . Distributors of modified builds must provide the corresponding complete source under the applicable AGPL terms. This extension does not use an EdgeEver relay, analytics service, official store identity or service credentials.

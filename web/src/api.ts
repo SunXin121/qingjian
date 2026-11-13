@@ -187,21 +187,6 @@ export interface ClientConfig {
   imgbed: boolean
 }
 
-export interface ClipperAIConfig {
-  enabled: boolean
-  provider: 'openai' | 'anthropic' | 'gemini'
-  base_url: string
-  model_id: string
-  api_key: string
-  has_api_key?: boolean
-  max_output_tokens: number
-  clear_api_key?: boolean
-}
-
-export interface ClipperSettings {
-  ai: ClipperAIConfig
-}
-
 export class ApiError extends Error {
   status: number
   data: any
@@ -242,8 +227,6 @@ export const api = {
   login: (password: string) => request<{ ok: boolean }>('POST', '/api/auth/login', { password }),
   logout: () => request('POST', '/api/auth/logout'),
 
-  clipperSettings: () => request<ClipperSettings>('GET', '/api/clipper/settings'),
-  saveClipperSettings: (ai: ClipperAIConfig) => request<ClipperSettings>('PUT', '/api/clipper/settings', { ai }),
 
   repos: () => request<Repo[]>('GET', '/api/repos'),
   repo: (id: string) => request<Repo>('GET', `/api/repos/${id}`),

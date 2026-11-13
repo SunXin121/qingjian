@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 )
 
@@ -41,43 +40,8 @@ func (s *Server) requireClipperPassword(h http.HandlerFunc) http.Handler {
 	})
 }
 
-// Keep the existing cookie and origin guard, converting its errors to the extension envelope.
-type clipperAdminWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *clipperAdminWriter) WriteHeader(status int) {
-	w.status = status
-	if status < 400 {
-		w.ResponseWriter.WriteHeader(status)
-	}
-}
-func (w *clipperAdminWriter) Write(b []byte) (int, error) {
-	if w.status >= 400 {
-		var e struct {
-			Error json.RawMessage `json:"error"`
-		}
-		var message string
-		if json.Unmarshal(b, &e) == nil && json.Unmarshal(e.Error, &message) == nil {
-			clipError(w.ResponseWriter, w.status, "request_rejected", message)
-			return len(b), nil
-		}
-		w.ResponseWriter.WriteHeader(w.status)
-	}
-	return w.ResponseWriter.Write(b)
-}
-func (s *Server) clipperAdmin(h http.HandlerFunc) http.Handler {
-	guarded := s.requireAdmin(h)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		guarded.ServeHTTP(&clipperAdminWriter{ResponseWriter: w}, r)
-	})
-}
 func (s *Server) registerClipper(mux *http.ServeMux) {
-	a := s.clipperAdmin
 	b := s.requireClipperPassword
-	mux.Handle("GET /api/clipper/settings", a(s.clipperGetSettings))
-	mux.Handle("PUT /api/clipper/settings", a(s.clipperPutSettings))
 	mux.Handle("GET /api/v1/notebooks", b(s.clipperNotebooks))
 	mux.Handle("POST /api/v1/memos", b(s.clipperCreate))
 	mux.Handle("POST /api/v1/memos/with-image", b(s.clipperCreateImage))
@@ -87,7 +51,6 @@ func (s *Server) registerClipper(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/memos/{id}/edit-sessions", b(s.clipperEditSession))
 	mux.Handle("POST /api/v1/memos/{id}/save", b(s.clipperSave))
 	mux.Handle("GET /api/v1/resources/{id}/blob", b(s.clipperBlob))
-	mux.Handle("POST /api/v1/ai/video-outline/prepare", b(s.clipperPrepareAI))
 	mux.Handle("/api/v1/", b(func(w http.ResponseWriter, r *http.Request) {
 		clipError(w, 404, "not_found", "Unknown clipper endpoint")
 	}))

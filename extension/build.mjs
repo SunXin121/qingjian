@@ -1,7 +1,6 @@
 // Qingjian build for the directly adapted EdgeEver clipping sources.
 import './scripts/prepare.mjs'
 import { build as viteBuild, loadConfigFromFile, mergeConfig } from 'vite'
-import { build as bundle } from 'esbuild'
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -25,23 +24,9 @@ const config = mergeConfig(loaded.config, {
       return code.replaceAll('https://github.com/tianma-if/edgeever', 'https://github.com/sunxin121/qingjian')
         .replace('"https://edgeever.org/privacy"', 'chrome.runtime.getURL("privacy.html")')
     },
-    transformIndexHtml(html, context) {
-      return context.filename.endsWith('/popup.html')
-        ? html.replace('</body>', '<a href="legacy.html" style="display:block;padding:8px 16px;font-size:12px;text-align:center;color:#52675b">预览 / 整页 / 仅链接</a></body>')
-        : html
-    },
   }],
 })
 await viteBuild(config)
-
-// Retain the first version's preview-before-save, whole-page and bookmark modes.
-await bundle({ entryPoints: {
-  'legacy': join(here, 'src/popup.js'), 'legacy-background': join(here, 'src/background.js'), 'capture': join(here, 'src/capture.js'),
-}, outdir: out, bundle: true, format: 'iife', target: 'es2022', minify: true, legalComments: 'eof' })
-await writeFile(join(out, 'legacy.html'), (await readFile(join(here, 'popup.html'), 'utf8')).replace('src="popup.js"', 'src="legacy.js"'))
-await cp(join(here, 'popup.css'), join(out, 'popup.css'))
-const background = join(out, 'assets/background.js')
-await writeFile(background, `import "../legacy-background.js";\n${await readFile(background, 'utf8')}`)
 
 // Rebrand generated assets only: no upstream source, tests or marks are modified.
 const pkg = JSON.parse(await readFile(join(here, 'package.json'), 'utf8'))
