@@ -22,6 +22,8 @@ func clipError(w http.ResponseWriter, status int, code, message string) {
 }
 
 // Basic authentication uses the native admin password verifier and login limiter.
+// No WWW-Authenticate challenge is sent: it would make browsers prompt for and then cache
+// the credentials, which they attach to cross-site requests on their own.
 func (s *Server) requireClipperPassword(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, pw, basic := r.BasicAuth()
@@ -31,7 +33,6 @@ func (s *Server) requireClipperPassword(h http.HandlerFunc) http.Handler {
 			if basic && !blocked {
 				s.limiter.fail(ip)
 			}
-			w.Header().Set("WWW-Authenticate", `Basic realm="Qingjian", charset="UTF-8"`)
 			clipError(w, 401, "unauthorized", "The admin password is required")
 			return
 		}

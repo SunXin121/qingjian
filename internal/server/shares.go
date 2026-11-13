@@ -308,7 +308,7 @@ func (s *Server) shareAuthorized(r *http.Request, sh *Share) bool {
 }
 
 func (s *Server) shareAuth(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
+	if !s.sameOrigin(r) {
 		httpError(w, http.StatusForbidden, "跨站请求被拒绝")
 		return
 	}

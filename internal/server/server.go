@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -38,6 +39,7 @@ type Server struct {
 	secret        []byte
 	pwFingerprint []byte
 	storedHash    string
+	pwVerified    atomic.Pointer[[]byte] // keyed digest of the stored password once verified
 	limiter       *loginLimiter
 	blobMu        sync.Mutex // serialises blob creation against attachment cleanup
 	puml          pumlCache
@@ -61,6 +63,7 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 	}
 	s := &Server{cfg: cfg, db: db, filesDir: filesDir, static: static, limiter: newLoginLimiter(), stop: make(chan struct{}), indexDone: make(chan struct{})}
 	if err := s.initAuth(); err != nil {
+		db.Close()
 		return nil, err
 	}
 	if err := s.backfillLinks(); err != nil {
@@ -71,8 +74,11 @@ func New(cfg Config, static fs.FS) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
-	go s.housekeeping()
-	s.workers.Add(2)
+	s.workers.Add(3)
+	go func() {
+		defer s.workers.Done()
+		s.housekeeping()
+	}()
 	go func() {
 		defer s.workers.Done()
 		s.indexLoop()
@@ -283,6 +289,10 @@ func (s *Server) housekeeping() {
 				log.Printf("trash cleanup: purged %d items", n)
 			}
 		}
-		<-t.C
+		select {
+		case <-s.stop:
+			return
+		case <-t.C:
+		}
 	}
 }

@@ -15,13 +15,24 @@ const idAlphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
 // newID returns a 12-char random lowercase id (~62 bits).
 func newID() string { return randString(12) }
 
+// randString returns n characters drawn uniformly from idAlphabet. Bytes at or above
+// the largest multiple of the alphabet size are rejected, so no character is favoured.
 func randString(n int) string {
-	b := make([]byte, n)
-	rand.Read(b)
-	for i := range b {
-		b[i] = idAlphabet[int(b[i])%len(idAlphabet)]
+	const limit = 256 - 256%len(idAlphabet)
+	out := make([]byte, 0, n)
+	buf := make([]byte, n+n/4+1)
+	for len(out) < n {
+		rand.Read(buf)
+		for _, c := range buf {
+			if int(c) < limit {
+				out = append(out, idAlphabet[int(c)%len(idAlphabet)])
+				if len(out) == n {
+					break
+				}
+			}
+		}
 	}
-	return string(b)
+	return string(out)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

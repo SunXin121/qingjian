@@ -106,7 +106,19 @@ func (s *Server) checkPassword(pw string) bool {
 		b := sha256.Sum256([]byte(s.cfg.AdminPassword))
 		return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 	}
-	return verifyHash(pw, s.storedHash)
+	// PBKDF2 is deliberately slow, and the clipper sends the password with every request:
+	// remember a keyed digest of the last password that verified and compare against it.
+	m := hmac.New(sha256.New, s.secret)
+	m.Write([]byte(pw))
+	digest := m.Sum(nil)
+	if known := s.pwVerified.Load(); known != nil && hmac.Equal(*known, digest) {
+		return true
+	}
+	if !verifyHash(pw, s.storedHash) {
+		return false
+	}
+	s.pwVerified.Store(&digest)
+	return true
 }
 
 // Session token: base64(expiryUnix).base64(hmac(secret, fingerprint|expiry))
@@ -162,7 +174,8 @@ func (s *Server) clientIP(r *http.Request) string {
 }
 
 // sameOrigin rejects cross-site state-changing requests (defence in depth on top of SameSite=Lax).
-func sameOrigin(r *http.Request) bool {
+// X-Forwarded-Host is only believed behind a trusted proxy, like the other forwarded headers.
+func (s *Server) sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
@@ -172,7 +185,7 @@ func sameOrigin(r *http.Request) bool {
 		return false
 	}
 	host := r.Host
-	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+	if fh := r.Header.Get("X-Forwarded-Host"); s.cfg.TrustProxy && fh != "" {
 		host = fh
 	}
 	return strings.EqualFold(u.Host, host)
@@ -184,7 +197,7 @@ func (s *Server) requireAdmin(h http.HandlerFunc) http.Handler {
 			httpError(w, http.StatusUnauthorized, "未登录")
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && !sameOrigin(r) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && !s.sameOrigin(r) {
 			httpError(w, http.StatusForbidden, "跨站请求被拒绝")
 			return
 		}
@@ -253,7 +266,7 @@ func (l *loginLimiter) reset(ip string) {
 // ---- handlers ----
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
+	if !s.sameOrigin(r) {
 		httpError(w, http.StatusForbidden, "跨站请求被拒绝")
 		return
 	}
@@ -290,7 +303,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.isSecure(r), SameSite: http.SameSiteLaxMode})
 	ok(w)
 }
 
