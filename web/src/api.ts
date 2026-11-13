@@ -1,3 +1,4 @@
+import { emitAppEvent } from './events'
 import type { HistoryEntry, Op, TableData } from './table/types'
 
 export interface Repo {
@@ -242,7 +243,7 @@ export const api = {
   renameNode: async (id: string, title: string, prev?: { type: NodeType; title: string }) => {
     const n = await request<TreeNode>('PATCH', `/api/nodes/${id}`, { title })
     if (prev && prev.title !== n.title)
-      window.dispatchEvent(new CustomEvent<NodeRenamed>('qj-node-renamed', { detail: { id, type: prev.type, from: prev.title, to: n.title } }))
+      emitAppEvent('qj-node-renamed', { id, type: prev.type, from: prev.title, to: n.title })
     return n
   },
   moveNode: (id: string, parent_id: string | null, sort: number) =>
@@ -297,7 +298,7 @@ export const shareApi = {
   auth: (token: string, password: string) => request('POST', `/api/s/${token}/auth`, { password }),
   tree: (token: string) => request<PublicNode[]>('GET', `/api/s/${token}/tree`),
   doc: (token: string, id: string) => request<PublicDoc>('GET', `/api/s/${token}/docs/${id}`),
-  table: (token: string, id: string) => request<TableData>('GET', `/api/s/${token}/tables/${id}`),
+  table: (token: string, id: string, viewId?: string) => request<TableData>('GET', `/api/s/${token}/tables/${id}${viewId ? `?view=${encodeURIComponent(viewId)}` : ''}`),
 }
 
 /** Renders PlantUML through the server (inside a share link: through the share). */

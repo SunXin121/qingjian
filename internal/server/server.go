@@ -282,6 +282,11 @@ func (s *Server) housekeeping() {
 	t := time.NewTicker(6 * time.Hour)
 	defer t.Stop()
 	for {
+		select {
+		case <-s.stop:
+			return
+		default:
+		}
 		if s.cfg.TrashDays > 0 {
 			if n, err := s.purgeExpiredTrash(time.Duration(s.cfg.TrashDays) * 24 * time.Hour); err != nil {
 				log.Printf("trash cleanup: %v", err)

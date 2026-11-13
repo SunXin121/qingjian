@@ -82,7 +82,7 @@ func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.db.Query(q+` ORDER BY s.created_at DESC`, args...)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -90,10 +90,14 @@ func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		sh, err := scanShare(rows)
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		out = append(out, sh)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -137,7 +141,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	if in.Password != "" {
 		h, err := hashPassword(in.Password)
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		hash = h
@@ -149,12 +153,12 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.db.Exec(`INSERT INTO shares(token, target_type, target_id, view_id, password_hash, expires_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)`,
 		token, in.TargetType, in.TargetID, in.ViewID, hash, in.ExpiresAt, t, t); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	sh, err := s.loadShare(token)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, sh)
@@ -185,7 +189,7 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 		if pw != "" {
 			h, err := hashPassword(pw)
 			if err != nil {
-				serverError(w, err)
+				serverError(w, r, err)
 				return
 			}
 			hash = h
@@ -222,13 +226,13 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 	if len(sets) > 0 {
 		sets, args = append(sets, "updated_at = ?"), append(args, now())
 		if _, err := s.db.Exec(`UPDATE shares SET `+strings.Join(sets, ", ")+` WHERE token = ?`, append(args, token)...); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 	}
 	sh, err := s.loadShare(token)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, sh)
@@ -240,7 +244,7 @@ func (s *Server) regenerateShare(w http.ResponseWriter, r *http.Request) {
 	next := randString(22)
 	res, err := s.db.Exec(`UPDATE shares SET token = ?, updated_at = ? WHERE token = ?`, next, now(), token)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -249,7 +253,7 @@ func (s *Server) regenerateShare(w http.ResponseWriter, r *http.Request) {
 	}
 	sh, err := s.loadShare(next)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, sh)
@@ -257,7 +261,7 @@ func (s *Server) regenerateShare(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteShare(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.db.Exec(`DELETE FROM shares WHERE token = ?`, r.PathValue("token")); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	ok(w)
@@ -270,6 +274,10 @@ func (s *Server) deleteShare(w http.ResponseWriter, r *http.Request) {
 func (s *Server) activeShare(w http.ResponseWriter, r *http.Request, requireAuth bool) *Share {
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	sh, err := s.loadShare(r.PathValue("token"))
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		serverError(w, r, err)
+		return nil
+	}
 	if err != nil || !sh.Enabled || !sh.TargetAlive {
 		httpError(w, http.StatusNotFound, "链接不存在或已被关闭")
 		return nil
@@ -396,7 +404,7 @@ func (s *Server) shareTree(w http.ResponseWriter, r *http.Request) {
 	}
 	nodes, err := s.treeNodes(sh.RepoID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	if folder {
@@ -475,7 +483,7 @@ func (s *Server) shareDoc(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusNotFound, "文档不存在")
 		return
 	} else if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": d.ID, "title": d.Title, "markdown": d.Markdown, "updated_at": d.ContentUpdatedAt})
@@ -490,29 +498,42 @@ func (s *Server) shareTable(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	t, err := s.loadTableData(s.db, id)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && !s.shareCoversTable(sh, &t.Node)) {
+	if errors.Is(err, sql.ErrNoRows) {
 		httpError(w, http.StatusNotFound, "表格不存在")
 		return
 	} else if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
-	// a link to one view of the table exposes only that view
-	if sh.TargetType == "node" && sh.TargetID == id && sh.ViewID != nil {
-		for _, v := range t.Views {
-			if v.ID == *sh.ViewID {
-				t.Views = []View{v}
-				break
-			}
+	viewID, restricted, err := s.sharedTableView(sh, t, r.URL.Query().Get("view"))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpError(w, http.StatusNotFound, "表格不存在")
+		} else if errors.Is(err, errShareView) {
+			httpError(w, http.StatusUnprocessableEntity, errShareView.Error())
+		} else {
+			serverError(w, r, err)
 		}
-		if len(t.Views) > 1 {
-			t.Views = t.Views[:1]
+		return
+	}
+	if restricted {
+		if err := restrictShareView(t, viewID); err != nil {
+			httpError(w, http.StatusUnprocessableEntity, errShareView.Error())
+			return
 		}
 	}
 	out := map[string]any{"id": t.ID, "title": t.Title, "updated_at": t.UpdatedAt,
 		"fields": t.Fields, "views": t.Views, "records": t.Records}
 	// linked tables: only the fields and records the computed fields read
 	if linked := s.linkedTables(s.db, t); len(linked) > 0 {
+		if err := s.restrictLinkedShare(sh, linked); err != nil {
+			if errors.Is(err, errShareView) {
+				httpError(w, http.StatusUnprocessableEntity, errShareView.Error())
+			} else {
+				serverError(w, r, err)
+			}
+			return
+		}
 		trimLinked(t, linked)
 		lite := map[string]any{}
 		for id, lt := range linked {
@@ -522,30 +543,4 @@ func (s *Server) shareTable(w http.ResponseWriter, r *http.Request) {
 		out["linked"] = lite
 	}
 	writeJSON(w, http.StatusOK, out)
-}
-
-func (s *Server) shareCoversTable(sh *Share, n *Node) bool {
-	if s.shareCovers(sh, n.ID) {
-		return true
-	}
-	// embedded in a document the share exposes
-	cond, args := shareScope(sh)
-	rows, err := s.db.Query(`SELECT d.markdown FROM doc_contents d JOIN nodes n ON n.id = d.node_id
-WHERE n.deleted_at IS NULL AND d.markdown LIKE ? AND `+cond, append([]any{"%" + n.ID + "%"}, args...)...)
-	if err != nil {
-		return false
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var md string
-		if rows.Scan(&md) != nil {
-			return false
-		}
-		for _, ref := range embeddedTables(md) {
-			if ref.Table == n.ID {
-				return true
-			}
-		}
-	}
-	return false
 }

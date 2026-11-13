@@ -261,7 +261,7 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	nodes, err := s.treeNodes(repo.ID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	children := map[string][]Node{}

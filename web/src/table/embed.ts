@@ -14,7 +14,7 @@ export interface EmbedRef {
   view?: string
 }
 
-type Fetcher = (id: string) => Promise<TableData>
+type Fetcher = (id: string, viewId?: string) => Promise<TableData>
 type LinkFn = (t: TableData, viewId: string) => string | null
 
 let fetcher: Fetcher = (id) => api.table(id)
@@ -31,12 +31,15 @@ export function resetEmbedSource() {
 }
 
 const cache = new Map<string, { at: number; p: Promise<TableData> }>()
-function load(id: string) {
-  const hit = cache.get(id)
+function load(id: string, viewId?: string) {
+  const key = `${id}:${viewId ?? ''}`
+  const hit = cache.get(key)
   if (hit && Date.now() - hit.at < 8000) return hit.p
-  const p = fetcher(id)
-  cache.set(id, { at: Date.now(), p })
-  p.catch(() => cache.delete(id))
+  const p = fetcher(id, viewId)
+  cache.set(key, { at: Date.now(), p })
+  p.catch(() => {
+    if (cache.get(key)?.p === p) cache.delete(key)
+  })
   return p
 }
 
@@ -160,14 +163,16 @@ const hint = (text: string) => `<div class="ink-preview-hint">${esc(text)}</div>
 export function renderTableEmbed(content: string, apply: (v: string) => void): string | undefined {
   const ref = parseEmbed(content)
   if (!ref.table) return hint('未选择表格')
-  load(ref.table)
+  load(ref.table, ref.view)
     .then((t) => apply(embedHTML(t, ref.view)))
     .catch((e) => apply(hint(e?.status === 404 ? '表格不存在或已被删除' : '表格加载失败：' + (e?.message ?? e))))
   return undefined
 }
 
 export function invalidateEmbed(id: string) {
-  cache.delete(id)
+  for (const key of cache.keys()) {
+    if (key.startsWith(`${id}:`)) cache.delete(key)
+  }
 }
 
 export type { TableSummary }

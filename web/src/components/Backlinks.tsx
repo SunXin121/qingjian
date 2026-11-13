@@ -1,3 +1,4 @@
+import { emitAppEvent } from '../events'
 import { useEffect, useState, type MouseEvent } from 'react'
 import { api, formatTime, type Backlink } from '../api'
 import { IconDoc, IconLink } from './icons'
@@ -29,7 +30,7 @@ export function BacklinkList({ list, repoId, onOpen }: { list: Backlink[]; repoI
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return
     e.preventDefault()
     onOpen?.()
-    window.dispatchEvent(new CustomEvent('qj-nav', { detail: path }))
+    emitAppEvent('qj-nav', path)
   }
   return (
     <div className="flex flex-col gap-1.5">

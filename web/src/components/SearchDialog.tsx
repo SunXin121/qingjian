@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { api, formatTime, nodePath, type SearchHit } from '../api'
-import { nodeTitle, useStore } from '../store'
+import { nodeTitle, useStore, useStoreUI } from '../store'
 import { isDark, setThemeMode } from '../theme'
 import { IconDoc, IconHome, IconLibrary, IconMoon, IconSearch, IconSettings, IconShare, IconSun, IconTable, IconTrash } from './icons'
 import { cn, Kbd, Spinner } from './ui'
@@ -35,7 +35,8 @@ function Snippet({ text }: { text: string }) {
 }
 
 export default function SearchDialog() {
-  const { searchOpen, setSearchOpen, repos } = useStore()
+  const { setSearchOpen, repos } = useStore()
+  const { searchOpen } = useStoreUI()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [recent, setRecent] = useState<SearchHit[]>([])

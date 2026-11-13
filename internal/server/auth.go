@@ -181,14 +181,18 @@ func (s *Server) sameOrigin(r *http.Request) bool {
 		return true
 	}
 	u, err := url.Parse(origin)
-	if err != nil {
+	if err != nil || u.User != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 		return false
 	}
 	host := r.Host
 	if fh := r.Header.Get("X-Forwarded-Host"); s.cfg.TrustProxy && fh != "" {
 		host = fh
 	}
-	return strings.EqualFold(u.Host, host)
+	scheme := "http"
+	if s.isSecure(r) {
+		scheme = "https"
+	}
+	return u.Scheme == scheme && strings.EqualFold(u.Host, host)
 }
 
 func (s *Server) requireAdmin(h http.HandlerFunc) http.Handler {

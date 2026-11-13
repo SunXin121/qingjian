@@ -106,7 +106,7 @@ func fileSize(p string) int64 {
 func (s *Server) storageStats(w http.ResponseWriter, r *http.Request) {
 	plan, err := s.planCleanup()
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	blobs := map[string]int64{}
@@ -124,7 +124,7 @@ func (s *Server) storageStats(w http.ResponseWriter, r *http.Request) {
 	}
 	var docs, versions int
 	if err := s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM doc_contents), (SELECT COUNT(*) FROM doc_versions)`).Scan(&docs, &versions); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	dbPath := filepath.Join(s.cfg.DataDir, "qingjian.db")
@@ -183,7 +183,7 @@ func (s *Server) cleanupAttachments() (removed int, freed int64, err error) {
 func (s *Server) cleanupFiles(w http.ResponseWriter, r *http.Request) {
 	removed, freed, err := s.cleanupAttachments()
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"removed": removed, "freed_bytes": freed})

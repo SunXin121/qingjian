@@ -35,7 +35,7 @@ SELECT r.id, r.name, r.description, r.icon, r.sort, r.created_at, r.updated_at,
   (SELECT COUNT(*) FROM nodes n WHERE n.repo_id = r.id AND n.type = 'doc' AND n.deleted_at IS NULL)
 FROM repos r WHERE r.deleted_at IS NULL ORDER BY r.sort, r.created_at`)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -43,10 +43,14 @@ FROM repos r WHERE r.deleted_at IS NULL ORDER BY r.sort, r.created_at`)
 	for rows.Next() {
 		var x Repo
 		if err := rows.Scan(&x.ID, &x.Name, &x.Description, &x.Icon, &x.Sort, &x.CreatedAt, &x.UpdatedAt, &x.DocCount); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		out = append(out, x)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -67,7 +71,7 @@ func (s *Server) getRepo(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusNotFound, "知识库不存在")
 		return
 	} else if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, x)
@@ -97,7 +101,7 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 VALUES(?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM repos), ?, ?) RETURNING sort`,
 		x.ID, x.Name, x.Description, x.Icon, x.CreatedAt, x.UpdatedAt).Scan(&x.Sort)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, x)
@@ -126,7 +130,7 @@ func (s *Server) updateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	x.UpdatedAt = now()
 	if _, err := s.db.Exec(`UPDATE repos SET name=?, description=?, icon=?, updated_at=? WHERE id=?`, x.Name, x.Description, x.Icon, x.UpdatedAt, id); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, x)
@@ -135,7 +139,7 @@ func (s *Server) updateRepo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	res, err := s.db.Exec(`UPDATE repos SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`, now(), r.PathValue("id"))
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -148,7 +152,7 @@ func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) repoTree(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.treeNodes(r.PathValue("id"))
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, nodes)

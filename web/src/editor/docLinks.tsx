@@ -1,3 +1,4 @@
+import { emitAppEvent } from '../events'
 // Links between documents (双链). Typing `[[` (or `【【`) opens a picker of documents and
 // tables; the pick is inserted as an ordinary markdown link to the node's page, so the
 // markdown stays portable and the server can index it for backlinks (links.go).
@@ -86,7 +87,7 @@ async function createDoc(title: string): Promise<NodeRef> {
   let parent: string | null = null
   if (page.doc) parent = (await api.doc(page.doc).catch(() => null))?.parent_id ?? null
   const n = await api.createNode(page.repo, parent, 'doc', title)
-  window.dispatchEvent(new CustomEvent('qj-tree-changed', { detail: page.repo }))
+  emitAppEvent('qj-tree-changed', page.repo)
   return { id: n.id, repo_id: n.repo_id, repo_name: '', type: 'doc', title: n.title, updated_at: n.updated_at }
 }
 

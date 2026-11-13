@@ -75,6 +75,9 @@ func (s *Server) backfillLinks() error {
 		docs = append(docs, d)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	for _, d := range docs {
 		if err := updateLinks(tx, d.id, d.md); err != nil {
 			return err
@@ -113,7 +116,7 @@ JOIN doc_contents c ON c.node_id = n.id
 WHERE l.dst = ? AND n.deleted_at IS NULL AND rp.deleted_at IS NULL
 ORDER BY n.updated_at DESC LIMIT 500`, id)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -122,11 +125,15 @@ ORDER BY n.updated_at DESC LIMIT 500`, id)
 		var b Backlink
 		var md string
 		if err := rows.Scan(&b.ID, &b.RepoID, &b.RepoName, &b.Title, &b.UpdatedAt, &md); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		b.Snippet = linkSnippet(md, id)
 		out = append(out, b)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -190,7 +197,7 @@ WHERE n.type IN ('doc', 'table') AND n.deleted_at IS NULL AND rp.deleted_at IS N
   AND lower(n.title) LIKE ? ESCAPE '\'
 ORDER BY (lower(n.title) LIKE ? ESCAPE '\') DESC, n.updated_at DESC LIMIT 30`, "%"+esc+"%", esc+"%")
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -198,10 +205,14 @@ ORDER BY (lower(n.title) LIKE ? ESCAPE '\') DESC, n.updated_at DESC LIMIT 30`, "
 	for rows.Next() {
 		var n NodeRef
 		if err := rows.Scan(&n.ID, &n.RepoID, &n.RepoName, &n.Type, &n.Title, &n.UpdatedAt); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -261,6 +272,9 @@ JOIN nodes n ON n.id = l.src JOIN doc_contents c ON c.node_id = n.id WHERE l.dst
 		}
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	t := now()
 	for _, d := range changed {
 		if _, err := tx.Exec(`UPDATE doc_contents SET markdown = ? WHERE node_id = ?`, d.md, d.id); err != nil {

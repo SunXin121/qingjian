@@ -1,3 +1,4 @@
+import { emitAppEvent, onAppEvent } from './events'
 import { ensureOnlineFont } from './fontLoader'
 import { DEFAULT_TYPOGRAPHY, normalizeTypography, proseFontStack, PROSE_WIDTHS, type Typography } from './typography'
 export { PROSE_WIDTHS } from './typography'
@@ -119,8 +120,8 @@ function apply() {
   meta.content = THEME_COLOR[theme][a.background]
   document.head.appendChild(meta)
   // drawings, diagrams and the table grid repaint for the new colours
-  window.dispatchEvent(new Event('qj-theme'))
-  if (themeChanged) window.dispatchEvent(new Event('qj-theme-mode'))
+  emitAppEvent('qj-theme')
+  if (themeChanged) emitAppEvent('qj-theme-mode')
 }
 
 export function setThemeMode(mode: ThemeMode) {
@@ -144,14 +145,12 @@ export function setAppearance(patch: Partial<Appearance>) {
 
 /** Calls `fn` when light / dark flips (not on accent or background changes). */
 export function onThemeModeChange(fn: () => void) {
-  window.addEventListener('qj-theme-mode', fn)
-  return () => window.removeEventListener('qj-theme-mode', fn)
+  return onAppEvent('qj-theme-mode', fn)
 }
 
 /** Calls `fn` whenever the theme, accent or background changes; returns the unsubscribe function. */
 export function onThemeChange(fn: () => void) {
-  window.addEventListener('qj-theme', fn)
-  return () => window.removeEventListener('qj-theme', fn)
+  return onAppEvent('qj-theme', fn)
 }
 
 export function initTheme() {

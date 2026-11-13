@@ -34,6 +34,8 @@ export default function ExcalidrawModal({ content, onSave, onClose }: Props) {
   // (Excalidraw fires onChange several times while mounting, so counting calls is unreliable)
   const baseline = useRef<string | null>(null)
   const dirty = useRef(false)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     let alive = true
@@ -54,8 +56,9 @@ export default function ExcalidrawModal({ content, onSave, onClose }: Props) {
         setMod(m)
       })
       .catch((e) => {
+        if (!alive) return
         toast('画板加载失败：' + e.message)
-        onClose()
+        onCloseRef.current()
       })
     return () => {
       alive = false

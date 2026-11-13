@@ -151,19 +151,24 @@ PlantUML 依赖 Java，体积较大，所以默认不启用。需要时在 `dock
 
 ## 开发
 
-需要 Go 1.26+ 和 Node 20+。
+需要 Go 1.26+ 和 Node.js 22.18+（CI 使用 Node 22）。Web 使用 npm 和 `web/package-lock.json`；剪藏扩展使用 Bun 1.4.4 和 `extension/bun.lock`，以应用上游补丁，不能用 npm 替换扩展的安装步骤。
 
 ```bash
-cd web && npm install && cd ..
+cd web && npm ci && cd ..
 make dev-server     # 终端 1：后端 :8080（默认密码 dev）
 make dev-web        # 终端 2：前端 :5173，接口代理到 :8080
 make build          # 生成 bin/qingjian（已内嵌前端）
-go test ./...       # 后端测试
-cd web && npm test  # 前端单元测试（公式、计算字段）
-npm run lint        # ESLint
+make test           # 后端与前端单元测试，不扫描 node_modules 中的 Go 包
+make lint           # gofmt、go vet、TypeScript、ESLint（不允许警告）
 ```
 
 推送到 `main` 或提交 PR 时，GitHub Actions（`.github/workflows/ci.yml`）会运行 gofmt / go vet / go test，以及前端的 lint、单元测试和构建。
+
+Web 当前使用 TypeScript 5.9 / React 19.3，扩展使用 TypeScript 6 / React 19.2；两个独立构建保留各自锁文件，升级时分别验证。`lodash` 和 `react-responsive-carousel` 是 Glide Data Grid 的 peer 依赖，即使业务代码没有直接导入也需要保留。
+
+Web 直接依赖 Mermaid 12，Excalidraw 的转换库声明依赖 Mermaid 11；在转换库支持新主版本并完成转换回归前不强制覆盖。单二进制包含编辑器、字体与图形库资源，产物大小随这些资源增长；“单二进制”描述部署方式，不表示前端资源体积很小。
+
+CSS 逐组件迁移顺序、模块拆分与依赖升级的后续工作见 [维护约定](docs/maintenance.md)。
 
 ## 目录结构
 
@@ -183,7 +188,12 @@ docs/PRD.md          需求文档
 
 - 除登录、健康检查和分享页接口外，所有接口都需要登录；写操作还会校验 Origin，防止跨站请求。
 - 分享链接使用 22 位随机 token；分享接口只返回该分享范围内的文档，密码用 PBKDF2 存储，验证失败同样受登录限流保护。
+- 限定视图分享和分享文档中嵌入的表格在服务端筛选记录、删除隐藏字段；主字段与编辑器一致始终可见。普通字段筛选支持 AND / OR、文本、数字、选项、日期、复选框及附件名。表达式和计算字段筛选尚未在服务端实现，遇到这些条件返回 422，分享者需要改用普通字段筛选；删除被分享的视图也会停止返回数据，不会回退到整表。相对日期按服务端时区计算。整个表格、知识库或文件夹分享仍按其完整授权范围返回数据。
 - 附件通过 20 位随机 ID 访问，响应带有 `CSP: sandbox` 和 `nosniff`，上传的 SVG 或 HTML 无法执行脚本。
 - 附件链接本身就是访问凭证（知道链接即可访问），不要把附件链接公开发布。关闭或删除分享后，访客已经拿到的附件链接仍然可以访问，直到附件被清理。
 - 应用页面带有 Content-Security-Policy：脚本只允许来自本站（不允许内联脚本），只允许嵌入 draw.io 编辑器的页面；图片和媒体不限来源，因为文档里可以引用外部图片。
 - 登录限流按 IP 计数。在反向代理后面（`QINGJIAN_TRUST_PROXY=1`）使用 `X-Forwarded-For` 的最后一段，也就是代理自己看到的地址；如果前面有多层代理，请让最外层之后的代理覆盖而不是追加这个头。
+
+## 许可证
+
+剪藏扩展的上游源码及修改遵循 AGPL-3.0-only，见 `extension/vendor/edgeever/LICENSE` 和 `extension/MODIFICATIONS.md`。根项目目前尚未声明许可证；扩展的许可证不自动成为其余代码的授权声明，发布根项目许可证前需要由版权人确定授权方式。

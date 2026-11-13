@@ -91,6 +91,9 @@ func (s *Server) loadTableData(q querier, id string) (*TableData, error) {
 		t.Fields = append(t.Fields, f)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	rows, err = q.Query(`SELECT id, name, type, config, sort FROM bt_views WHERE table_node_id = ? ORDER BY sort, rowid`, id)
 	if err != nil {
 		return nil, err
@@ -106,6 +109,9 @@ func (s *Server) loadTableData(q querier, id string) (*TableData, error) {
 		t.Views = append(t.Views, v)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	rows, err = q.Query(`SELECT id, seq, data, sort, created_at, updated_at FROM bt_records WHERE table_node_id = ? ORDER BY sort, seq`, id)
 	if err != nil {
 		return nil, err
@@ -160,7 +166,7 @@ func (s *Server) getTable(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusNotFound, "表格不存在")
 		return
 	} else if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	if linked := s.linkedTables(s.db, t); len(linked) > 0 {
@@ -188,7 +194,7 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`SELECT n.id, n.title, n.repo_id, r.name FROM nodes n JOIN repos r ON r.id = n.repo_id
 WHERE n.type = 'table' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY n.updated_at DESC`)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	out := []*tableSummary{}
@@ -197,7 +203,7 @@ WHERE n.type = 'table' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER B
 		t := &tableSummary{Views: []viewSummary{}}
 		if err := rows.Scan(&t.ID, &t.Title, &t.RepoID, &t.RepoName); err != nil {
 			rows.Close()
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		out = append(out, t)
@@ -205,7 +211,7 @@ WHERE n.type = 'table' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER B
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	err = scanRows(s.db, func(rows *sql.Rows) error {
@@ -220,7 +226,7 @@ WHERE n.type = 'table' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER B
 		return nil
 	}, `SELECT table_node_id, id, name, type FROM bt_views ORDER BY sort, rowid`)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -285,8 +291,11 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWri
 	}
 	// the field as it was (for link pairing)
 	// (empty when the field does not exist)
-	oldField := func() (typ, opts string) {
-		tx.QueryRow(`SELECT type, options FROM bt_fields WHERE id = ? AND table_node_id = ?`, op.ID, tableID).Scan(&typ, &opts)
+	oldField := func() (typ, opts string, err error) {
+		err = tx.QueryRow(`SELECT type, options FROM bt_fields WHERE id = ? AND table_node_id = ?`, op.ID, tableID).Scan(&typ, &opts)
+		if err == sql.ErrNoRows {
+			err = nil
+		}
 		return
 	}
 	switch op.Op {
@@ -307,7 +316,11 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWri
 			op.ID, tableID, nonEmpty(str(op.Name), "字段"), *op.Type, opts, sort())
 	case "field.update":
 		sets, args := []string{}, []any{}
-		oldType, oldOpts := oldField()
+		var oldType, oldOpts string
+		oldType, oldOpts, err = oldField()
+		if err != nil {
+			return err
+		}
 		newType := oldType
 		if op.Type != nil {
 			newType = *op.Type
@@ -364,7 +377,11 @@ FROM bt_fields WHERE table_node_id = ?1`, tableID).Scan(&n, &primary); err != ni
 		if primary == op.ID || n <= 1 {
 			return opError{"不能删除主字段"}
 		}
-		if typ, opts := oldField(); typ == "link" {
+		typ, opts, readErr := oldField()
+		if readErr != nil {
+			return readErr
+		}
+		if typ == "link" {
 			if err := l.unpair(op.ID, opts); err != nil {
 				return err
 			}
@@ -541,7 +558,7 @@ func (s *Server) tableOps(w http.ResponseWriter, r *http.Request) {
 		return touchRepo(tx, n.RepoID, t)
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"updated_at": t})

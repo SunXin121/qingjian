@@ -1,3 +1,4 @@
+import { onAppEvent } from '../events'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError, formatTime, shareApi, type PublicDoc, type PublicNode, type ShareInfo } from '../api'
@@ -25,7 +26,7 @@ export default function SharePage() {
   // tables embedded in shared docs are read through the share
   useEffect(() => {
     setEmbedSource(
-      (id) => shareApi.table(token, id),
+      (id, viewId) => shareApi.table(token, id, viewId),
       () => null,
     )
   }, [token])
@@ -236,12 +237,10 @@ function SharedRepo({ token, info }: { token: string; info: ShareInfo }) {
   // tables of the shared repo open inside the share
   useEffect(() => {
     setEmbedSource(
-      (id) => shareApi.table(token, id),
+      (id, viewId) => shareApi.table(token, id, viewId),
       (t, view) => (ids.has(t.id) ? `${base}/${t.id}?view=${view}` : null),
     )
-    const onNav = (e: Event) => navigate((e as CustomEvent<string>).detail)
-    window.addEventListener('qj-nav', onNav)
-    return () => window.removeEventListener('qj-nav', onNav)
+    return onAppEvent('qj-nav', (path) => navigate(path))
   }, [token, ids, base, navigate])
 
   const toggle = (id: string) => {

@@ -161,6 +161,10 @@ func (s *Server) compactVersions() {
 		nodes = append(nodes, id)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		log.Printf("compact versions: %v", err)
+		return
+	}
 	var saved int64
 	for _, n := range nodes {
 		select {
@@ -175,7 +179,9 @@ func (s *Server) compactVersions() {
 		}
 		saved += x
 	}
-	s.setSetting("versions_compacted", "1")
+	if err := s.setSetting("versions_compacted", "1"); err != nil {
+		log.Printf("compact versions: %v", err)
+	}
 	if saved > 0 {
 		log.Printf("history: stored %d MB less by keeping versions as deltas", saved>>20)
 	}

@@ -48,7 +48,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		hits, err = s.searchLike(q)
 	}
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	if hits != nil {

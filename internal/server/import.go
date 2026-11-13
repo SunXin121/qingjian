@@ -666,7 +666,7 @@ func (s *Server) importDocs(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpDir, err := os.MkdirTemp(filepath.Join(s.filesDir, "tmp"), "import-*")
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -800,7 +800,7 @@ func (s *Server) importDocs(w http.ResponseWriter, r *http.Request) {
 		return touchRepo(tx, repoID, t)
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusCreated, res)

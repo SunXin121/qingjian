@@ -12,7 +12,8 @@ import { Plugin, PluginKey, TextSelection, type Transaction } from '@milkdown/ki
 import type { EditorView } from '@milkdown/kit/prose/view'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import { $prose, $remark } from '@milkdown/kit/utils'
-import { uploadFile, type NodeRenamed } from '../api'
+import { uploadFile } from '../api'
+import { emitAppEvent, onAppEvent } from '../events'
 import { toast } from '../components/dialog'
 import { calloutPlugin, insertCallout, normalizeCalloutMarkdown } from './callout'
 import { docLinkTrigger, followRename, nodeLinkPath, openDocLinkPicker } from './docLinks'
@@ -505,7 +506,8 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       onReady?.({ getMarkdown })
     })
     // typing, pasting, dropping, finding (Ctrl+F) or printing work on the whole document
-    const flushEvents = ['keydown', 'paste', 'drop', 'beforeprint', 'qj-editor-flush']
+    const flushEvents = ['keydown', 'paste', 'drop', 'beforeprint']
+    const offFlush = pending.length ? onAppEvent('qj-editor-flush', flushPending) : () => {}
     if (pending.length) for (const t of flushEvents) window.addEventListener(t, flushPending, true)
 
     // click on a drawing preview opens the board editor
@@ -514,7 +516,8 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       const nav = (e.target as Element).closest?.('a[data-qj-nav]')
       if (nav) {
         e.preventDefault()
-        window.dispatchEvent(new CustomEvent('qj-nav', { detail: nav.getAttribute('href') }))
+        const href = nav.getAttribute('href')
+        if (href) emitAppEvent('qj-nav', href)
         return
       }
       if (crepe.readonly) return
@@ -524,7 +527,7 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
       if (path) {
         e.preventDefault()
         if (e.ctrlKey || e.metaKey) window.open(path, '_blank')
-        else window.dispatchEvent(new CustomEvent('qj-nav', { detail: path }))
+        else emitAppEvent('qj-nav', path)
         return
       }
       const el = (e.target as Element).closest?.('[data-ink-drawing]')
@@ -537,22 +540,23 @@ export default function Editor({ value, readonly, onChange, onReady }: Props) {
     root.addEventListener('click', onClick)
 
     // a linked document / table was renamed: links still showing its old title follow
-    const onRenamed = (e: Event) => {
+    const offRenamed = onAppEvent('qj-node-renamed', (detail) => {
       if (crepe.readonly || destroyed) return
       created.then(() => {
+        if (destroyed) return
         flushPending() // links further down follow too
-        crepe.editor.action((ctx) => followRename(ctx.get(editorViewCtx), (e as CustomEvent<NodeRenamed>).detail))
+        crepe.editor.action((ctx) => followRename(ctx.get(editorViewCtx), detail))
       })
-    }
-    window.addEventListener('qj-node-renamed', onRenamed)
+    })
 
     return () => {
       destroyed = true
       clearTimeout(pieceTimer)
       for (const t of flushEvents) window.removeEventListener(t, flushPending, true)
+      offFlush()
       offFocus()
       root.removeEventListener('click', onClick)
-      window.removeEventListener('qj-node-renamed', onRenamed)
+      offRenamed()
       crepeRef.current = null
       created.finally(() => crepe.destroy())
     }

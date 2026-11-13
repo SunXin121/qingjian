@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { api, ApiError, formatTime, type Doc } from '../api'
 import { confirmDialog, Modal, ModalActions, ModalBody, mount, openMenu, toast } from '../components/dialog'
@@ -21,6 +21,10 @@ type Status = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict'
 
 export default function DocPage() {
   const { repoId, docId } = useParams() as { repoId: string; docId: string }
+  return <DocPageInstance key={docId} repoId={repoId} docId={docId} />
+}
+
+function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
   const { patchNode, repos, loadTree } = useStore()
   const navigate = useNavigate()
   const [doc, setDoc] = useState<Doc | null>(null)
@@ -51,11 +55,31 @@ export default function DocPage() {
   const saving = useRef<Promise<void> | null>(null)
   const timer = useRef<number>(0)
   const titleEl = useRef<HTMLTextAreaElement>(null)
+  const active = useRef(true)
+  const loadRequest = useRef(0)
+  const deleted = useRef(false)
+
+  // Freeze the current editor before its passive cleanup destroys the view. A save
+  // already in flight must read this snapshot after it finishes, never a dead editor.
+  useLayoutEffect(() => {
+    active.current = true
+    return () => {
+      active.current = false
+      if (deleted.current) return
+      const markdown = getMd.current()
+      md.current = markdown
+      getMd.current = () => markdown
+      if (markdown !== savedMd.current || titleRef.current !== savedTitle.current) dirty.current = true
+    }
+  }, [])
 
   const load = useCallback(async () => {
+    if (!active.current) return
+    const request = ++loadRequest.current
     setError('')
     try {
       const d = await api.doc(docId)
+      if (!active.current || request !== loadRequest.current) return
       setDoc(d)
       setTitle(d.title)
       titleRef.current = d.title
@@ -71,6 +95,7 @@ export default function DocPage() {
       setStats(d.markdown)
       setMountKey((k) => k + 1)
     } catch (e: any) {
+      if (!active.current || request !== loadRequest.current) return
       setError(e instanceof ApiError && e.status === 404 ? '文档不存在或已被删除' : e.message)
     }
   }, [docId, setStatus])
@@ -83,7 +108,8 @@ export default function DocPage() {
 
   const save = useCallback(
     async (opts: { force?: boolean; snapshot?: boolean } = {}) => {
-      if (saving.current) await saving.current
+      while (saving.current) await saving.current
+      if (deleted.current || (statusRef.current === 'conflict' && !opts.force)) return
       if (!dirty.current && !opts.snapshot) return
       clearTimeout(timer.current)
       dirty.current = false
@@ -147,7 +173,7 @@ export default function DocPage() {
       }
     }
     const onUnload = (e: BeforeUnloadEvent) => {
-      if (dirty.current) e.preventDefault()
+      if (dirty.current || saving.current) e.preventDefault()
     }
     // A hidden tab can be frozen or discarded without any unload event (switching apps
     // on a phone), so whatever is still waiting for the autosave timer goes out now.
@@ -164,7 +190,7 @@ export default function DocPage() {
       document.removeEventListener('visibilitychange', onHide)
       window.removeEventListener('pagehide', onHide)
       clearTimeout(timer.current)
-      if (dirty.current) save()
+      if (dirty.current && statusRef.current !== 'conflict') save()
     }
   }, [save])
 
@@ -242,6 +268,7 @@ export default function DocPage() {
           if (!(await confirmDialog('确定删除这篇文档及其子文档吗？可在回收站中恢复。', { danger: true, okText: '删除' }))) return
           dirty.current = false
           await api.deleteNode(docId)
+          deleted.current = true
           await loadTree(repoId)
           navigate(`/r/${repoId}`)
         },
@@ -342,7 +369,7 @@ export default function DocPage() {
                 }
               }}
             />
-            <Editor key={doc.id + ':' + mountKey} value={doc.markdown} onChange={onChange} />
+            <Editor key={doc.id + ':' + mountKey} value={doc.markdown} onChange={onChange} onReady={({ getMarkdown }) => { getMd.current = getMarkdown }} />
             <Backlinks nodeId={doc.id} repoId={repoId} />
           </div>
         </main>

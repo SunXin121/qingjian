@@ -17,10 +17,10 @@
 @import './styles/page.css' layer(legacy);
 @import './styles/overlays.css' layer(legacy);
 @import './styles/responsive.css' layer(legacy);
-@import './styles/m2.css' layer(legacy);
+@import './styles/form-controls.css' layer(legacy);
 @import './styles/settings.css' layer(legacy);
 @import './styles/diff.css' layer(legacy);
-@import './styles/refresh.css' layer(legacy);
+@import './styles/icons-and-indicators.css' layer(legacy);
 @import './styles/states.css' layer(legacy);
 @import './styles/dark.css' layer(legacy);
 

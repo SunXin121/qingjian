@@ -64,19 +64,27 @@ func errStatus(status int, msg string) error { return &apiError{status, msg} }
 
 // writeError answers with err: an apiError as it is, anything else as an internal error,
 // which is logged with its call site but never shown to the client (it may quote SQL).
-func writeError(w http.ResponseWriter, err error) {
+func writeError(w http.ResponseWriter, err error, requests ...*http.Request) {
 	var ae *apiError
 	if errors.As(err, &ae) {
 		httpError(w, ae.status, ae.msg)
 		return
 	}
-	logInternal(2, err)
-	httpError(w, http.StatusInternalServerError, "服务器内部错误")
+	if len(requests) > 0 {
+		serverError(w, requests[0], err)
+		return
+	}
+	serverError(w, nil, err)
 }
 
 // serverError logs err and answers 500 without revealing it.
-func serverError(w http.ResponseWriter, err error) {
-	logInternal(2, err)
+func serverError(w http.ResponseWriter, r *http.Request, err error) {
+	if r != nil {
+		// Paths may contain private share tokens; log the route pattern, never the URL.
+		logInternal(2, fmt.Errorf("%s %s: %w", r.Method, r.Pattern, err))
+	} else {
+		logInternal(2, err)
+	}
 	httpError(w, http.StatusInternalServerError, "服务器内部错误")
 }
 

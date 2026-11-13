@@ -1,3 +1,4 @@
+import { emitAppEvent } from '../events'
 import { useMemo } from 'react'
 import { cn } from './ui'
 
@@ -54,7 +55,7 @@ export default function Outline({ headings, open, onClose }: { headings: Heading
   if (headings.length === 0) return null
   const jumpTo = (h: Heading) => {
     // long documents are still appending their later parts right after opening
-    window.dispatchEvent(new Event('qj-editor-flush'))
+    emitAppEvent('qj-editor-flush')
     const els = document.querySelectorAll('.doc-main .ink-editor .ProseMirror > :is(h1,h2,h3,h4,h5,h6)')
     const el = els[h.index] as HTMLElement | undefined
     if (el) scrollToHeading(el)

@@ -36,7 +36,7 @@ func serveStaticFile(w http.ResponseWriter, r *http.Request, fsys fs.FS, name st
 		raw, err := io.ReadAll(f)
 		f.Close()
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		var buf bytes.Buffer

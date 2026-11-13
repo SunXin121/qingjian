@@ -9,7 +9,8 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import RepoHome from './pages/RepoHome'
 import Trash from './pages/Trash'
-import { StoreProvider, useStore } from './store'
+import { StoreProvider, useStore, useStoreUI } from './store'
+import { onAppEvent } from './events'
 
 const loadDocPage = () => import('./pages/DocPage')
 const loadTablePage = () => import('./pages/TablePage')
@@ -37,7 +38,8 @@ function preloadHeavyPages() {
 }
 
 function Shell() {
-  const { sidebarOpen, setSidebarOpen, loadTree, treeRepoId } = useStore()
+  const { setSidebarOpen, loadTree, treeRepoId } = useStore()
+  const { sidebarOpen } = useStoreUI()
   const location = useLocation()
   const navigate = useNavigate()
   useEffect(() => setSidebarOpen(false), [location.pathname, setSidebarOpen])
@@ -48,19 +50,14 @@ function Shell() {
   useEffect(preloadHeavyPages, [])
   // in-app links rendered outside React (e.g. table embeds inside the editor)
   useEffect(() => {
-    const onNav = (e: Event) => navigate((e as CustomEvent<string>).detail)
     import('./table/embed').then((m) => m.resetEmbedSource())
-    window.addEventListener('qj-nav', onNav)
-    return () => window.removeEventListener('qj-nav', onNav)
+    return onAppEvent('qj-nav', (path) => navigate(path))
   }, [navigate])
   // nodes created outside the sidebar (a new document from the [[ picker)
   useEffect(() => {
-    const onTree = (e: Event) => {
-      const repo = (e as CustomEvent<string>).detail
+    return onAppEvent('qj-tree-changed', (repo) => {
       if (repo === treeRepoId) loadTree(repo)
-    }
-    window.addEventListener('qj-tree-changed', onTree)
-    return () => window.removeEventListener('qj-tree-changed', onTree)
+    })
   }, [loadTree, treeRepoId])
   return (
     <div className="flex min-h-dvh bg-editor">

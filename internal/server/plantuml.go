@@ -116,7 +116,7 @@ func (s *Server) renderPlantUML(w http.ResponseWriter, r *http.Request, sh *Shar
 	if sh != nil {
 		ok, err := s.shareHasText(sh, src)
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		if !ok {

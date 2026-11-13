@@ -81,7 +81,7 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 		return touchRepo(tx, n.RepoID, n.UpdatedAt)
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusCreated, n)
@@ -120,7 +120,7 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusOK, n)
@@ -168,7 +168,7 @@ func (s *Server) moveNode(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	ok(w)
@@ -218,7 +218,7 @@ func (s *Server) deleteNode(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	ok(w)

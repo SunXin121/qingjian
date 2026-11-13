@@ -8,7 +8,7 @@
     "copy-assets": "rm -rf public/excalidraw-assets && mkdir -p public/excalidraw-assets && cp -r node_modules/@excalidraw/excalidraw/dist/prod/fonts public/excalidraw-assets/ && node scripts/build-icons.mjs",
     "build": "npm run copy-assets && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 0",
     "test": "vitest run"
   },
   "dependencies": {

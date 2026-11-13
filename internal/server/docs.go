@@ -42,7 +42,7 @@ func (s *Server) getDoc(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusNotFound, "文档不存在")
 		return
 	} else if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, d)
@@ -126,7 +126,7 @@ func (s *Server) saveDoc(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "文档已在其他地方被修改", "updated_at": conflictAt})
 		return
 	} else if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"updated_at": t, "title": n.Title})
@@ -144,7 +144,7 @@ type Version struct {
 func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`SELECT id, node_id, title, size, created_at FROM doc_versions WHERE node_id = ? ORDER BY id DESC`, r.PathValue("id"))
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -152,13 +152,13 @@ func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var v Version
 		if err := rows.Scan(&v.ID, &v.NodeID, &v.Title, &v.Size, &v.CreatedAt); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		out = append(out, v)
 	}
 	if err := rows.Err(); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -225,7 +225,7 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 		return addVersion(tx, d.ID, v.Title, v.Markdown, t)
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"updated_at": t})
@@ -244,7 +244,7 @@ func (s *Server) recentDocs(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, n.type, n.updated_at FROM nodes n JOIN repos r ON r.id = n.repo_id
 WHERE n.type IN ('doc', 'table') AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY n.updated_at DESC LIMIT 30`)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -252,13 +252,13 @@ WHERE n.type IN ('doc', 'table') AND n.deleted_at IS NULL AND r.deleted_at IS NU
 	for rows.Next() {
 		var d RecentDoc
 		if err := rows.Scan(&d.ID, &d.RepoID, &d.RepoName, &d.Title, &d.Type, &d.UpdatedAt); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		out = append(out, d)
 	}
 	if err := rows.Err(); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, out)

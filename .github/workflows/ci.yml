@@ -24,8 +24,8 @@ jobs:
           go-version-file: go.mod
       - name: gofmt
         run: test -z "$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)
-      - run: go vet ./...
-      - run: go test ./...
+      - run: go vet ./cmd/... ./internal/... ./web
+      - run: go test ./cmd/... ./internal/... ./web
 
   web:
     runs-on: ubuntu-latest

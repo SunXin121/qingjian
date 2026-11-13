@@ -1,4 +1,4 @@
-.PHONY: build web server dev-server dev-web clean
+.PHONY: build web server dev-server dev-web test lint clean
 
 build: web server
 
@@ -14,6 +14,15 @@ dev-server:
 
 dev-web:
 	cd web && npm run copy-assets && npm run dev
+
+test:
+	go test ./cmd/... ./internal/... ./web
+	cd web && npm test
+
+lint:
+	test -z "$$(gofmt -l cmd internal)"
+	go vet ./cmd/... ./internal/... ./web
+	cd web && npm run typecheck && npm run lint
 
 clean:
 	rm -rf bin web/dist/assets web/dist/index.html web/dist/excalidraw-assets

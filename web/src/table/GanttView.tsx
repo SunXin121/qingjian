@@ -184,7 +184,7 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
   const upper = useMemo(() => periods(lo, days, scale === 'month' ? 'year' : 'month'), [lo, days, scale])
   const lower = useMemo(() => periods(lo, days, scale), [lo, days, scale])
 
-  const rules = view.config.groups ?? []
+  const rules = useMemo(() => view.config.groups ?? [], [view.config.groups])
   const collapsed = useMemo(() => new Set(view.config.collapsed ?? []), [view.config.collapsed])
   const rows = useMemo(() => groupRows(table, records, rules, collapsed), [table, records, rules, collapsed])
   const ids = useMemo(() => records.map((r) => r.id), [records])
@@ -208,6 +208,7 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
 
   // ---------- scrolling ----------
   const scrollRef = useRef<HTMLDivElement>(null)
+  const hasField = !!field
   const [vp, setVp] = useState({ top: 0, h: 600 })
   useLayoutEffect(() => {
     const el = scrollRef.current
@@ -226,7 +227,7 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
       el.removeEventListener('scroll', update)
       ro.disconnect()
     }
-  }, [!!field])
+  }, [hasField])
 
   // keep the date in the middle of the time line when the range or the scale changes; start at today
   const anchor = useRef<{ lo: string; dw: number } | null>(null)
@@ -238,7 +239,7 @@ export default function GanttView({ model, table, view, readOnly, onOpenRecord, 
     if (!prev) el.scrollLeft = diffDays(today, lo) * dw - half / 2
     else if (prev.lo !== lo || prev.dw !== dw) el.scrollLeft = ((el.scrollLeft + half) / prev.dw + diffDays(prev.lo, lo)) * dw - half
     anchor.current = { lo, dw }
-  }, [lo, dw, !!field])
+  }, [lo, dw, hasField, listW, today])
 
   if (!field)
     return (

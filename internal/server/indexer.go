@@ -71,11 +71,18 @@ func (s *Server) indexPending(at int64) {
 	var ids []string
 	for rows.Next() {
 		var id string
-		if rows.Scan(&id) == nil {
-			ids = append(ids, id)
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			log.Printf("search index: %v", err)
+			return
 		}
+		ids = append(ids, id)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		log.Printf("search index: %v", err)
+		return
+	}
 	for _, id := range ids {
 		if err := s.indexOne(id, at); err != nil {
 			log.Printf("search index %s: %v", id, err)

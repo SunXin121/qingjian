@@ -232,14 +232,20 @@ func idList(raw json.RawMessage) []string {
 }
 
 // recordValues reads a record's data (nil when the record does not exist).
-func recordValues(q querier, tableID, id string) map[string]json.RawMessage {
+func recordValues(q querier, tableID, id string) (map[string]json.RawMessage, error) {
 	var raw string
-	if q.QueryRow(`SELECT data FROM bt_records WHERE id = ? AND table_node_id = ?`, id, tableID).Scan(&raw) != nil {
-		return nil
+	err := q.QueryRow(`SELECT data FROM bt_records WHERE id = ? AND table_node_id = ?`, id, tableID).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	m := map[string]json.RawMessage{}
-	json.Unmarshal([]byte(raw), &m)
-	return m
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // before returns the current values of the record's two-way link fields.
@@ -247,7 +253,10 @@ func (l *linkSync) before(recID string) (map[string][]string, error) {
 	if err := l.load(); err != nil || len(l.pairs) == 0 {
 		return nil, err
 	}
-	data := recordValues(l.tx, l.tableID, recID)
+	data, err := recordValues(l.tx, l.tableID, recID)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string][]string{}
 	for fid := range l.pairs {
 		out[fid] = idList(data[fid])
@@ -289,9 +298,9 @@ func (l *linkSync) apply(recID string, old map[string][]string, next map[string]
 
 // mirror adds / removes src in the pair field of record target of the other table.
 func (l *linkSync) mirror(p pairInfo, target, src string, add bool) error {
-	data := recordValues(l.tx, p.table, target)
-	if data == nil {
-		return nil
+	data, err := recordValues(l.tx, p.table, target)
+	if err != nil || data == nil {
+		return err
 	}
 	ids := idList(data[p.pair])
 	out := make([]string, 0, len(ids)+1)
@@ -311,7 +320,6 @@ func (l *linkSync) mirror(p pairInfo, target, src string, add bool) error {
 	if add {
 		out = append(out, src)
 	}
-	var err error
 	if len(out) == 0 {
 		_, err = l.tx.Exec(`UPDATE bt_records SET data = json_remove(data, ?), updated_at = ? WHERE id = ? AND table_node_id = ?`, `$."`+p.pair+`"`, l.t, target, p.table)
 	} else {
@@ -338,15 +346,21 @@ func (l *linkSync) pairField(id string, options json.RawMessage) (string, error)
 		return drop, nil
 	}
 	var typ string
-	if err := l.tx.QueryRow(`SELECT type FROM nodes WHERE id = ? AND deleted_at IS NULL`, o.Table).Scan(&typ); err != nil || typ != "table" {
+	err := l.tx.QueryRow(`SELECT type FROM nodes WHERE id = ? AND deleted_at IS NULL`, o.Table).Scan(&typ)
+	if err == sql.ErrNoRows || (err == nil && typ != "table") {
 		return drop, nil
 	}
+	if err != nil {
+		return "", err
+	}
 	var ptype, popts, ptable string
-	err := l.tx.QueryRow(`SELECT type, options, table_node_id FROM bt_fields WHERE id = ?`, o.Pair).Scan(&ptype, &popts, &ptable)
+	err = l.tx.QueryRow(`SELECT type, options, table_node_id FROM bt_fields WHERE id = ?`, o.Pair).Scan(&ptype, &popts, &ptable)
 	switch {
 	case err == sql.ErrNoRows:
 		var sortKey float64
-		l.tx.QueryRow(`SELECT COALESCE(MAX(sort), 0) + 1 FROM bt_fields WHERE table_node_id = ?`, o.Table).Scan(&sortKey)
+		if err := l.tx.QueryRow(`SELECT COALESCE(MAX(sort), 0) + 1 FROM bt_fields WHERE table_node_id = ?`, o.Table).Scan(&sortKey); err != nil {
+			return "", err
+		}
 		popt, _ := json.Marshal(map[string]any{"table": l.tableID, "pair": id})
 		if _, err := l.tx.Exec(`INSERT INTO bt_fields(id, table_node_id, name, type, options, sort) VALUES(?,?,?,?,?,?)`,
 			o.Pair, o.Table, nonEmpty(o.PairName, "关联"), "link", string(popt), sortKey); err != nil {
@@ -410,13 +424,17 @@ func (l *linkSync) unpair(id string, options string) error {
 		return nil
 	}
 	var popts string
-	if l.tx.QueryRow(`SELECT options FROM bt_fields WHERE id = ? AND table_node_id = ?`, o.Pair, o.Table).Scan(&popts) != nil {
+	err := l.tx.QueryRow(`SELECT options FROM bt_fields WHERE id = ? AND table_node_id = ?`, o.Pair, o.Table).Scan(&popts)
+	if err == sql.ErrNoRows {
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	if parseOpts(json.RawMessage(popts)).Pair != id {
 		return nil
 	}
-	_, err := l.tx.Exec(`UPDATE bt_fields SET options = ? WHERE id = ?`, setOptKeys(json.RawMessage(popts), map[string]any{"pair": nil}), o.Pair)
+	_, err = l.tx.Exec(`UPDATE bt_fields SET options = ? WHERE id = ?`, setOptKeys(json.RawMessage(popts), map[string]any{"pair": nil}), o.Pair)
 	l.invalidate()
 	return err
 }

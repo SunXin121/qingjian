@@ -384,7 +384,7 @@ function PopoverFrame({ rect, opts, close, children }: { rect: { left: number; r
     if (!el) return
     const h = el.offsetHeight
     if (rect.bottom + 6 + h > window.innerHeight - 8 && rect.top - 6 - h > 8) setTop(rect.top - 6 - h)
-  })
+  }, [rect.bottom, rect.top])
   return (
     <div className="fixed inset-0 z-[210]" onMouseDown={(e) => e.target === e.currentTarget && close()} onTouchStart={(e) => e.target === e.currentTarget && close()}>
       <div ref={ref} className={'popover ' + (opts.className ?? '')} style={{ left, top, width, maxHeight: `calc(100vh - ${Math.max(16, top + 8)}px)` }}>

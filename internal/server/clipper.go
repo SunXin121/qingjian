@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
+	"net/url"
 )
 
 func clipHash(text string) string { h := sha256.Sum256([]byte(text)); return hex.EncodeToString(h[:]) }
@@ -21,11 +22,26 @@ func clipError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"message": message, "code": code}})
 }
 
+// Extensions use explicit Authorization headers and their own protected origin.
+// Web pages cannot impersonate these origins, even when they target the same API.
+func (s *Server) clipperOriginAllowed(r *http.Request) bool {
+	if origin, err := url.Parse(r.Header.Get("Origin")); err == nil && origin.Host != "" && origin.User == nil && origin.Path == "" && origin.RawQuery == "" && origin.Fragment == "" {
+		if origin.Scheme == "chrome-extension" || origin.Scheme == "moz-extension" {
+			return true
+		}
+	}
+	return s.sameOrigin(r) && r.Header.Get("Sec-Fetch-Site") != "cross-site"
+}
+
 // Basic authentication uses the native admin password verifier and login limiter.
 // No WWW-Authenticate challenge is sent: it would make browsers prompt for and then cache
 // the credentials, which they attach to cross-site requests on their own.
 func (s *Server) requireClipperPassword(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.clipperOriginAllowed(r) {
+			clipError(w, http.StatusForbidden, "forbidden", "Cross-site requests are not allowed")
+			return
+		}
 		_, pw, basic := r.BasicAuth()
 		ip := s.clientIP(r)
 		blocked, _ := s.limiter.blocked(ip)

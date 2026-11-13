@@ -143,7 +143,7 @@ export function applyOps(t: TableData, ops: Op[]): TableData {
           else data[k] = v
         }
         if (records === t.records) records = [...records]
-        if (hasPairs && op.data) linkChanges.push({ rec: r.id, before: r.data, after: { ...op.data } })
+        if (hasPairs && op.data) linkChanges.push({ rec: r.id, before: r.data, after: data })
         // a move (sort only) is not a modification
         records[i] = { ...r, data, updated_at: op.data ? now : r.updated_at, ...(op.sort !== undefined && { sort: op.sort }) }
         if (op.sort !== undefined) recordsDirty = true

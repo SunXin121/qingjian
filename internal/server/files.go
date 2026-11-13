@@ -82,7 +82,7 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 				httpError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("文件超过 %dMB 限制", s.cfg.MaxUploadMB))
 				return
 			}
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusCreated, att)

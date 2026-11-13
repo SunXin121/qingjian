@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { memo, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, NavLink, useMatch, useNavigate } from 'react-router'
 import { api, nodePath, type NodeType, type TreeNode } from '../api'
-import { childrenMap, nodeTitle, useStore } from '../store'
+import { childrenMap, nodeTitle, useStore, useStoreUI } from '../store'
 import { confirmDialog, openMenu, promptText, toast, type MenuItem } from './dialog'
 import { canPickFolder, droppedEntries, isFileDrag, pickImport, runImport } from './ImportDialog'
 import { editRepoDialog, repoMenu } from './RepoDialog'
@@ -45,7 +45,8 @@ function loadExpanded(): Set<string> {
 }
 
 export default function Sidebar() {
-  const { repos, loadRepos, sidebarOpen, setSidebarOpen, setSearchOpen } = useStore()
+  const { repos, loadRepos, setSidebarOpen, setSearchOpen } = useStore()
+  const { sidebarOpen } = useStoreUI()
   const repoMatch = useMatch('/r/:repoId/*')
   const repoId = repoMatch?.params.repoId
   const navigate = useNavigate()
@@ -178,7 +179,7 @@ function SideLink({ to, end, icon, count, children }: { to: string; end?: boolea
 
 type DropPos = 'before' | 'after' | 'inside'
 
-function RepoTree({ repoId }: { repoId: string }) {
+const RepoTree = memo(function RepoTree({ repoId }: { repoId: string }) {
   const { repos, tree, treeRepoId, loadTree, loadRepos, setSidebarOpen } = useStore()
   const navigate = useNavigate()
   const docMatch = useMatch('/r/:repoId/d/:docId')
@@ -194,7 +195,7 @@ function RepoTree({ repoId }: { repoId: string }) {
     loadTree(repoId).catch((e) => toast(e.message))
   }, [repoId, loadTree])
 
-  const nodes = treeRepoId === repoId ? tree : []
+  const nodes = useMemo(() => treeRepoId === repoId ? tree : [], [treeRepoId, repoId, tree])
   const kids = useMemo(() => childrenMap(nodes), [nodes])
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
 
@@ -551,7 +552,7 @@ function RepoTree({ repoId }: { repoId: string }) {
       </div>
     </>
   )
-}
+})
 
 function isDescendant(byId: Map<string, TreeNode>, id: string, ancestor: string) {
   let cur = byId.get(id)

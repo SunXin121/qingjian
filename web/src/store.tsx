@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api, type Repo, type TreeNode } from './api'
 
 interface Store {
@@ -8,13 +8,12 @@ interface Store {
   treeRepoId: string | null
   loadTree: (repoId: string) => Promise<void>
   patchNode: (id: string, patch: Partial<TreeNode>) => void
-  sidebarOpen: boolean
   setSidebarOpen: (v: boolean) => void
-  searchOpen: boolean
   setSearchOpen: (v: boolean) => void
 }
 
 const Ctx = createContext<Store>(null!)
+const UICtx = createContext<{ sidebarOpen: boolean; searchOpen: boolean }>(null!)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [repos, setRepos] = useState<Repo[]>([])
@@ -22,10 +21,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [treeRepoId, setTreeRepoId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const treeRequest = useRef(0)
 
   const loadRepos = useCallback(async () => setRepos(await api.repos()), [])
   const loadTree = useCallback(async (repoId: string) => {
+    const request = ++treeRequest.current
     const nodes = await api.tree(repoId)
+    if (request !== treeRequest.current) return
     setTreeRepoId(repoId)
     setTree(nodes)
   }, [])
@@ -34,13 +36,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ repos, loadRepos, tree, treeRepoId, loadTree, patchNode, sidebarOpen, setSidebarOpen, searchOpen, setSearchOpen }),
-    [repos, loadRepos, tree, treeRepoId, loadTree, patchNode, sidebarOpen, searchOpen],
+    () => ({ repos, loadRepos, tree, treeRepoId, loadTree, patchNode, setSidebarOpen, setSearchOpen }),
+    [repos, loadRepos, tree, treeRepoId, loadTree, patchNode],
   )
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+  const ui = useMemo(() => ({ sidebarOpen, searchOpen }), [sidebarOpen, searchOpen])
+  return <Ctx.Provider value={value}><UICtx.Provider value={ui}>{children}</UICtx.Provider></Ctx.Provider>
 }
 
 export const useStore = () => useContext(Ctx)
+export const useStoreUI = () => useContext(UICtx)
 
 export function childrenMap<T extends { parent_id: string | null; sort: number; created_at?: number }>(nodes: T[]) {
   const map = new Map<string | null, T[]>()

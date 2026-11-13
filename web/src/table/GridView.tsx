@@ -168,7 +168,6 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   )
 
   const fieldAt = (col: number): Field | undefined => fields[col - 1]
-  const rowAt = (row: number): GridRow | undefined => rows[row]
   const recAt = (row: number): Rec | undefined => {
     const r = rows[row]
     return r?.kind === 'record' ? r.rec : undefined
@@ -185,7 +184,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         const text = summaries[col - 1] ?? ''
         return { ...empty, displayData: text, data: text, contentAlign: 'right', themeOverride: { ...foot, textDark: theme.textLight } }
       }
-      const item = rowAt(row)!
+      const item = rows[row]!
       if (item.kind === 'group') {
         if (col === 1) {
           const f = item.field
@@ -204,7 +203,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       const rec = item.rec
       if (col === 0)
         return { kind: GridCellKind.Custom, data: { kind: 'qj-index', n: ordinal.get(rec.id) ?? 0, grip: !readOnly }, copyData: '', allowOverlay: false, readonly: true, cursor: 'pointer' } as IndexCell
-      const f = fieldAt(col)
+      const f = fields[col - 1]
       if (!f) return empty
       const cell = makeCell(model, f, rec, readOnly)
       const key = rec.id + ':' + f.id
@@ -272,7 +271,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         const rec = targetRecs[i]?.rec
         const data: Record<string, any> = {}
         line.forEach((text, j) => {
-          const f = fieldAt(col0 + j)
+          const f = fields[col0 + j - 1]
           if (!f || isComputed(f.type) || f.type === 'attachment') return
           const v = parseText(f, text, col.resolve)
           if (rec) changes.push({ rec: rec.id, field: f.id, value: v })

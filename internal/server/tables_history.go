@@ -260,7 +260,7 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 	args = append(args, historyPageSize+1)
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -269,12 +269,16 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 		var e historyEntry
 		var raw string
 		if err := rows.Scan(&e.ID, &e.Action, &raw, &e.CreatedAt, &e.UpdatedAt); err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		e.Changes = []historyChange{}
 		json.Unmarshal([]byte(raw), &e.Changes)
 		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, r, err)
+		return
 	}
 	more := len(out) > historyPageSize
 	if more {

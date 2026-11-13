@@ -245,7 +245,7 @@ func TestClipperAdminPasswordAuth(t *testing.T) {
 		method, path string
 		want         int
 	}{
-		{"POST", "/api/v1/memos", 401},
+		{"POST", "/api/v1/memos", http.StatusForbidden},
 		{"PUT", "/api/clipper/settings", 404},
 	} {
 		req, _ := http.NewRequest(tc.method, e.ts.URL+tc.path, strings.NewReader(`{}`))

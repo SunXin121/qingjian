@@ -42,7 +42,7 @@ func (s *Server) listTrash(w http.ResponseWriter, r *http.Request) {
 WHERE n.trash_root = 1 AND n.deleted_at IS NOT NULL AND r.deleted_at IS NULL`)
 	}
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	// newest first
@@ -64,7 +64,7 @@ func (s *Server) restoreTrash(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	ok(w)
@@ -74,8 +74,10 @@ func (s *Server) restoreTrash(w http.ResponseWriter, r *http.Request) {
 func restoreNode(tx *sql.Tx, id string) error {
 	var deletedAt int64
 	var parentID *string
-	if err := tx.QueryRow(`SELECT deleted_at, parent_id FROM nodes WHERE id = ? AND trash_root = 1`, id).Scan(&deletedAt, &parentID); err != nil {
+	if err := tx.QueryRow(`SELECT deleted_at, parent_id FROM nodes WHERE id = ? AND trash_root = 1`, id).Scan(&deletedAt, &parentID); err == sql.ErrNoRows {
 		return errStatus(http.StatusNotFound, "条目不存在")
+	} else if err != nil {
+		return err
 	}
 	ids, err := descendantIDs(tx, id, false)
 	if err != nil {
@@ -104,7 +106,7 @@ func restoreNode(tx *sql.Tx, id string) error {
 func (s *Server) purgeTrash(w http.ResponseWriter, r *http.Request) {
 	err := s.withTx(func(tx *sql.Tx) error { return purgeItem(tx, r.PathValue("kind"), r.PathValue("id")) })
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	ok(w)
@@ -151,7 +153,7 @@ func (s *Server) emptyTrash(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		writeError(w, err)
+		writeError(w, err, r)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"purged": n})

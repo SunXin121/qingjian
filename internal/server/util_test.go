@@ -27,6 +27,7 @@ func TestSameOriginForwardedHost(t *testing.T) {
 	r := httptest.NewRequest("POST", "http://internal:8080/api/x", nil)
 	r.Header.Set("Origin", "https://note.example.com")
 	r.Header.Set("X-Forwarded-Host", "note.example.com")
+	r.Header.Set("X-Forwarded-Proto", "https")
 	direct := &Server{cfg: Config{}}
 	if direct.sameOrigin(r) {
 		t.Fatal("X-Forwarded-Host must be ignored without a trusted proxy")

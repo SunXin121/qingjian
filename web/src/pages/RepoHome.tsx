@@ -33,7 +33,7 @@ export default function RepoHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoId])
 
-  const nodes = treeRepoId === repoId ? tree : []
+  const nodes = useMemo(() => treeRepoId === repoId ? tree : [], [treeRepoId, repoId, tree])
   const kids = useMemo(() => childrenMap(nodes), [nodes])
 
   const newDoc = async () => {

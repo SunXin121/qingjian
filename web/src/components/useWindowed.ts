@@ -59,12 +59,18 @@ export function useWindowed<T extends HTMLElement>(count: number, estimate: numb
 
   // measure the real row pitch (height + vertical margins) from the first rendered row
   useLayoutEffect(() => {
-    const row = list?.querySelector<HTMLElement>('[data-row]')
-    if (!row) return
-    const cs = getComputedStyle(row)
-    const h = row.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)
-    if (h > 0 && Math.abs(h - rowHRef.current) > 0.5) setRowH(h)
-  })
+    const measure = () => {
+      const row = list?.querySelector<HTMLElement>('[data-row]')
+      if (!row) return
+      const cs = getComputedStyle(row)
+      const h = row.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)
+      if (h > 0 && Math.abs(h - rowHRef.current) > 0.5) setRowH(h)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    if (list) observer.observe(list)
+    return () => observer.disconnect()
+  }, [list, count, range])
 
   const [start, end] = [Math.min(range[0], count), Math.min(range[1], count)]
   return {

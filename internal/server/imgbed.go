@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,7 +75,7 @@ func (s *Server) imgbedConfig() ImgbedConfig {
 func (s *Server) getImgbed(w http.ResponseWriter, r *http.Request) {
 	var cached int
 	if err := s.db.QueryRow(`SELECT count(*) FROM imgbed_uploads`).Scan(&cached); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"config": s.imgbedConfig(), "uploaded": cached})
@@ -92,7 +93,7 @@ func (s *Server) putImgbed(w http.ResponseWriter, r *http.Request) {
 	}
 	data, _ := json.Marshal(c)
 	if err := s.setSetting("imgbed", string(data)); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, c)
@@ -103,7 +104,7 @@ func (s *Server) putImgbed(w http.ResponseWriter, r *http.Request) {
 func (s *Server) forgetImgbed(w http.ResponseWriter, r *http.Request) {
 	res, err := s.db.Exec(`DELETE FROM imgbed_uploads`)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	n, _ := res.RowsAffected()
@@ -172,8 +173,12 @@ func (u *imgbedUploader) uploadAll(ctx context.Context, atts []*Attachment) (map
 func (u *imgbedUploader) upload(ctx context.Context, a *Attachment) (string, error) {
 	target := u.cfg.target()
 	var cached string
-	if u.s.db.QueryRow(`SELECT url FROM imgbed_uploads WHERE target = ? AND sha256 = ?`, target, a.SHA256).Scan(&cached) == nil {
+	err := u.s.db.QueryRow(`SELECT url FROM imgbed_uploads WHERE target = ? AND sha256 = ?`, target, a.SHA256).Scan(&cached)
+	if err == nil {
 		return cached, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", err
 	}
 	f, err := os.Open(u.s.blobPath(a.SHA256))
 	if err != nil {
