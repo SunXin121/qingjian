@@ -2,9 +2,14 @@ package server
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -44,6 +49,80 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func httpError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// apiError is an error whose status and message are meant for the client.
+type apiError struct {
+	status int
+	msg    string
+}
+
+func (e *apiError) Error() string { return e.msg }
+
+// errStatus returns an error that writeError answers with the given status and message.
+func errStatus(status int, msg string) error { return &apiError{status, msg} }
+
+// writeError answers with err: an apiError as it is, anything else as an internal error,
+// which is logged with its call site but never shown to the client (it may quote SQL).
+func writeError(w http.ResponseWriter, err error) {
+	var ae *apiError
+	if errors.As(err, &ae) {
+		httpError(w, ae.status, ae.msg)
+		return
+	}
+	logInternal(2, err)
+	httpError(w, http.StatusInternalServerError, "服务器内部错误")
+}
+
+// serverError logs err and answers 500 without revealing it.
+func serverError(w http.ResponseWriter, err error) {
+	logInternal(2, err)
+	httpError(w, http.StatusInternalServerError, "服务器内部错误")
+}
+
+func logInternal(skip int, err error) {
+	where := "?"
+	if _, file, line, ok := runtime.Caller(skip); ok {
+		where = fmt.Sprintf("%s:%d", filepath.Base(file), line)
+	}
+	log.Printf("internal error (%s): %v", where, err)
+}
+
+// querier is what read helpers need, so they work on the database and inside a transaction.
+type querier interface {
+	QueryRow(string, ...any) *sql.Row
+	Query(string, ...any) (*sql.Rows, error)
+}
+
+// rowScanner is a *sql.Row or *sql.Rows.
+type rowScanner interface{ Scan(...any) error }
+
+// scanRows runs a query and calls each for every row, then reports any iteration error.
+func scanRows(q querier, each func(*sql.Rows) error, query string, args ...any) error {
+	rows, err := q.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := each(rows); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+// withTx runs fn in a transaction and commits it when fn returns nil.
+func (s *Server) withTx(fn func(tx *sql.Tx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func readJSON(r *http.Request, v any) error {

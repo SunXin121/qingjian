@@ -105,29 +105,29 @@ func (s *Server) renderPlantUML(w http.ResponseWriter, r *http.Request, sh *Shar
 		Source string `json:"source"`
 	}
 	if err := readJSON(r, &req); err != nil {
-		httpError(w, 400, "请求格式错误")
+		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
 	src := strings.TrimSpace(req.Source)
 	if src == "" || len(src) > pumlMaxSource {
-		httpError(w, 400, "图表内容为空或过长")
+		httpError(w, http.StatusBadRequest, "图表内容为空或过长")
 		return
 	}
 	if sh != nil {
 		ok, err := s.shareHasText(sh, src)
 		if err != nil {
-			httpError(w, 500, err.Error())
+			serverError(w, err)
 			return
 		}
 		if !ok {
-			httpError(w, 404, "图表不存在")
+			httpError(w, http.StatusNotFound, "图表不存在")
 			return
 		}
 	}
 	sum := sha256.Sum256([]byte(src))
 	key := hex.EncodeToString(sum[:])
 	if svg, ok := s.puml.get(key); ok {
-		writeJSON(w, 200, map[string]any{"svg": svg})
+		writeJSON(w, http.StatusOK, map[string]any{"svg": svg})
 		return
 	}
 	svg, syntaxErr, err := s.fetchPlantUML(r.Context(), src)
@@ -138,7 +138,7 @@ func (s *Server) renderPlantUML(w http.ResponseWriter, r *http.Request, sh *Shar
 	if !syntaxErr {
 		s.puml.put(key, svg)
 	}
-	writeJSON(w, 200, map[string]any{"svg": svg, "error": syntaxErr})
+	writeJSON(w, http.StatusOK, map[string]any{"svg": svg, "error": syntaxErr})
 }
 
 // fetchPlantUML renders src to SVG; syntax errors come back as an SVG describing them.

@@ -268,7 +268,7 @@ func (s *Server) clientConfig(w http.ResponseWriter, r *http.Request) {
 	if drawio == "" {
 		drawio = "https://embed.diagrams.net/"
 	}
-	writeJSON(w, 200, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"version":       s.cfg.Version,
 		"drawio_url":    drawio,
 		"max_upload_mb": s.cfg.MaxUploadMB,

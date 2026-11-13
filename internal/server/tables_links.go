@@ -214,7 +214,9 @@ func (l *linkSync) load() error {
 	l.pairs = map[string]pairInfo{}
 	for rows.Next() {
 		var id, opts string
-		rows.Scan(&id, &opts)
+		if err := rows.Scan(&id, &opts); err != nil {
+			return err
+		}
 		o := parseOpts(json.RawMessage(opts))
 		if o.Pair != "" && o.Table != "" && o.Table != l.tableID {
 			l.pairs[id] = pairInfo{o.Table, o.Pair}
@@ -378,10 +380,16 @@ func (l *linkSync) pairField(id string, options json.RawMessage) (string, error)
 	for rows.Next() {
 		var rec string
 		var raw sql.NullString
-		rows.Scan(&rec, &raw)
+		if err := rows.Scan(&rec, &raw); err != nil {
+			rows.Close()
+			return "", err
+		}
 		links = append(links, link{rec, idList(json.RawMessage(raw.String))})
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
 	sort.Slice(links, func(i, j int) bool { return links[i].rec < links[j].rec })
 	p := pairInfo{o.Table, o.Pair}
 	for _, lk := range links {

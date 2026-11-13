@@ -18,6 +18,7 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -653,19 +654,19 @@ type importResult struct {
 func (s *Server) importDocs(w http.ResponseWriter, r *http.Request) {
 	repoID := r.PathValue("id")
 	if _, err := s.loadRepo(repoID); err != nil {
-		httpError(w, 404, "知识库不存在")
+		httpError(w, http.StatusNotFound, "知识库不存在")
 		return
 	}
 	limit := s.cfg.MaxUploadMB << 20
 	r.Body = http.MaxBytesReader(w, r.Body, limit+1<<20)
 	mr, err := r.MultipartReader()
 	if err != nil {
-		httpError(w, 400, "需要 multipart/form-data")
+		httpError(w, http.StatusBadRequest, "需要 multipart/form-data")
 		return
 	}
 	tmpDir, err := os.MkdirTemp(filepath.Join(s.filesDir, "tmp"), "import-*")
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	defer os.RemoveAll(tmpDir)
@@ -681,7 +682,7 @@ func (s *Server) importDocs(w http.ResponseWriter, r *http.Request) {
 		case errors.As(err, &mbe):
 			httpError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("上传内容超过 %dMB 限制", s.cfg.MaxUploadMB))
 		default:
-			httpError(w, 400, "上传失败："+err.Error())
+			httpError(w, http.StatusBadRequest, "上传失败："+err.Error())
 		}
 	}
 	var parentID *string
@@ -725,13 +726,13 @@ func (s *Server) importDocs(w http.ResponseWriter, r *http.Request) {
 
 	roots, docs := planImport(set)
 	if len(docs) == 0 {
-		httpError(w, 400, "没有找到 Markdown 文件（.md / .markdown）")
+		httpError(w, http.StatusBadRequest, "没有找到 Markdown 文件（.md / .markdown）")
 		return
 	}
 	if parentID != nil {
 		p, err := s.loadNode(s.db, *parentID)
 		if err != nil || p.RepoID != repoID {
-			httpError(w, 400, "导入位置不存在")
+			httpError(w, http.StatusBadRequest, "导入位置不存在")
 			return
 		}
 	}
@@ -753,60 +754,56 @@ func (s *Server) importDocs(w http.ResponseWriter, r *http.Request) {
 	if res.Missing == nil {
 		res.Missing = []string{}
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	defer tx.Rollback()
-	if parentID != nil {
-		if p, err := s.loadNode(tx, *parentID); err != nil || p.RepoID != repoID {
-			httpError(w, 400, "导入位置不存在")
-			return
-		}
-	}
 	t := now()
-	var base float64
-	tx.QueryRow(`SELECT COALESCE(MAX(sort), 0) FROM nodes WHERE repo_id = ? AND parent_id IS ? AND deleted_at IS NULL`, repoID, parentID).Scan(&base)
-	var insert func(parent *string, list []*importNode, base float64) error
-	insert = func(parent *string, list []*importNode, base float64) error {
-		for i, in := range list {
-			n := Node{ID: in.id, RepoID: repoID, ParentID: parent, Type: in.typ, Title: in.title, Sort: base + float64(i+1), CreatedAt: t, UpdatedAt: t}
-			if _, err := tx.Exec(`INSERT INTO nodes(id, repo_id, parent_id, type, title, sort, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)`,
-				n.ID, n.RepoID, n.ParentID, n.Type, n.Title, n.Sort, n.CreatedAt, n.UpdatedAt); err != nil {
-				return err
-			}
-			if in.typ == "doc" {
-				md := contents[in]
-				if _, err := tx.Exec(`INSERT INTO doc_contents(node_id, markdown, updated_at) VALUES(?,?,?)`, n.ID, md, t); err != nil {
-					return err
-				}
-				if err := indexDoc(tx, n.ID, n.Title, md, t); err != nil {
-					return err
-				}
-				res.Docs++
-				if res.First == nil {
-					res.First = &n
-				}
-			} else {
-				res.Groups++
-			}
-			if err := insert(&n.ID, in.children, 0); err != nil {
-				return err
+	err = s.withTx(func(tx *sql.Tx) error {
+		if parentID != nil {
+			if p, err := s.loadNode(tx, *parentID); err != nil || p.RepoID != repoID {
+				return errStatus(http.StatusBadRequest, "导入位置不存在")
 			}
 		}
-		return nil
-	}
-	if err := insert(parentID, roots, base); err != nil {
-		httpError(w, 500, err.Error())
+		var base float64
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(sort), 0) FROM nodes WHERE repo_id = ? AND parent_id IS ? AND deleted_at IS NULL`, repoID, parentID).Scan(&base); err != nil {
+			return err
+		}
+		var insert func(parent *string, list []*importNode, base float64) error
+		insert = func(parent *string, list []*importNode, base float64) error {
+			for i, in := range list {
+				n := Node{ID: in.id, RepoID: repoID, ParentID: parent, Type: in.typ, Title: in.title, Sort: base + float64(i+1), CreatedAt: t, UpdatedAt: t}
+				if _, err := tx.Exec(`INSERT INTO nodes(id, repo_id, parent_id, type, title, sort, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+					n.ID, n.RepoID, n.ParentID, n.Type, n.Title, n.Sort, n.CreatedAt, n.UpdatedAt); err != nil {
+					return err
+				}
+				if in.typ == "doc" {
+					md := contents[in]
+					if _, err := tx.Exec(`INSERT INTO doc_contents(node_id, markdown, updated_at) VALUES(?,?,?)`, n.ID, md, t); err != nil {
+						return err
+					}
+					if err := indexDoc(tx, n.ID, n.Title, md, t); err != nil {
+						return err
+					}
+					res.Docs++
+					if res.First == nil {
+						res.First = &n
+					}
+				} else {
+					res.Groups++
+				}
+				if err := insert(&n.ID, in.children, 0); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := insert(parentID, roots, base); err != nil {
+			return err
+		}
+		return touchRepo(tx, repoID, t)
+	})
+	if err != nil {
+		writeError(w, err)
 		return
 	}
-	tx.Exec(`UPDATE repos SET updated_at = ? WHERE id = ?`, t, repoID)
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	writeJSON(w, 201, res)
+	writeJSON(w, http.StatusCreated, res)
 }
 
 // rawFileName is the file name as sent, keeping the directory part that

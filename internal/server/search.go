@@ -33,7 +33,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	out := []SearchHit{}
 	if q == "" {
-		writeJSON(w, 200, out)
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	if r := []rune(q); len(r) > 200 {
@@ -48,13 +48,13 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		hits, err = s.searchLike(q)
 	}
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	if hits != nil {
 		out = hits
 	}
-	writeJSON(w, 200, out)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func minTermLen(q string) int {
@@ -85,7 +85,9 @@ FROM docs_fts f`+searchJoin+` AND docs_fts MATCH ? ORDER BY bm25(docs_fts, 0, 8,
 	var out []SearchHit
 	for rows.Next() {
 		var h SearchHit
-		rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Type, &h.Snippet, &h.UpdatedAt)
+		if err := rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Type, &h.Snippet, &h.UpdatedAt); err != nil {
+			return nil, err
+		}
 		out = append(out, h)
 	}
 	return out, rows.Err()
@@ -110,7 +112,9 @@ func (s *Server) searchLike(q string) ([]SearchHit, error) {
 	for rows.Next() {
 		var h SearchHit
 		var body string
-		rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Type, &body, &h.UpdatedAt)
+		if err := rows.Scan(&h.ID, &h.RepoID, &h.RepoName, &h.Title, &h.Type, &body, &h.UpdatedAt); err != nil {
+			return nil, err
+		}
 		h.Snippet = makeSnippet(body, terms[0])
 		out = append(out, h)
 	}

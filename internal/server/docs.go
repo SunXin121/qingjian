@@ -39,13 +39,13 @@ func (s *Server) loadDoc(id string) (*Doc, error) {
 func (s *Server) getDoc(w http.ResponseWriter, r *http.Request) {
 	d, err := s.loadDoc(r.PathValue("id"))
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, 404, "文档不存在")
+		httpError(w, http.StatusNotFound, "文档不存在")
 		return
 	} else if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, d)
+	writeJSON(w, http.StatusOK, d)
 }
 
 // saveDoc stores markdown (and optionally title). If base_updated_at is given and does not
@@ -61,77 +61,75 @@ func (s *Server) saveDoc(w http.ResponseWriter, r *http.Request) {
 		Snapshot      bool    `json:"snapshot"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		httpError(w, 400, "请求格式错误")
+		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	defer tx.Rollback()
-	n, err := s.loadNode(tx, id)
-	if err != nil || n.Type != "doc" {
-		httpError(w, 404, "文档不存在")
-		return
-	}
-	var md string
-	var contentUpdated int64
-	if err := tx.QueryRow(`SELECT markdown, updated_at FROM doc_contents WHERE node_id = ?`, id).Scan(&md, &contentUpdated); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	if in.BaseUpdatedAt != nil && *in.BaseUpdatedAt != contentUpdated && !in.Force {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "文档已在其他地方被修改", "updated_at": contentUpdated})
-		return
-	}
-	t := now()
-	if t <= contentUpdated {
-		t = contentUpdated + 1 // keep updated_at strictly increasing for conflict detection
-	}
-	oldTitle := n.Title
-	if in.Title != nil {
-		n.Title = strings.TrimSpace(*in.Title)
-	}
-	if in.Markdown != nil {
-		md = *in.Markdown
-	}
-	if err := renameLinks(tx, id, n.Type, oldTitle, n.Title); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	n.UpdatedAt = t
-	if _, err := tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, n.Title, t, id); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	if _, err := tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, md, t, id); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	if err := indexDoc(tx, id, n.Title, md, t); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	tx.Exec(`UPDATE repos SET updated_at = ? WHERE id = ?`, t, n.RepoID)
-
-	// snapshot: only rebuild / compare content when one is due
-	_, lastAt, _, verr := latestVersion(tx, id)
-	if in.Snapshot || errors.Is(verr, sql.ErrNoRows) || t-lastAt >= versionInterval {
-		same, err := sameAsLatest(tx, id, md)
-		if err == nil && !same {
-			err = addVersion(tx, id, n.Title, md, t)
+	errConflict := errors.New("conflict")
+	var n *Node
+	var t, conflictAt int64
+	err := s.withTx(func(tx *sql.Tx) error {
+		var err error
+		if n, err = s.loadNode(tx, id); err != nil || n.Type != "doc" {
+			return errStatus(http.StatusNotFound, "文档不存在")
 		}
-		if err != nil {
-			httpError(w, 500, err.Error())
-			return
+		var md string
+		var contentUpdated int64
+		if err := tx.QueryRow(`SELECT markdown, updated_at FROM doc_contents WHERE node_id = ?`, id).Scan(&md, &contentUpdated); err != nil {
+			return err
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
+		if in.BaseUpdatedAt != nil && *in.BaseUpdatedAt != contentUpdated && !in.Force {
+			conflictAt = contentUpdated
+			return errConflict
+		}
+		t = now()
+		if t <= contentUpdated {
+			t = contentUpdated + 1 // keep updated_at strictly increasing for conflict detection
+		}
+		oldTitle := n.Title
+		if in.Title != nil {
+			n.Title = strings.TrimSpace(*in.Title)
+		}
+		if in.Markdown != nil {
+			md = *in.Markdown
+		}
+		if err := renameLinks(tx, id, n.Type, oldTitle, n.Title); err != nil {
+			return err
+		}
+		n.UpdatedAt = t
+		if _, err := tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, n.Title, t, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, md, t, id); err != nil {
+			return err
+		}
+		if err := indexDoc(tx, id, n.Title, md, t); err != nil {
+			return err
+		}
+		if err := touchRepo(tx, n.RepoID, t); err != nil {
+			return err
+		}
+		// snapshot: only rebuild / compare content when one is due
+		_, lastAt, _, verr := latestVersion(tx, id)
+		if verr != nil && !errors.Is(verr, sql.ErrNoRows) {
+			return verr
+		}
+		if in.Snapshot || errors.Is(verr, sql.ErrNoRows) || t-lastAt >= versionInterval {
+			same, err := sameAsLatest(tx, id, md)
+			if err == nil && !same {
+				err = addVersion(tx, id, n.Title, md, t)
+			}
+			return err
+		}
+		return nil
+	})
+	if errors.Is(err, errConflict) {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "文档已在其他地方被修改", "updated_at": conflictAt})
+		return
+	} else if err != nil {
+		writeError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"updated_at": t, "title": n.Title})
+	writeJSON(w, http.StatusOK, map[string]any{"updated_at": t, "title": n.Title})
 }
 
 type Version struct {
@@ -146,17 +144,24 @@ type Version struct {
 func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`SELECT id, node_id, title, size, created_at FROM doc_versions WHERE node_id = ? ORDER BY id DESC`, r.PathValue("id"))
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	defer rows.Close()
 	out := []Version{}
 	for rows.Next() {
 		var v Version
-		rows.Scan(&v.ID, &v.NodeID, &v.Title, &v.Size, &v.CreatedAt)
+		if err := rows.Scan(&v.ID, &v.NodeID, &v.Title, &v.Size, &v.CreatedAt); err != nil {
+			serverError(w, err)
+			return
+		}
 		out = append(out, v)
 	}
-	writeJSON(w, 200, out)
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) loadVersion(r *http.Request) (*Version, error) {
@@ -179,59 +184,51 @@ func (s *Server) loadVersion(r *http.Request) (*Version, error) {
 func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 	v, err := s.loadVersion(r)
 	if err != nil {
-		httpError(w, 404, "版本不存在")
+		httpError(w, http.StatusNotFound, "版本不存在")
 		return
 	}
-	writeJSON(w, 200, v)
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 	v, err := s.loadVersion(r)
 	if err != nil {
-		httpError(w, 404, "版本不存在")
+		httpError(w, http.StatusNotFound, "版本不存在")
 		return
 	}
 	d, err := s.loadDoc(v.NodeID)
 	if err != nil {
-		httpError(w, 404, "文档不存在")
+		httpError(w, http.StatusNotFound, "文档不存在")
 		return
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	defer tx.Rollback()
 	t := now()
 	if t <= d.ContentUpdatedAt {
 		t = d.ContentUpdatedAt + 1
 	}
-	// snapshot the current content first so the restore itself is undoable
-	err = addVersion(tx, d.ID, d.Title, d.Markdown, t-1)
-	if err == nil {
-		_, err = tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, v.Title, t, d.ID)
-	}
-	if err == nil {
-		err = renameLinks(tx, d.ID, "doc", d.Title, v.Title)
-	}
-	if err == nil {
-		_, err = tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, v.Markdown, t, d.ID)
-	}
-	if err == nil {
-		err = indexDoc(tx, d.ID, v.Title, v.Markdown, t)
-	}
-	if err == nil {
-		err = addVersion(tx, d.ID, v.Title, v.Markdown, t)
-	}
+	err = s.withTx(func(tx *sql.Tx) error {
+		// snapshot the current content first so the restore itself is undoable
+		if err := addVersion(tx, d.ID, d.Title, d.Markdown, t-1); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?`, v.Title, t, d.ID); err != nil {
+			return err
+		}
+		if err := renameLinks(tx, d.ID, "doc", d.Title, v.Title); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE doc_contents SET markdown = ?, updated_at = ? WHERE node_id = ?`, v.Markdown, t, d.ID); err != nil {
+			return err
+		}
+		if err := indexDoc(tx, d.ID, v.Title, v.Markdown, t); err != nil {
+			return err
+		}
+		return addVersion(tx, d.ID, v.Title, v.Markdown, t)
+	})
 	if err != nil {
-		httpError(w, 500, err.Error())
+		writeError(w, err)
 		return
 	}
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	writeJSON(w, 200, map[string]any{"updated_at": t})
+	writeJSON(w, http.StatusOK, map[string]any{"updated_at": t})
 }
 
 type RecentDoc struct {
@@ -247,15 +244,22 @@ func (s *Server) recentDocs(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`SELECT n.id, n.repo_id, r.name, n.title, n.type, n.updated_at FROM nodes n JOIN repos r ON r.id = n.repo_id
 WHERE n.type IN ('doc', 'table') AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY n.updated_at DESC LIMIT 30`)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	defer rows.Close()
 	out := []RecentDoc{}
 	for rows.Next() {
 		var d RecentDoc
-		rows.Scan(&d.ID, &d.RepoID, &d.RepoName, &d.Title, &d.Type, &d.UpdatedAt)
+		if err := rows.Scan(&d.ID, &d.RepoID, &d.RepoName, &d.Title, &d.Type, &d.UpdatedAt); err != nil {
+			serverError(w, err)
+			return
+		}
 		out = append(out, d)
 	}
-	writeJSON(w, 200, out)
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }

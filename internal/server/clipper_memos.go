@@ -26,9 +26,10 @@ func clipRespondError(w http.ResponseWriter, err error) {
 	if errors.As(err, &e) {
 		clipError(w, e.status, e.code, e.message)
 	} else if errors.Is(err, sql.ErrNoRows) {
-		clipError(w, 404, "not_found", "Clipper memo or notebook not found")
+		clipError(w, http.StatusNotFound, "not_found", "Clipper memo or notebook not found")
 	} else {
-		clipError(w, 500, "storage_error", "Cannot persist clipper data")
+		logInternal(2, err)
+		clipError(w, http.StatusInternalServerError, "storage_error", "Cannot persist clipper data")
 	}
 }
 
@@ -95,19 +96,19 @@ func (s *Server) clipperNotebooks(w http.ResponseWriter, r *http.Request) {
 		clipRespondError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"notebooks": out})
+	writeJSON(w, http.StatusOK, map[string]any{"notebooks": out})
 }
 func clipNormalizeInput(in *clipMemoInput) error {
 	in.Title = strings.TrimSpace(in.Title)
 	if len(in.Title) > 1000 || len(in.Markdown) > 16<<20 || len(in.Tags) > 100 {
-		return clipFail(400, "invalid_request", "Memo or tags exceed size limits")
+		return clipFail(http.StatusBadRequest, "invalid_request", "Memo or tags exceed size limits")
 	}
 	tags := []string{}
 	seen := map[string]bool{}
 	for _, tag := range in.Tags {
 		tag = strings.TrimSpace(tag)
 		if len(tag) > 200 {
-			return clipFail(400, "invalid_request", "Tag exceeds size limit")
+			return clipFail(http.StatusBadRequest, "invalid_request", "Tag exceeds size limit")
 		}
 		if tag != "" && !seen[tag] {
 			tags = append(tags, tag)
@@ -223,13 +224,13 @@ func clipCanonical(tx *sql.Tx, md string) (string, error) {
 			rid = m[1]
 		} else {
 			if strings.HasPrefix(path, "/api/v1/resources/") || strings.HasPrefix(path, "/files/") {
-				failure = clipFail(400, "invalid_resource", "Invalid resource reference")
+				failure = clipFail(http.StatusBadRequest, "invalid_resource", "Invalid resource reference")
 			}
 			return target
 		}
 		var name string
 		if err := tx.QueryRow(`SELECT name FROM attachments WHERE id=?`, rid).Scan(&name); err != nil {
-			failure = clipFail(400, "invalid_resource", "Resource does not exist")
+			failure = clipFail(http.StatusBadRequest, "invalid_resource", "Resource does not exist")
 			return target
 		}
 		return fileURL(rid, name) + suffix
@@ -340,7 +341,7 @@ func clipCreateTx(tx *sql.Tx, in clipMemoInput, att *Attachment) (*clipMemo, err
 func (s *Server) clipperCreate(w http.ResponseWriter, r *http.Request) {
 	var in clipMemoInput
 	if readJSON(r, &in) != nil {
-		clipError(w, 400, "invalid_request", "Invalid memo")
+		clipError(w, http.StatusBadRequest, "invalid_request", "Invalid memo")
 		return
 	}
 	s.clipCreateResponse(w, in, nil)
@@ -373,7 +374,7 @@ func (s *Server) clipCreateResponse(w http.ResponseWriter, in clipMemoInput, att
 	if att != nil {
 		out["resourceId"] = att.ID
 	}
-	writeJSON(w, 201, out)
+	writeJSON(w, http.StatusCreated, out)
 }
 func (s *Server) clipperGet(w http.ResponseWriter, r *http.Request) {
 	tx, err := s.db.Begin()
@@ -387,7 +388,7 @@ func (s *Server) clipperGet(w http.ResponseWriter, r *http.Request) {
 		clipRespondError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"memo": m})
+	writeJSON(w, http.StatusOK, map[string]any{"memo": m})
 }
 func (s *Server) clipperEditSession(w http.ResponseWriter, r *http.Request) {
 	tx, err := s.db.Begin()
@@ -413,7 +414,7 @@ func (s *Server) clipperEditSession(w http.ResponseWriter, r *http.Request) {
 		clipRespondError(w, err)
 		return
 	}
-	writeJSON(w, 201, map[string]any{"editSession": map[string]any{"id": id, "baseRevision": m.Revision, "baseContentHash": m.ContentHash}})
+	writeJSON(w, http.StatusCreated, map[string]any{"editSession": map[string]any{"id": id, "baseRevision": m.Revision, "baseContentHash": m.ContentHash}})
 }
 func (s *Server) clipperSave(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -423,7 +424,7 @@ func (s *Server) clipperSave(w http.ResponseWriter, r *http.Request) {
 		Markdown *string `json:"contentMarkdown"`
 	}
 	if readJSON(r, &in) != nil || in.Markdown == nil || len(*in.Markdown) > 16<<20 {
-		clipError(w, 400, "invalid_request", "A bounded contentMarkdown and edit session are required")
+		clipError(w, http.StatusBadRequest, "invalid_request", "A bounded contentMarkdown and edit session are required")
 		return
 	}
 	tx, err := s.db.Begin()
@@ -442,7 +443,7 @@ func (s *Server) clipperSave(w http.ResponseWriter, r *http.Request) {
 	var hash, nativeHash string
 	err = tx.QueryRow(`SELECT revision,content_hash,native_hash FROM clipper_edit_sessions WHERE id=? AND node_id=? AND expires_at>?`, in.Session, id, now()).Scan(&revision, &hash, &nativeHash)
 	if err != nil || revision != in.Revision || hash != in.Hash || m.Revision != revision || m.ContentHash != hash || m.nativeHash != nativeHash {
-		clipError(w, 409, "edit_conflict", "Memo changed or edit session expired; reload before saving")
+		clipError(w, http.StatusConflict, "edit_conflict", "Memo changed or edit session expired; reload before saving")
 		return
 	}
 	native, err := clipCanonical(tx, *in.Markdown)
@@ -495,11 +496,11 @@ func (s *Server) clipperSave(w http.ResponseWriter, r *http.Request) {
 		clipRespondError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"memo": m})
+	writeJSON(w, http.StatusOK, map[string]any{"memo": m})
 }
 func (s *Server) clipperDelete(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("permanent") != "1" {
-		clipError(w, 400, "invalid_request", "permanent=1 is required")
+		clipError(w, http.StatusBadRequest, "invalid_request", "permanent=1 is required")
 		return
 	}
 	tx, err := s.db.Begin()
@@ -517,7 +518,7 @@ func (s *Server) clipperDelete(w http.ResponseWriter, r *http.Request) {
 	var children int
 	err = tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE parent_id=?`, m.ID).Scan(&children)
 	if err == nil && children > 0 {
-		clipError(w, 409, "has_children", "Move child notes before deleting this memo")
+		clipError(w, http.StatusConflict, "has_children", "Move child notes before deleting this memo")
 		return
 	}
 	for _, q := range []string{`DELETE FROM docs_fts WHERE node_id=?`, `DELETE FROM fts_pending WHERE node_id=?`, `DELETE FROM shares WHERE target_type='node' AND target_id=?`, `DELETE FROM nodes WHERE id=?`} {
@@ -548,12 +549,12 @@ func (s *Server) clipReadImage(w http.ResponseWriter, r *http.Request) (*Attachm
 		if r.MultipartForm != nil {
 			r.MultipartForm.RemoveAll()
 		}
-		return nil, clipFail(400, "invalid_multipart", "Invalid or oversized image upload")
+		return nil, clipFail(http.StatusBadRequest, "invalid_multipart", "Invalid or oversized image upload")
 	}
 	defer r.MultipartForm.RemoveAll()
 	f, h, err := r.FormFile("file")
 	if err != nil {
-		return nil, clipFail(400, "missing_file", "Image file is required")
+		return nil, clipFail(http.StatusBadRequest, "missing_file", "Image file is required")
 	}
 	defer f.Close()
 	head := make([]byte, 512)
@@ -564,7 +565,7 @@ func (s *Server) clipReadImage(w http.ResponseWriter, r *http.Request) (*Attachm
 	head = head[:n]
 	mt := clipImageType(head)
 	if mt == "" {
-		return nil, clipFail(415, "invalid_image", "Unsupported image content")
+		return nil, clipFail(http.StatusUnsupportedMediaType, "invalid_image", "Unsupported image content")
 	}
 	digest := sha256.New()
 	att, err := s.storeUpload(io.TeeReader(io.MultiReader(bytes.NewReader(head), f), digest), h.Filename, mt, limit)
@@ -579,7 +580,7 @@ func (s *Server) clipReadImage(w http.ResponseWriter, r *http.Request) (*Attachm
 		s.blobMu.Unlock()
 	}
 	if errors.Is(err, errTooLarge) {
-		return nil, clipFail(413, "file_too_large", "Image exceeds upload limit")
+		return nil, clipFail(http.StatusRequestEntityTooLarge, "file_too_large", "Image exceeds upload limit")
 	}
 	return att, err
 }
@@ -603,12 +604,12 @@ func (s *Server) clipperCreateImage(w http.ResponseWriter, r *http.Request) {
 	in := clipMemoInput{NotebookID: r.FormValue("notebookId"), Title: r.FormValue("title"), Markdown: r.FormValue("contentMarkdown")}
 	if err = json.Unmarshal([]byte(r.FormValue("tags")), &in.Tags); err != nil {
 		s.clipDiscardUpload(att)
-		clipError(w, 400, "invalid_request", "tags must be a JSON string array")
+		clipError(w, http.StatusBadRequest, "invalid_request", "tags must be a JSON string array")
 		return
 	}
 	if _, found := clipImagePlaceholder(in.Markdown, att.ID); !found {
 		s.clipDiscardUpload(att)
-		clipError(w, 400, "invalid_request", "Image markdown must contain EDGEVERRESOURCEID")
+		clipError(w, http.StatusBadRequest, "invalid_request", "Image markdown must contain EDGEVERRESOURCEID")
 		return
 	}
 	s.clipCreateResponse(w, in, att)
@@ -655,7 +656,7 @@ func (s *Server) clipperUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	success = true
-	writeJSON(w, 201, map[string]any{"resource": map[string]any{"id": att.ID, "mimeType": att.Mime, "size": att.Size}})
+	writeJSON(w, http.StatusCreated, map[string]any{"resource": map[string]any{"id": att.ID, "mimeType": att.Mime, "size": att.Size}})
 }
 func (s *Server) clipperBlob(w http.ResponseWriter, r *http.Request) {
 	var name string

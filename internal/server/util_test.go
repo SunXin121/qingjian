@@ -1,6 +1,9 @@
 package server
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -48,5 +51,18 @@ func TestCheckPasswordCachesVerifiedHash(t *testing.T) {
 	}
 	if !s.checkPassword("secret") || s.checkPassword("secreT") {
 		t.Fatal("cached verification mismatch")
+	}
+}
+
+func TestWriteErrorHidesInternalErrors(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writeError(rec, errors.New("SQL logic error: no such table: secret_stuff"))
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "secret_stuff") {
+		t.Fatalf("internal error leaked: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	writeError(rec, fmt.Errorf("wrapped: %w", errStatus(http.StatusNotFound, "节点不存在")))
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "节点不存在") {
+		t.Fatalf("api error not passed through: %d %s", rec.Code, rec.Body.String())
 	}
 }

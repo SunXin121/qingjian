@@ -33,7 +33,7 @@ func (s *Server) requireClipperPassword(h http.HandlerFunc) http.Handler {
 			if basic && !blocked {
 				s.limiter.fail(ip)
 			}
-			clipError(w, 401, "unauthorized", "The admin password is required")
+			clipError(w, http.StatusUnauthorized, "unauthorized", "The admin password is required")
 			return
 		}
 		s.limiter.reset(ip)
@@ -53,7 +53,7 @@ func (s *Server) registerClipper(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/memos/{id}/save", b(s.clipperSave))
 	mux.Handle("GET /api/v1/resources/{id}/blob", b(s.clipperBlob))
 	mux.Handle("/api/v1/", b(func(w http.ResponseWriter, r *http.Request) {
-		clipError(w, 404, "not_found", "Unknown clipper endpoint")
+		clipError(w, http.StatusNotFound, "not_found", "Unknown clipper endpoint")
 	}))
 }
 

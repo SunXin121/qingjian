@@ -106,7 +106,7 @@ func fileSize(p string) int64 {
 func (s *Server) storageStats(w http.ResponseWriter, r *http.Request) {
 	plan, err := s.planCleanup()
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	blobs := map[string]int64{}
@@ -123,10 +123,12 @@ func (s *Server) storageStats(w http.ResponseWriter, r *http.Request) {
 		freed += n
 	}
 	var docs, versions int
-	s.db.QueryRow(`SELECT COUNT(*) FROM doc_contents`).Scan(&docs)
-	s.db.QueryRow(`SELECT COUNT(*) FROM doc_versions`).Scan(&versions)
+	if err := s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM doc_contents), (SELECT COUNT(*) FROM doc_versions)`).Scan(&docs, &versions); err != nil {
+		serverError(w, err)
+		return
+	}
 	dbPath := filepath.Join(s.cfg.DataDir, "qingjian.db")
-	writeJSON(w, 200, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"attachments":        len(plan.total),
 		"blobs":              len(blobs),
 		"logical_bytes":      logical,
@@ -181,8 +183,8 @@ func (s *Server) cleanupAttachments() (removed int, freed int64, err error) {
 func (s *Server) cleanupFiles(w http.ResponseWriter, r *http.Request) {
 	removed, freed, err := s.cleanupAttachments()
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"removed": removed, "freed_bytes": freed})
+	writeJSON(w, http.StatusOK, map[string]any{"removed": removed, "freed_bytes": freed})
 }

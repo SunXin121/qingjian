@@ -73,26 +73,29 @@ func (s *Server) imgbedConfig() ImgbedConfig {
 
 func (s *Server) getImgbed(w http.ResponseWriter, r *http.Request) {
 	var cached int
-	s.db.QueryRow(`SELECT count(*) FROM imgbed_uploads`).Scan(&cached)
-	writeJSON(w, 200, map[string]any{"config": s.imgbedConfig(), "uploaded": cached})
+	if err := s.db.QueryRow(`SELECT count(*) FROM imgbed_uploads`).Scan(&cached); err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"config": s.imgbedConfig(), "uploaded": cached})
 }
 
 func (s *Server) putImgbed(w http.ResponseWriter, r *http.Request) {
 	var c ImgbedConfig
 	if err := readJSON(r, &c); err != nil {
-		httpError(w, 400, "请求格式错误")
+		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
 	if err := c.normalize(); err != nil {
-		httpError(w, 400, err.Error())
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	data, _ := json.Marshal(c)
 	if err := s.setSetting("imgbed", string(data)); err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, c)
+	writeJSON(w, http.StatusOK, c)
 }
 
 // forgetImgbed drops the upload records, so the next export uploads every file again
@@ -100,11 +103,11 @@ func (s *Server) putImgbed(w http.ResponseWriter, r *http.Request) {
 func (s *Server) forgetImgbed(w http.ResponseWriter, r *http.Request) {
 	res, err := s.db.Exec(`DELETE FROM imgbed_uploads`)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	n, _ := res.RowsAffected()
-	writeJSON(w, 200, map[string]int64{"removed": n})
+	writeJSON(w, http.StatusOK, map[string]int64{"removed": n})
 }
 
 type imgbedUploader struct {

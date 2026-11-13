@@ -90,7 +90,9 @@ func addVersion(tx *sql.Tx, nodeID, title, md string, t int64) error {
 	prevID, _, _, err := latestVersion(tx, nodeID)
 	if err == nil {
 		var chain int
-		tx.QueryRow(`SELECT COUNT(*) FROM doc_versions WHERE node_id = ? AND id > (SELECT COALESCE(MAX(id), 0) FROM doc_versions WHERE node_id = ? AND delta = 0)`, nodeID, nodeID).Scan(&chain)
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM doc_versions WHERE node_id = ? AND id > (SELECT COALESCE(MAX(id), 0) FROM doc_versions WHERE node_id = ? AND delta = 0)`, nodeID, nodeID).Scan(&chain); err != nil {
+			return err
+		}
 		if chain < versionKeyframeEvery-1 {
 			if prev, err := versionText(tx, prevID); err == nil {
 				if d := makeDelta(prev, md); float64(len(d)) < float64(len(md))*versionDeltaMaxRatio {
@@ -118,7 +120,9 @@ func pruneVersions(tx *sql.Tx, nodeID string) error {
 		return err
 	}
 	var older int
-	tx.QueryRow(`SELECT COUNT(*) FROM doc_versions WHERE node_id = ? AND id < ?`, nodeID, cut).Scan(&older)
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM doc_versions WHERE node_id = ? AND id < ?`, nodeID, cut).Scan(&older); err != nil {
+		return err
+	}
 	if older == 0 {
 		return nil
 	}
@@ -149,7 +153,11 @@ func (s *Server) compactVersions() {
 	var nodes []string
 	for rows.Next() {
 		var id string
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			log.Printf("compact versions: %v", err)
+			return
+		}
 		nodes = append(nodes, id)
 	}
 	rows.Close()
@@ -181,10 +189,16 @@ func (s *Server) compactNodeVersions(nodeID string) (saved int64, err error) {
 	var ids []int64
 	for rows.Next() {
 		var id int64
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
 		ids = append(ids, id)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
 	var prevText string
 	prevID := int64(0)
 	chain := 0
@@ -235,7 +249,10 @@ func (s *Server) compactNodeVersions(nodeID string) (saved int64, err error) {
 			} else {
 				chain = 0
 			}
-			tx.Exec(`UPDATE doc_versions SET hash = ?, size = ? WHERE id = ? AND hash = ''`, contentHash(text), utf8.RuneCountInString(text), id)
+			if _, err := tx.Exec(`UPDATE doc_versions SET hash = ?, size = ? WHERE id = ? AND hash = ''`, contentHash(text), utf8.RuneCountInString(text), id); err != nil {
+				tx.Rollback()
+				return saved, err
+			}
 			prevID, prevText = id, text
 		}
 		if err := tx.Commit(); err != nil {

@@ -66,11 +66,6 @@ var (
 
 const maxTableOps = 20000
 
-type querier interface {
-	QueryRow(string, ...any) *sql.Row
-	Query(string, ...any) (*sql.Rows, error)
-}
-
 // loadTableData returns the table node with everything in it.
 func (s *Server) loadTableData(q querier, id string) (*TableData, error) {
 	n, err := s.loadNode(q, id)
@@ -162,16 +157,16 @@ func initTable(tx *sql.Tx, tableID string, t int64) error {
 func (s *Server) getTable(w http.ResponseWriter, r *http.Request) {
 	t, err := s.loadTableData(s.db, r.PathValue("id"))
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, 404, "表格不存在")
+		httpError(w, http.StatusNotFound, "表格不存在")
 		return
 	} else if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	if linked := s.linkedTables(s.db, t); len(linked) > 0 {
 		t.Linked = linked
 	}
-	writeJSON(w, 200, t)
+	writeJSON(w, http.StatusOK, t)
 }
 
 type tableSummary struct {
@@ -193,33 +188,42 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`SELECT n.id, n.title, n.repo_id, r.name FROM nodes n JOIN repos r ON r.id = n.repo_id
 WHERE n.type = 'table' AND n.deleted_at IS NULL AND r.deleted_at IS NULL ORDER BY n.updated_at DESC`)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	out := []*tableSummary{}
 	byID := map[string]*tableSummary{}
 	for rows.Next() {
 		t := &tableSummary{Views: []viewSummary{}}
-		rows.Scan(&t.ID, &t.Title, &t.RepoID, &t.RepoName)
+		if err := rows.Scan(&t.ID, &t.Title, &t.RepoID, &t.RepoName); err != nil {
+			rows.Close()
+			serverError(w, err)
+			return
+		}
 		out = append(out, t)
 		byID[t.ID] = t
 	}
 	rows.Close()
-	rows, err = s.db.Query(`SELECT table_node_id, id, name, type FROM bt_views ORDER BY sort, rowid`)
-	if err != nil {
-		httpError(w, 500, err.Error())
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
 		return
 	}
-	defer rows.Close()
-	for rows.Next() {
+	err = scanRows(s.db, func(rows *sql.Rows) error {
 		var tid string
 		var v viewSummary
-		rows.Scan(&tid, &v.ID, &v.Name, &v.Type)
+		if err := rows.Scan(&tid, &v.ID, &v.Name, &v.Type); err != nil {
+			return err
+		}
 		if t := byID[tid]; t != nil {
 			t.Views = append(t.Views, v)
 		}
+		return nil
+	}, `SELECT table_node_id, id, name, type FROM bt_views ORDER BY sort, rowid`)
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-	writeJSON(w, 200, out)
+	writeJSON(w, http.StatusOK, out)
 }
 
 // tableOp is one change to a table. Ops are applied in order inside one transaction.
@@ -280,6 +284,7 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWri
 		l.invalidate()
 	}
 	// the field as it was (for link pairing)
+	// (empty when the field does not exist)
 	oldField := func() (typ, opts string) {
 		tx.QueryRow(`SELECT type, options FROM bt_fields WHERE id = ? AND table_node_id = ?`, op.ID, tableID).Scan(&typ, &opts)
 		return
@@ -351,9 +356,11 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWri
 		}
 	case "field.delete":
 		var n int
-		tx.QueryRow(`SELECT COUNT(*) FROM bt_fields WHERE table_node_id = ?`, tableID).Scan(&n)
 		var primary string
-		tx.QueryRow(`SELECT id FROM bt_fields WHERE table_node_id = ? ORDER BY sort, rowid LIMIT 1`, tableID).Scan(&primary)
+		if err := tx.QueryRow(`SELECT COUNT(*), COALESCE((SELECT id FROM bt_fields WHERE table_node_id = ?1 ORDER BY sort, rowid LIMIT 1), '')
+FROM bt_fields WHERE table_node_id = ?1`, tableID).Scan(&n, &primary); err != nil {
+			return err
+		}
 		if primary == op.ID || n <= 1 {
 			return opError{"不能删除主字段"}
 		}
@@ -393,7 +400,9 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWri
 		}
 	case "view.delete":
 		var n int
-		tx.QueryRow(`SELECT COUNT(*) FROM bt_views WHERE table_node_id = ?`, tableID).Scan(&n)
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM bt_views WHERE table_node_id = ?`, tableID).Scan(&n); err != nil {
+			return err
+		}
 		if n <= 1 {
 			return opError{"至少需要保留一个视图"}
 		}
@@ -407,7 +416,9 @@ func applyTableOp(tx *sql.Tx, tableID string, op tableOp, t int64, h *historyWri
 		if op.Seq != nil && *op.Seq > 0 {
 			seq = *op.Seq
 		} else {
-			tx.QueryRow(`SELECT COALESCE(MAX(seq), 0) + 1 FROM bt_records WHERE table_node_id = ?`, tableID).Scan(&seq)
+			if err := tx.QueryRow(`SELECT COALESCE(MAX(seq), 0) + 1 FROM bt_records WHERE table_node_id = ?`, tableID).Scan(&seq); err != nil {
+				return err
+			}
 		}
 		created := t
 		if op.CreatedAt != nil && *op.CreatedAt > 0 && *op.CreatedAt <= t {
@@ -492,50 +503,46 @@ func (s *Server) tableOps(w http.ResponseWriter, r *http.Request) {
 		Ops []tableOp `json:"ops"`
 	}
 	if err := readJSON(r, &in); err != nil {
-		httpError(w, 400, "请求格式错误")
+		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
 	if len(in.Ops) > maxTableOps {
-		httpError(w, 400, fmt.Sprintf("单次最多 %d 项修改", maxTableOps))
-		return
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	defer tx.Rollback()
-	n, err := s.loadNode(tx, id)
-	if err != nil || n.Type != "table" {
-		httpError(w, 404, "表格不存在")
+		httpError(w, http.StatusBadRequest, fmt.Sprintf("单次最多 %d 项修改", maxTableOps))
 		return
 	}
 	t := now()
-	h := &historyWriter{tx: tx, tableID: id, t: t}
-	l := &linkSync{tx: tx, tableID: id, t: t}
-	for i, op := range in.Ops {
-		if err := applyTableOp(tx, id, op, t, h, l); err != nil {
-			var oe opError
-			if errors.As(err, &oe) {
-				httpError(w, 400, oe.msg)
-			} else {
-				httpError(w, 500, fmt.Sprintf("op %d: %v", i, err))
-			}
-			return
+	err := s.withTx(func(tx *sql.Tx) error {
+		n, err := s.loadNode(tx, id)
+		if err != nil || n.Type != "table" {
+			return errStatus(http.StatusNotFound, "表格不存在")
 		}
-	}
-	if err := queueTableIndex(tx, id, t); err != nil {
-		httpError(w, 500, err.Error())
+		h := &historyWriter{tx: tx, tableID: id, t: t}
+		l := &linkSync{tx: tx, tableID: id, t: t}
+		for i, op := range in.Ops {
+			if err := applyTableOp(tx, id, op, t, h, l); err != nil {
+				var oe opError
+				if errors.As(err, &oe) {
+					return errStatus(http.StatusBadRequest, oe.msg)
+				}
+				return fmt.Errorf("table %s op %d (%s): %w", id, i, op.Op, err)
+			}
+		}
+		if err := queueTableIndex(tx, id, t); err != nil {
+			return err
+		}
+		for other := range l.touched {
+			if _, err := tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, t, other); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, t, id); err != nil {
+			return err
+		}
+		return touchRepo(tx, n.RepoID, t)
+	})
+	if err != nil {
+		writeError(w, err)
 		return
 	}
-	tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, t, id)
-	for other := range l.touched {
-		tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, t, other)
-	}
-	tx.Exec(`UPDATE repos SET updated_at = ? WHERE id = ?`, t, n.RepoID)
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	writeJSON(w, 200, map[string]any{"updated_at": t})
+	writeJSON(w, http.StatusOK, map[string]any{"updated_at": t})
 }

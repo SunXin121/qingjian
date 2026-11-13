@@ -1,9 +1,11 @@
 package server
 
 import (
+	"cmp"
 	"database/sql"
 	"math"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -19,110 +21,90 @@ type TrashItem struct {
 
 func (s *Server) listTrash(w http.ResponseWriter, r *http.Request) {
 	out := []TrashItem{}
-	rows, err := s.db.Query(`SELECT id, name, deleted_at FROM repos WHERE deleted_at IS NOT NULL`)
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	for rows.Next() {
+	err := scanRows(s.db, func(rows *sql.Rows) error {
 		it := TrashItem{Kind: "repo", Type: "repo"}
-		rows.Scan(&it.ID, &it.Title, &it.DeletedAt)
+		if err := rows.Scan(&it.ID, &it.Title, &it.DeletedAt); err != nil {
+			return err
+		}
 		it.RepoID, it.RepoName = it.ID, it.Title
 		out = append(out, it)
-	}
-	rows.Close()
-	rows, err = s.db.Query(`SELECT n.id, n.type, n.title, n.repo_id, r.name, n.deleted_at FROM nodes n JOIN repos r ON r.id = n.repo_id
+		return nil
+	}, `SELECT id, name, deleted_at FROM repos WHERE deleted_at IS NOT NULL`)
+	if err == nil {
+		err = scanRows(s.db, func(rows *sql.Rows) error {
+			it := TrashItem{Kind: "node"}
+			if err := rows.Scan(&it.ID, &it.Type, &it.Title, &it.RepoID, &it.RepoName, &it.DeletedAt); err != nil {
+				return err
+			}
+			out = append(out, it)
+			return nil
+		}, `SELECT n.id, n.type, n.title, n.repo_id, r.name, n.deleted_at FROM nodes n JOIN repos r ON r.id = n.repo_id
 WHERE n.trash_root = 1 AND n.deleted_at IS NOT NULL AND r.deleted_at IS NULL`)
+	}
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	for rows.Next() {
-		it := TrashItem{Kind: "node"}
-		rows.Scan(&it.ID, &it.Type, &it.Title, &it.RepoID, &it.RepoName, &it.DeletedAt)
-		out = append(out, it)
-	}
-	rows.Close()
 	// newest first
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].DeletedAt > out[j-1].DeletedAt; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
-	writeJSON(w, 200, out)
+	slices.SortStableFunc(out, func(a, b TrashItem) int { return cmp.Compare(b.DeletedAt, a.DeletedAt) })
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) restoreTrash(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("kind"), r.PathValue("id")
-	tx, err := s.db.Begin()
+	err := s.withTx(func(tx *sql.Tx) error {
+		switch kind {
+		case "repo":
+			_, err := tx.Exec(`UPDATE repos SET deleted_at = NULL WHERE id = ?`, id)
+			return err
+		case "node":
+			return restoreNode(tx, id)
+		default:
+			return errStatus(http.StatusBadRequest, "未知类型")
+		}
+	})
 	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	defer tx.Rollback()
-	switch kind {
-	case "repo":
-		if _, err := tx.Exec(`UPDATE repos SET deleted_at = NULL WHERE id = ?`, id); err != nil {
-			httpError(w, 500, err.Error())
-			return
-		}
-	case "node":
-		var deletedAt int64
-		var parentID *string
-		if err := tx.QueryRow(`SELECT deleted_at, parent_id FROM nodes WHERE id = ? AND trash_root = 1`, id).Scan(&deletedAt, &parentID); err != nil {
-			httpError(w, 404, "条目不存在")
-			return
-		}
-		ids, err := descendantIDs(tx, id, false)
-		if err != nil {
-			httpError(w, 500, err.Error())
-			return
-		}
-		for _, x := range ids {
-			// only revive descendants deleted together with the root
-			if _, err := tx.Exec(`UPDATE nodes SET deleted_at = NULL, trash_root = 0 WHERE id = ? AND deleted_at = ?`, x, deletedAt); err != nil {
-				httpError(w, 500, err.Error())
-				return
-			}
-		}
-		// if the original parent is gone, put it back at the root
-		if parentID != nil {
-			var alive int
-			if err := tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = ? AND deleted_at IS NULL`, *parentID).Scan(&alive); err != nil {
-				httpError(w, 500, err.Error())
-				return
-			}
-			if alive == 0 {
-				if _, err := tx.Exec(`UPDATE nodes SET parent_id = NULL WHERE id = ?`, id); err != nil {
-					httpError(w, 500, err.Error())
-					return
-				}
-			}
-		}
-	default:
-		httpError(w, 400, "未知类型")
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
+		writeError(w, err)
 		return
 	}
 	ok(w)
 }
 
-func (s *Server) purgeTrash(w http.ResponseWriter, r *http.Request) {
-	tx, err := s.db.Begin()
+// restoreNode revives a trashed node with the descendants deleted together with it.
+func restoreNode(tx *sql.Tx, id string) error {
+	var deletedAt int64
+	var parentID *string
+	if err := tx.QueryRow(`SELECT deleted_at, parent_id FROM nodes WHERE id = ? AND trash_root = 1`, id).Scan(&deletedAt, &parentID); err != nil {
+		return errStatus(http.StatusNotFound, "条目不存在")
+	}
+	ids, err := descendantIDs(tx, id, false)
 	if err != nil {
-		httpError(w, 500, err.Error())
-		return
+		return err
 	}
-	defer tx.Rollback()
-	if err := purgeItem(tx, r.PathValue("kind"), r.PathValue("id")); err != nil {
-		httpError(w, 500, err.Error())
-		return
+	for _, x := range ids {
+		// only revive descendants deleted together with the root
+		if _, err := tx.Exec(`UPDATE nodes SET deleted_at = NULL, trash_root = 0 WHERE id = ? AND deleted_at = ?`, x, deletedAt); err != nil {
+			return err
+		}
 	}
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
+	// if the original parent is gone, put it back at the root
+	if parentID == nil {
+		return nil
+	}
+	var alive int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = ? AND deleted_at IS NULL`, *parentID).Scan(&alive); err != nil {
+		return err
+	}
+	if alive == 0 {
+		_, err = tx.Exec(`UPDATE nodes SET parent_id = NULL WHERE id = ?`, id)
+	}
+	return err
+}
+
+func (s *Server) purgeTrash(w http.ResponseWriter, r *http.Request) {
+	err := s.withTx(func(tx *sql.Tx) error { return purgeItem(tx, r.PathValue("kind"), r.PathValue("id")) })
+	if err != nil {
+		writeError(w, err)
 		return
 	}
 	ok(w)
@@ -163,56 +145,46 @@ func purgeItem(tx *sql.Tx, kind, id string) error {
 
 // emptyTrash deletes everything in the trash for good.
 func (s *Server) emptyTrash(w http.ResponseWriter, r *http.Request) {
-	tx, err := s.db.Begin()
+	var n int
+	err := s.withTx(func(tx *sql.Tx) (err error) {
+		n, err = purgeTrashedBefore(tx, math.MaxInt64)
+		return err
+	})
 	if err != nil {
-		httpError(w, 500, err.Error())
+		writeError(w, err)
 		return
 	}
-	defer tx.Rollback()
-	n, err := purgeTrashedBefore(tx, math.MaxInt64)
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	writeJSON(w, 200, map[string]int{"purged": n})
+	writeJSON(w, http.StatusOK, map[string]int{"purged": n})
 }
 
 func (s *Server) purgeExpiredTrash(age time.Duration) (int, error) {
 	cutoff := time.Now().Add(-age).UnixMilli()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	n, err := purgeTrashedBefore(tx, cutoff)
-	if err != nil {
-		return 0, err
-	}
-	// deleted records stay restorable through undo only briefly; their log goes with the trash
-	if err := purgeDeletedRecordHistory(tx, cutoff); err != nil {
-		return 0, err
-	}
-	return n, tx.Commit()
+	var n int
+	err := s.withTx(func(tx *sql.Tx) (err error) {
+		if n, err = purgeTrashedBefore(tx, cutoff); err != nil {
+			return err
+		}
+		// deleted records stay restorable through undo only briefly; their log goes with the trash
+		return purgeDeletedRecordHistory(tx, cutoff)
+	})
+	return n, err
 }
 
 // purgeTrashedBefore deletes the repos and trashed nodes deleted before cutoff (unix ms).
 func purgeTrashedBefore(tx *sql.Tx, cutoff int64) (int, error) {
 	type item struct{ kind, id string }
 	var items []item
-	rows, err := tx.Query(`SELECT 'repo', id FROM repos WHERE deleted_at < ? UNION ALL SELECT 'node', id FROM nodes WHERE trash_root = 1 AND deleted_at < ?`, cutoff, cutoff)
+	err := scanRows(tx, func(rows *sql.Rows) error {
+		var it item
+		if err := rows.Scan(&it.kind, &it.id); err != nil {
+			return err
+		}
+		items = append(items, it)
+		return nil
+	}, `SELECT 'repo', id FROM repos WHERE deleted_at < ? UNION ALL SELECT 'node', id FROM nodes WHERE trash_root = 1 AND deleted_at < ?`, cutoff, cutoff)
 	if err != nil {
 		return 0, err
 	}
-	for rows.Next() {
-		var it item
-		rows.Scan(&it.kind, &it.id)
-		items = append(items, it)
-	}
-	rows.Close()
 	for _, it := range items {
 		if err := purgeItem(tx, it.kind, it.id); err != nil {
 			return 0, err

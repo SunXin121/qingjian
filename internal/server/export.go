@@ -220,14 +220,14 @@ func attachmentHeader(w http.ResponseWriter, filename string) {
 func (s *Server) exportDoc(w http.ResponseWriter, r *http.Request) {
 	d, err := s.loadDoc(r.PathValue("id"))
 	if err != nil {
-		httpError(w, 404, "文档不存在")
+		httpError(w, http.StatusNotFound, "文档不存在")
 		return
 	}
 	base := sanitizeName(nonEmpty(d.Title, "未命名文档"))
 	b := s.newExportBundle()
 	if r.URL.Query().Get("imgbed") == "1" {
 		if err := b.uploadRemote(r.Context(), []string{d.Markdown}); err != nil {
-			httpError(w, 502, err.Error())
+			httpError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
@@ -256,12 +256,12 @@ func nonEmpty(s, def string) string {
 func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 	repo, err := s.loadRepo(r.PathValue("id"))
 	if err != nil {
-		httpError(w, 404, "知识库不存在")
+		httpError(w, http.StatusNotFound, "知识库不存在")
 		return
 	}
 	nodes, err := s.treeNodes(repo.ID)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	children := map[string][]Node{}
@@ -323,7 +323,7 @@ func (s *Server) exportRepo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := b.uploadRemote(r.Context(), mds); err != nil {
-			httpError(w, 502, err.Error())
+			httpError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 	}

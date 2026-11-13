@@ -35,7 +35,7 @@ SELECT r.id, r.name, r.description, r.icon, r.sort, r.created_at, r.updated_at,
   (SELECT COUNT(*) FROM nodes n WHERE n.repo_id = r.id AND n.type = 'doc' AND n.deleted_at IS NULL)
 FROM repos r WHERE r.deleted_at IS NULL ORDER BY r.sort, r.created_at`)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	defer rows.Close()
@@ -43,12 +43,12 @@ FROM repos r WHERE r.deleted_at IS NULL ORDER BY r.sort, r.created_at`)
 	for rows.Next() {
 		var x Repo
 		if err := rows.Scan(&x.ID, &x.Name, &x.Description, &x.Icon, &x.Sort, &x.CreatedAt, &x.UpdatedAt, &x.DocCount); err != nil {
-			httpError(w, 500, err.Error())
+			serverError(w, err)
 			return
 		}
 		out = append(out, x)
 	}
-	writeJSON(w, 200, out)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) loadRepo(id string) (*Repo, error) {
@@ -64,13 +64,13 @@ func (s *Server) loadRepo(id string) (*Repo, error) {
 func (s *Server) getRepo(w http.ResponseWriter, r *http.Request) {
 	x, err := s.loadRepo(r.PathValue("id"))
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, 404, "知识库不存在")
+		httpError(w, http.StatusNotFound, "知识库不存在")
 		return
 	} else if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, x)
+	writeJSON(w, http.StatusOK, x)
 }
 
 type repoInput struct {
@@ -82,7 +82,7 @@ type repoInput struct {
 func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 	var in repoInput
 	if err := readJSON(r, &in); err != nil || in.Name == nil || strings.TrimSpace(*in.Name) == "" {
-		httpError(w, 400, "请填写知识库名称")
+		httpError(w, http.StatusBadRequest, "请填写知识库名称")
 		return
 	}
 	x := Repo{ID: newID(), Name: strings.TrimSpace(*in.Name), CreatedAt: now()}
@@ -93,26 +93,26 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 	if in.Icon != nil {
 		x.Icon = *in.Icon
 	}
-	s.db.QueryRow(`SELECT COALESCE(MAX(sort), 0) + 1 FROM repos`).Scan(&x.Sort)
-	_, err := s.db.Exec(`INSERT INTO repos(id, name, description, icon, sort, created_at, updated_at) VALUES(?,?,?,?,?,?,?)`,
-		x.ID, x.Name, x.Description, x.Icon, x.Sort, x.CreatedAt, x.UpdatedAt)
+	err := s.db.QueryRow(`INSERT INTO repos(id, name, description, icon, sort, created_at, updated_at)
+VALUES(?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM repos), ?, ?) RETURNING sort`,
+		x.ID, x.Name, x.Description, x.Icon, x.CreatedAt, x.UpdatedAt).Scan(&x.Sort)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 201, x)
+	writeJSON(w, http.StatusCreated, x)
 }
 
 func (s *Server) updateRepo(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var in repoInput
 	if err := readJSON(r, &in); err != nil {
-		httpError(w, 400, "请求格式错误")
+		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
 	x, err := s.loadRepo(id)
 	if err != nil {
-		httpError(w, 404, "知识库不存在")
+		httpError(w, http.StatusNotFound, "知识库不存在")
 		return
 	}
 	if in.Name != nil && strings.TrimSpace(*in.Name) != "" {
@@ -126,20 +126,20 @@ func (s *Server) updateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	x.UpdatedAt = now()
 	if _, err := s.db.Exec(`UPDATE repos SET name=?, description=?, icon=?, updated_at=? WHERE id=?`, x.Name, x.Description, x.Icon, x.UpdatedAt, id); err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, x)
+	writeJSON(w, http.StatusOK, x)
 }
 
 func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	res, err := s.db.Exec(`UPDATE repos SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`, now(), r.PathValue("id"))
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		httpError(w, 404, "知识库不存在")
+		httpError(w, http.StatusNotFound, "知识库不存在")
 		return
 	}
 	ok(w)
@@ -148,10 +148,10 @@ func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) repoTree(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.treeNodes(r.PathValue("id"))
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
-	writeJSON(w, 200, nodes)
+	writeJSON(w, http.StatusOK, nodes)
 }
 
 func (s *Server) treeNodes(repoID string) ([]Node, error) {

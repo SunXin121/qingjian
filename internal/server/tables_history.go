@@ -260,7 +260,7 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 	args = append(args, historyPageSize+1)
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
-		httpError(w, 500, err.Error())
+		serverError(w, err)
 		return
 	}
 	defer rows.Close()
@@ -269,7 +269,7 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 		var e historyEntry
 		var raw string
 		if err := rows.Scan(&e.ID, &e.Action, &raw, &e.CreatedAt, &e.UpdatedAt); err != nil {
-			httpError(w, 500, err.Error())
+			serverError(w, err)
 			return
 		}
 		e.Changes = []historyChange{}
@@ -280,7 +280,7 @@ func (s *Server) recordHistory(w http.ResponseWriter, r *http.Request) {
 	if more {
 		out = out[:historyPageSize]
 	}
-	writeJSON(w, 200, map[string]any{"entries": out, "more": more})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": out, "more": more})
 }
 
 // purgeDeletedRecordHistory drops the log of records deleted before cutoff (ms).

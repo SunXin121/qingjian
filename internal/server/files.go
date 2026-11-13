@@ -57,17 +57,17 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, limit+1<<20)
 	mr, err := r.MultipartReader()
 	if err != nil {
-		httpError(w, 400, "需要 multipart/form-data")
+		httpError(w, http.StatusBadRequest, "需要 multipart/form-data")
 		return
 	}
 	for {
 		part, err := mr.NextPart()
 		if errors.Is(err, io.EOF) {
-			httpError(w, 400, "缺少 file 字段")
+			httpError(w, http.StatusBadRequest, "缺少 file 字段")
 			return
 		}
 		if err != nil {
-			httpError(w, 400, "上传失败："+err.Error())
+			httpError(w, http.StatusBadRequest, "上传失败："+err.Error())
 			return
 		}
 		if part.FormName() != "file" {
@@ -82,10 +82,10 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 				httpError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("文件超过 %dMB 限制", s.cfg.MaxUploadMB))
 				return
 			}
-			httpError(w, 500, err.Error())
+			serverError(w, err)
 			return
 		}
-		writeJSON(w, 201, att)
+		writeJSON(w, http.StatusCreated, att)
 		return
 	}
 }
