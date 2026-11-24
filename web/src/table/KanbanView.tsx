@@ -21,8 +21,9 @@ import {
   type KanbanColumn,
 } from './engine'
 import { openFieldEditor } from './FieldEditor'
+import { FieldTypeIcon } from './icons'
 import type { TableModel } from './model'
-import { isComputed, newId, TAG_COLORS, type Choice, type Field, type Rec, type TableData, type View } from './types'
+import { isComputed, newId, TAG_COLORS, type AttachmentValue, type Choice, type Field, type Rec, type TableData, type View } from './types'
 
 interface Props {
   model: TableModel
@@ -35,8 +36,8 @@ interface Props {
   onSearchCount?: (n: number) => void
 }
 
-/** cards rendered per column at first and added each time the column is scrolled to its end */
 const PAGE = 50
+const isImage = (a: AttachmentValue) => a.mime.startsWith('image/')
 
 export default function KanbanView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {
   const cfg = view.config
@@ -50,11 +51,14 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
   }, [table, view, model, needle])
   useLayoutEffect(() => onSearchCount?.(records.length), [records.length, onSearchCount])
   const primary = primaryField(table)
-  const cardFields = useMemo(() => visibleFields(table, view).filter((f) => f.id !== primary?.id && f.id !== groupField?.id), [table, view, primary, groupField])
-  // `from`: the column the card was picked up in (a multi-select card shows in several)
+  const visFields = useMemo(() => visibleFields(table, view), [table, view])
+  const coverAttach = useMemo(() => visFields.find((f) => f.type === 'attachment'), [visFields])
+  const cardFields = useMemo(
+    () => visFields.filter((f) => f.id !== primary?.id && f.id !== groupField?.id && f.id !== coverAttach?.id),
+    [visFields, primary, groupField, coverAttach],
+  )
   const [drag, setDrag] = useState<{ id: string; from: string; over?: string; before?: string } | null>(null)
   const sorted = !!cfg.sorts?.length
-  // how many cards each column shows; starts over when the view or the search changes
   const [limits, setLimits] = useState<Record<string, number>>({})
   useEffect(() => setLimits({}), [view.id, needle, groupField?.id])
   const limitOf = (key: string) => limits[key] ?? PAGE
@@ -78,7 +82,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
         )}
         {!readOnly && (
           <button
-            className="btn primary"
+            className="bt-btn-add"
             onClick={(e) =>
               openFieldEditor(e.currentTarget, model, {
                 type: 'select',
@@ -87,7 +91,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               })
             }
           >
-            <IconPlus width={16} height={16} /> 新建单选字段
+            <IconPlus width={15} height={15} /> 新建单选字段
           </button>
         )}
       </div>
@@ -97,7 +101,6 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
   const { columns, byColumn, hiddenRecords } = layout
   const choices = groupField.options.choices ?? []
   const hasChoices = groupField.type === 'select' || groupField.type === 'multiselect'
-  // computed fields (created / modified time) cannot be written: cards only reorder
   const writable = !isComputed(groupField.type)
   const allIds = [...new Set(columns.flatMap((c) => byColumn.get(c.key)!.map((r) => r.id)))]
   const canDropIn = (colKey: string) => !!drag && (writable || drag.from === colKey)
@@ -114,7 +117,6 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     const data = kanbanMoveData(groupField, rec, from, col)
     let sort: number | undefined
     if (!sorted) {
-      // place between neighbours in the global record order
       const list = byColumn.get(colKey)!.filter((r) => r.id !== rec.id)
       const idx = before ? list.findIndex((r) => r.id === before) : list.length
       const prev = list[idx - 1]
@@ -135,7 +137,6 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
     const data = kanbanNewData(groupField, col)
     const list = byColumn.get(colKey)!
     const [id] = model.addRecords([data], list.at(-1)?.id)
-    // make sure the new card at the end of the column is rendered
     setLimits((l) => ({ ...l, [colKey]: Math.max(limitOf(colKey), list.length + 1) }))
     onOpenRecord(id, [...allIds, id])
   }
@@ -163,10 +164,11 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
       {columns.map((col) => {
         const list = byColumn.get(col.key)!
         const shown = list.slice(0, limitOf(col.key))
+        const accentCls = col.choice ? ` c${col.choice.color % 10}` : ''
         return (
           <div
             key={col.key}
-            className={'bt-col' + (drag?.over === col.key ? ' over' : '')}
+            className={'bt-col' + accentCls + (drag?.over === col.key ? ' over' : '')}
             onDragOver={(e) => {
               if (!drag || !canDropIn(col.key)) return
               e.preventDefault()
@@ -202,38 +204,48 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               )}
             </div>
             <div className="bt-col-body">
-              {shown.map((r) => (
-                <div
-                  key={r.id}
-                  className={'bt-card' + (drag?.id === r.id && drag.from === col.key ? ' dragging' : '') + (drag?.over === col.key && drag.before === r.id ? ' drop-before' : '')}
-                  draggable={!readOnly}
-                  onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = 'move'
-                    e.dataTransfer.setData('text/plain', r.id)
-                    setDrag({ id: r.id, from: col.key })
-                  }}
-                  onDragEnd={() => setDrag(null)}
-                  onDragOver={(e) => {
-                    if (!drag || drag.id === r.id || !canDropIn(col.key)) return
-                    e.preventDefault()
-                    e.stopPropagation()
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                    const i = shown.indexOf(r)
-                    const before = e.clientY < rect.top + rect.height / 2 ? r.id : list[i + 1]?.id
-                    if (drag.over !== col.key || drag.before !== before) setDrag({ ...drag, over: col.key, before })
-                  }}
-                  onDrop={(e) => {
-                    e.stopPropagation()
-                    drop(e, col)
-                  }}
-                  onClick={() => onOpenRecord(r.id, allIds)}
-                >
-                  <div className={'bt-card-title' + (primary && displayText(primary, cellValue(r, primary)) ? '' : ' muted')}>{(primary && displayText(primary, cellValue(r, primary))) || '未命名记录'}</div>
-                  {cardFields.map((f) => (
-                    <CardLine key={f.id} field={f} rec={r} />
-                  ))}
-                </div>
-              ))}
+              {shown.map((r) => {
+                const coverImg = coverAttach ? ((cellValue(r, coverAttach) as AttachmentValue[] | undefined) ?? []).find(isImage) : undefined
+                return (
+                  <div
+                    key={r.id}
+                    className={'bt-card' + (drag?.id === r.id && drag.from === col.key ? ' dragging' : '') + (drag?.over === col.key && drag.before === r.id ? ' drop-before' : '')}
+                    draggable={!readOnly}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', r.id)
+                      setDrag({ id: r.id, from: col.key })
+                    }}
+                    onDragEnd={() => setDrag(null)}
+                    onDragOver={(e) => {
+                      if (!drag || drag.id === r.id || !canDropIn(col.key)) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                      const i = shown.indexOf(r)
+                      const before = e.clientY < rect.top + rect.height / 2 ? r.id : list[i + 1]?.id
+                      if (drag.over !== col.key || drag.before !== before) setDrag({ ...drag, over: col.key, before })
+                    }}
+                    onDrop={(e) => {
+                      e.stopPropagation()
+                      drop(e, col)
+                    }}
+                    onClick={() => onOpenRecord(r.id, allIds)}
+                  >
+                    {coverImg && (
+                      <div className="bt-card-cover">
+                        <img src={coverImg.url} alt="" loading="lazy" />
+                      </div>
+                    )}
+                    <div className={'bt-card-title' + (primary && displayText(primary, cellValue(r, primary)) ? '' : ' muted')}>
+                      {(primary && displayText(primary, cellValue(r, primary))) || '未命名记录'}
+                    </div>
+                    {cardFields.map((f) => (
+                      <CardLine key={f.id} field={f} rec={r} />
+                    ))}
+                  </div>
+                )
+              })}
               {shown.length < list.length && (
                 <LoadMore
                   key={shown.length}
@@ -243,7 +255,7 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
               )}
               {!readOnly && writable && shown.length === list.length && (
                 <button className="bt-col-add" onClick={() => addCard(col)}>
-                  <IconPlus width={14} height={14} /> 新建记录
+                  <IconPlus width={14} height={14} /> 添加记录
                 </button>
               )}
             </div>
@@ -270,7 +282,6 @@ export default function KanbanView({ model, table, view, readOnly, onOpenRecord,
   )
 }
 
-/** Placeholder at the end of a partly rendered column: loads the next page once it scrolls into view. */
 export function LoadMore({ rest, onLoad }: { rest: number; onLoad: () => void }) {
   const ref = useRef<HTMLButtonElement>(null)
   const load = useRef(onLoad)
@@ -278,7 +289,6 @@ export function LoadMore({ rest, onLoad }: { rest: number; onLoad: () => void })
   useEffect(() => {
     const el = ref.current
     if (!el || typeof IntersectionObserver === 'undefined') return
-    // implicit root: the visible part of the target, clipped by the column and page scrollers
     const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && load.current(), { rootMargin: '300px 0px' })
     io.observe(el)
     return () => io.disconnect()
@@ -295,7 +305,10 @@ export function CardLine({ field, rec }: { field: Field; rec: Rec }) {
   const content = ValueView({ field, rec })
   return (
     <div className="bt-card-line">
-      <span className="bt-card-label">{field.name}</span>
+      <span className="bt-card-label" title={field.name}>
+        <FieldTypeIcon type={field.type} size={12} />
+        <span className="ellipsis">{field.name}</span>
+      </span>
       <span className="bt-card-value">{content}</span>
     </div>
   )

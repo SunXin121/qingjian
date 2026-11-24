@@ -1,10 +1,24 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { openMenu, openPopover } from '../components/dialog'
-import { IconClose, IconEdit, IconPlus } from '../components/icons'
+import { IconClose, IconEdit, IconPlus, IconSearch } from '../components/icons'
 import { ChoicePicker, Tags } from './editors'
-import { cellValue, DATE_PRESETS, defaultCondValue, displayText, exprField, filterOps, kanbanField, kanbanFieldOk, orderedFields } from './engine'
+import {
+  cellValue,
+  DATE_PRESETS,
+  defaultCondValue,
+  displayText,
+  exprField,
+  filterOps,
+  groupRows,
+  kanbanField,
+  kanbanFieldOk,
+  orderedFields,
+  viewRecords,
+  type GridRow,
+} from './engine'
 import { openFieldEditor } from './FieldEditor'
 import { compileFilter, compileFormula, FORMULA_FUNCTIONS, toDisplayExpr, toStoredExpr } from './formula'
+import { FieldTypeIcon } from './icons'
 import { orderIds, useTable, type TableModel } from './model'
 import { coverField } from './GalleryView'
 import { calendarEndField, calendarField, calendarFieldOk } from './CalendarView'
@@ -43,13 +57,21 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
 
   return (
     <div className="bt-panel">
-      <div className="bt-panel-title">筛选条件</div>
-      {filter.conds.length === 0 && <div className="bt-panel-empty">还没有筛选条件，只显示符合条件的记录</div>}
+      <div className="bt-panel-title">
+        <span>筛选条件</span>
+        <span className="spacer" />
+        {filter.conds.length > 0 && (
+          <button className="btn ghost sm" onClick={() => set([])}>
+            清空全部
+          </button>
+        )}
+      </div>
+      {filter.conds.length === 0 && <div className="bt-panel-empty">设置筛选条件后，当前视图仅展示满足条件的记录</div>}
       {filter.conds.map((c, i) => {
         const conj = (
           <span className="bt-cond-conj">
             {i === 0 ? (
-              '当'
+              '满足'
             ) : i === 1 ? (
               <select className="bt-input sm" value={filter.conj} onChange={(e) => set(filter.conds, e.target.value as 'and' | 'or')}>
                 <option value="and">且</option>
@@ -103,27 +125,20 @@ export function FilterPanel({ model, viewId }: { model: TableModel; viewId: stri
             set([...filter.conds, { id: newId(), field: f.id, op: filterOps(f.type)[0].op, value: defaultCondValue(f.type) }])
           }}
         >
-          <IconPlus width={14} height={14} /> 添加条件
+          <IconPlus width={14} height={14} /> 添加筛选条件
         </button>
         <button className="btn ghost sm" onClick={() => set([...filter.conds, { id: newId(), field: '', op: 'expr', value: '' }])}>
-          <IconPlus width={14} height={14} /> 添加表达式
+          <IconPlus width={14} height={14} /> 公式条件
         </button>
       </div>
     </div>
   )
 }
 
-/** A filter condition written as a formula expression (formula.ts). */
 function ExprCond({ model, value, conj, remove, onChange }: { model: TableModel; value: string; conj: ReactNode; remove: ReactNode; onChange: (stored: string) => void }) {
   return <ExprInput model={model} value={value} lead={conj} trailing={remove} onChange={onChange} mode="filter" />
 }
 
-/**
- * Formula expression input (formula.ts) with field / function pickers. The text as typed
- * (field names) is the source while editing; `value` / `onChange` use the stored form,
- * which references fields by id. `filter` mode reports how many records match, `value`
- * mode how many distinct values the expression gives.
- */
 export function ExprInput({
   model,
   value,
@@ -141,10 +156,8 @@ export function ExprInput({
   mode: 'filter' | 'value'
   lead?: ReactNode
   trailing?: ReactNode
-  /** controls shown in the bar under the input */
   extra?: ReactNode
   placeholder?: string
-  /** value mode: show the first non-empty result instead of the number of distinct values */
   sample?: boolean
 }) {
   const t = useTable(model)
@@ -210,14 +223,17 @@ export function ExprInput({
           onClick={(e) =>
             openMenu(
               e.currentTarget,
-              t.fields.map((f) => ({ label: f.name, onClick: () => insert(`{${f.name}}`) })),
+              t.fields.map((f) => ({ label: f.name, icon: <FieldTypeIcon type={f.type} size={14} />, onClick: () => insert(`{${f.name}}`) })),
               { align: 'left', width: 220 },
             )
           }
         >
           {'{ }'} 插入字段
         </button>
-        <button className="btn ghost sm" onClick={(e) => openPopover(e.currentTarget, (close) => <FormulaHelp onPick={(name) => (close(), insert(name + '()', 1))} formula={mode === 'value'} />, { width: 380, align: 'left' })}>
+        <button
+          className="btn ghost sm"
+          onClick={(e) => openPopover(e.currentTarget, (close) => <FormulaHelp onPick={(name) => (close(), insert(name + '()', 1))} formula={mode === 'value'} />, { width: 380, align: 'left' })}
+        >
           ƒ 函数与语法
         </button>
         {extra}
@@ -356,10 +372,36 @@ function RulesPanel({ model, viewId, kind }: { model: TableModel; viewId: string
       <IconClose width={14} height={14} />
     </button>
   )
+  const collapseAll = () => {
+    const t = model.data
+    const recs = viewRecords(t, view, model.sticky)
+    const paths = groupRows(t, recs, rules, new Set())
+      .filter((x): x is Extract<GridRow, { kind: 'group' }> => x.kind === 'group')
+      .map((x) => x.path)
+    model.updateView(viewId, { collapsed: paths })
+  }
   return (
     <div className="bt-panel">
-      <div className="bt-panel-title">{kind === 'sorts' ? '排序' : '分组'}</div>
-      {rules.length === 0 && <div className="bt-panel-empty">{kind === 'sorts' ? '按字段或表达式对记录排序' : '按字段或表达式把记录分组显示，最多 3 级'}</div>}
+      <div className="bt-panel-title">
+        <span>{kind === 'sorts' ? '排序规则' : '分组设置'}</span>
+        <span className="spacer" />
+        {kind === 'groups' && rules.length > 0 && (
+          <>
+            <button className="btn ghost sm" onClick={() => model.updateView(viewId, { collapsed: [] })}>
+              全部展开
+            </button>
+            <button className="btn ghost sm" onClick={collapseAll}>
+              全部折叠
+            </button>
+          </>
+        )}
+        {rules.length > 0 && (
+          <button className="btn ghost sm" onClick={() => set([])}>
+            清空
+          </button>
+        )}
+      </div>
+      {rules.length === 0 && <div className="bt-panel-empty">{kind === 'sorts' ? '按字段或表达式对记录自动排序' : '按字段或表达式将记录分组展示，最多支持 3 级分组'}</div>}
       {rules.map((r, i) =>
         r.expr !== undefined ? (
           <ExprInput key={r.id ?? 'e' + i} model={model} value={r.expr} mode="value" trailing={remove(i)} extra={order(r, i)} onChange={(expr) => update(i, { expr })} />
@@ -377,16 +419,15 @@ function RulesPanel({ model, viewId, kind }: { model: TableModel; viewId: string
             <button
               className="btn ghost sm"
               onClick={() => {
-                // grouping by a category reads best; fall back to any field
                 const pick = kind === 'groups' ? (unused.find((f) => f.type === 'select') ?? unused.find((f) => f.type === 'checkbox' || f.type === 'multiselect') ?? unused[0]) : unused[0]
                 set([...rules, { field: pick.id }])
               }}
             >
-              <IconPlus width={14} height={14} /> {kind === 'sorts' ? '添加排序' : '添加分组'}
+              <IconPlus width={14} height={14} /> {kind === 'sorts' ? '添加排序字段' : '添加分组字段'}
             </button>
           )}
           <button className="btn ghost sm" onClick={() => set([...rules, { field: '', expr: '', id: newId() }])}>
-            <IconPlus width={14} height={14} /> 添加表达式
+            <IconPlus width={14} height={14} /> 按表达式
           </button>
         </div>
       )}
@@ -406,7 +447,7 @@ export function KanbanPanel({ model, viewId }: { model: TableModel; viewId: stri
   const isExpr = view.config.kanbanExpr !== undefined
   return (
     <div className="bt-panel">
-      <div className="bt-panel-title">看板分组字段</div>
+      <div className="bt-panel-title">看板分组依据</div>
       <select
         className="bt-input sm"
         value={isExpr ? EXPR : (cur?.id ?? '')}
@@ -425,21 +466,21 @@ export function KanbanPanel({ model, viewId }: { model: TableModel; viewId: stri
         {isExpr
           ? '每个不同的计算结果一列；结果由表达式自动计算，卡片不能拖到其他列'
           : !cur
-          ? '可按除附件、自动编号外的任意字段分组'
-          : cur.type === 'select' || cur.type === 'multiselect'
-            ? cur.type === 'multiselect'
-              ? '每个选项一列，有多个选项的记录会出现在多列中'
-              : '每个选项一列，拖动卡片即可修改选项'
-            : cur.type === 'checkbox'
-              ? '分为「未勾选」「已勾选」两列'
-              : isComputed(cur.type)
-                ? '每个日期一列；该字段自动生成，卡片不能拖到其他列'
-                : '每个不同的值一列，拖动卡片会把值改成目标列的值'}
+            ? '可按除附件、自动编号外的任意字段分组'
+            : cur.type === 'select' || cur.type === 'multiselect'
+              ? cur.type === 'multiselect'
+                ? '每个选项一列，有多个选项的记录会出现在多列中'
+                : '每个选项一列，拖动卡片即可修改选项'
+              : cur.type === 'checkbox'
+                ? '分为「未勾选」「已勾选」两列'
+                : isComputed(cur.type)
+                  ? '每个日期一列；该字段自动生成，卡片不能拖到其他列'
+                  : '每个不同的值一列，拖动卡片会把值改成目标列的值'}
       </div>
       {cur?.type !== 'checkbox' && (
-      <label className="bt-check-row">
-        <input type="checkbox" checked={!view.config.hideEmptyColumn} onChange={(e) => model.updateView(viewId, { hideEmptyColumn: !e.target.checked || undefined })} /> 显示「未分组」列
-      </label>
+        <label className="bt-check-row">
+          <input type="checkbox" checked={!view.config.hideEmptyColumn} onChange={(e) => model.updateView(viewId, { hideEmptyColumn: !e.target.checked || undefined })} /> 显示「未分组」列
+        </label>
       )}
     </div>
   )
@@ -451,6 +492,7 @@ export function FieldsPanel({ model, viewId, readOnly }: { model: TableModel; vi
   const t = useTable(model)
   const view = t.views.find((v) => v.id === viewId)
   const [drag, setDrag] = useState<string | null>(null)
+  const [q, setQ] = useState('')
   if (!view) return null
   const fields = orderedFields(t, view)
   const hidden = new Set(view.config.hidden ?? [])
@@ -461,59 +503,78 @@ export function FieldsPanel({ model, viewId, readOnly }: { model: TableModel; vi
     order.splice(i < 0 ? order.length : i, 0, id)
     model.updateView(viewId, { order })
   }
+  const needle = q.trim().toLowerCase()
+  const filteredFields = needle ? fields.filter((f) => f.name.toLowerCase().includes(needle)) : fields
+
   return (
     <div className="bt-panel">
       <div className="bt-panel-title">
-        字段
+        <span>字段配置</span>
         <span className="spacer" />
         <button className="btn ghost sm" onClick={() => setHidden(new Set())}>
           全部显示
         </button>
         <button className="btn ghost sm" onClick={() => setHidden(new Set(fields.slice(1).map((f) => f.id)))}>
-          全部隐藏
+          仅主字段
         </button>
       </div>
+      {fields.length > 5 && (
+        <div className="bt-field-search">
+          <IconSearch width={13} height={13} />
+          <input value={q} placeholder="搜索字段…" onChange={(e) => setQ(e.target.value)} />
+          {q && (
+            <button className="icon-btn sm" onClick={() => setQ('')} aria-label="清除">
+              <IconClose width={12} height={12} />
+            </button>
+          )}
+        </div>
+      )}
       <div className="bt-field-list">
-        {fields.map((f, i) => (
-          <div
-            key={f.id}
-            className={'bt-field-item' + (drag === f.id ? ' dragging' : '')}
-            draggable={i > 0}
-            onDragStart={(e) => {
-              e.dataTransfer.effectAllowed = 'move'
-              setDrag(f.id)
-            }}
-            onDragEnd={() => setDrag(null)}
-            onDragOver={(e) => i > 0 && drag && e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault()
-              if (drag && drag !== f.id && i > 0) move(drag, f.id)
-              setDrag(null)
-            }}
-          >
-            <span className="bt-drag-handle">{i > 0 ? '⠿' : ''}</span>
-            <span className="ellipsis bt-field-name">{f.name}</span>
-            <span className="bt-field-type">{i === 0 ? '主字段' : fieldTypeLabel(f.type)}</span>
-            {!readOnly && (
-              <button className="icon-btn sm" title="编辑字段" aria-label="编辑字段" onClick={(e) => openFieldEditor(e.currentTarget, model, { field: f })}>
-                <IconEdit width={14} height={14} />
-              </button>
-            )}
-            <label className="switch bt-switch" title={i === 0 ? '主字段不能隐藏' : hidden.has(f.id) ? '显示' : '隐藏'}>
-              <input
-                type="checkbox"
-                disabled={i === 0}
-                checked={i === 0 || !hidden.has(f.id)}
-                onChange={(e) => {
-                  const h = new Set(hidden)
-                  e.target.checked ? h.delete(f.id) : h.add(f.id)
-                  setHidden(h)
-                }}
-              />
-              <span />
-            </label>
-          </div>
-        ))}
+        {filteredFields.map((f) => {
+          const isPrimary = f.id === fields[0]?.id
+          return (
+            <div
+              key={f.id}
+              className={'bt-field-item' + (drag === f.id ? ' dragging' : '')}
+              draggable={!isPrimary && !needle}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setDrag(f.id)
+              }}
+              onDragEnd={() => setDrag(null)}
+              onDragOver={(e) => !isPrimary && drag && e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (drag && drag !== f.id && !isPrimary) move(drag, f.id)
+                setDrag(null)
+              }}
+            >
+              <span className="bt-drag-handle">{!isPrimary && !needle ? '⠿' : ''}</span>
+              <FieldTypeIcon type={f.type} size={14} className="bt-field-icon" />
+              <span className="ellipsis bt-field-name">{f.name}</span>
+              <span className="bt-field-type">{isPrimary ? '主字段' : fieldTypeLabel(f.type)}</span>
+              {!readOnly && (
+                <button className="icon-btn sm" title="编辑字段" aria-label="编辑字段" onClick={(e) => openFieldEditor(e.currentTarget, model, { field: f })}>
+                  <IconEdit width={13} height={13} />
+                </button>
+              )}
+              <label className="switch bt-switch" title={isPrimary ? '主字段不能隐藏' : hidden.has(f.id) ? '显示' : '隐藏'}>
+                <input
+                  type="checkbox"
+                  disabled={isPrimary}
+                  checked={isPrimary || !hidden.has(f.id)}
+                  onChange={(e) => {
+                    const h = new Set(hidden)
+                    e.target.checked ? h.delete(f.id) : h.add(f.id)
+                    setHidden(h)
+                  }}
+                />
+                <span />
+              </label>
+            </div>
+          )
+        })}
+        {!filteredFields.length && <div className="bt-panel-empty">没有匹配的字段</div>}
       </div>
       {!readOnly && (
         <button className="btn ghost sm bt-panel-add" onClick={(e) => openFieldEditor(e.currentTarget, model, { viewId, after: fields.at(-1)?.id })}>
@@ -533,7 +594,7 @@ export function GalleryPanel({ model, viewId }: { model: TableModel; viewId: str
   const cur = coverField(model.data, view)
   return (
     <div className="bt-panel">
-      <div className="bt-panel-title">封面</div>
+      <div className="bt-panel-title">画册封面</div>
       <select className="bt-input sm" value={cur?.id ?? ''} onChange={(e) => model.updateView(viewId, { coverField: e.target.value })}>
         <option value="">不显示封面</option>
         {files.map((f) => (
@@ -542,13 +603,13 @@ export function GalleryPanel({ model, viewId }: { model: TableModel; viewId: str
           </option>
         ))}
       </select>
-      {!files.length && <div className="bt-panel-empty">添加一个附件字段后，可把其中的第一张图片作为封面</div>}
+      {!files.length && <div className="bt-panel-empty">添加一个附件字段后，可将其中的图片作为卡片封面展示</div>}
       {cur && (
         <label className="bt-check-row">
-          <input type="checkbox" checked={view.config.coverFit === 'contain'} onChange={(e) => model.updateView(viewId, { coverFit: e.target.checked ? 'contain' : undefined })} /> 完整显示图片（不裁剪）
+          <input type="checkbox" checked={view.config.coverFit === 'contain'} onChange={(e) => model.updateView(viewId, { coverFit: e.target.checked ? 'contain' : undefined })} /> 完整适应图片（不裁剪）
         </label>
       )}
-      <div className="bt-panel-empty">卡片上显示的字段可在「字段」中设置</div>
+      <div className="bt-panel-empty">卡片展示的其他字段可在「字段配置」中开关</div>
     </div>
   )
 }
@@ -572,7 +633,7 @@ export function CalendarPanel({ model, viewId, gantt }: { model: TableModel; vie
       </select>
       <div className="bt-panel-title">结束日期</div>
       <select className="bt-input sm" value={end?.id ?? ''} onChange={(e) => model.updateView(viewId, { endField: e.target.value || undefined })}>
-        <option value="">{gantt ? '无（每条记录只占一天）' : '无（只显示在开始日期）'}</option>
+        <option value="">{gantt ? '无（每条记录占一天）' : '无（仅显示在开始日）'}</option>
         {options
           .filter((f) => f.id !== cur?.id)
           .map((f) => (
@@ -585,13 +646,12 @@ export function CalendarPanel({ model, viewId, gantt }: { model: TableModel; vie
       {gantt ? (
         <GanttOptions model={model} view={view} fields={fields} />
       ) : (
-        <div className="bt-panel-empty">{cur?.type === 'date' ? '拖动记录可修改日期，双击空白处新建记录' : '该字段自动计算，记录不能拖动'}</div>
+        <div className="bt-panel-empty">{cur?.type === 'date' ? '拖动日程条可修改日期，双击日期格新建记录' : '该字段自动计算，记录不能拖动'}</div>
       )}
     </div>
   )
 }
 
-/** What a calendar / gantt record shows: some fields joined, or an expression. */
 function TitleOptions({ model, view, fields }: { model: TableModel; view: View; fields: Field[] }) {
   const cfg = view.config
   const isExpr = cfg.titleExpr !== undefined
@@ -642,7 +702,7 @@ function TitleOptions({ model, view, fields }: { model: TableModel; view: View; 
               onClick={(e) =>
                 openMenu(
                   e.currentTarget,
-                  rest.map((f) => ({ label: f.name, onClick: () => setFields([...shown, f.id]) })),
+                  rest.map((f) => ({ label: f.name, icon: <FieldTypeIcon type={f.type} size={14} />, onClick: () => setFields([...shown, f.id]) })),
                   { align: 'left', width: 200 },
                 )
               }

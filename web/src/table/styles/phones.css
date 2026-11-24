@@ -16,21 +16,21 @@
     display: inline;
   }
   .bt-tool {
-    height: 36px;
-    padding: 0 10px;
+    height: 34px;
+    padding: 0 9px;
   }
-  .bt-toolbar .btn.sm {
-    height: 36px;
+  .bt-btn-add {
+    height: 34px;
   }
   .bt-sheet {
     width: 100vw;
   }
   .bt-sheet-field {
     grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
+    gap: 2px;
   }
   .bt-sheet-label {
-    padding-top: 0;
+    height: 26px;
   }
   .bt-sheet-body {
     padding: 14px 16px calc(32px + var(--safe-b));
@@ -67,7 +67,7 @@
     flex: 1 1 100%;
   }
   .bt-kanban {
-    padding: 4px 10px 24px;
+    padding: 10px 10px 24px;
   }
   .bt-col {
     width: 82vw;
@@ -75,6 +75,14 @@
   }
   .bt-title-input {
     font-size: 16px;
+  }
+  .bt-batch-bar {
+    max-width: calc(100vw - 16px);
+    overflow-x: auto;
+    padding-left: 10px;
+  }
+  .bt-lightbox-stage {
+    padding: 8px 12px 24px;
   }
 }
 
@@ -85,14 +93,14 @@
   display: none;
   margin: 0;
   padding: 8px 9px;
-  border: 2px solid var(--c-info);
-  border-radius: 3px;
+  border: 2px solid var(--bt-blue);
+  border-radius: 4px;
   background: var(--c-panel);
   color: var(--c-text);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-pop);
   font: inherit;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.4;
   resize: none;
   outline: none;
   overflow: hidden;
@@ -107,10 +115,9 @@
   font: inherit;
   font-size: 13px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
   outline: none;
 }
 .bt-embed .bt-embed-card-line .muted {
   margin-right: 6px;
 }
-
-/* hover "+" buttons over the grid: insert a record above / below, or a field to the right */

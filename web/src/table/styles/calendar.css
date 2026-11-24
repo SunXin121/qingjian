@@ -1,9 +1,9 @@
-/* ---------- calendar ---------- */
+/* ---------- Feishu-style calendar ---------- */
 .bt-cal {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  padding: 0 16px 16px;
+  padding: 6px 16px 16px;
 }
 .bt-cal-head {
   display: flex;
@@ -12,42 +12,45 @@
   padding: 4px 0 10px;
 }
 .bt-cal-month {
-  min-width: 96px;
+  min-width: 98px;
   text-align: center;
   font-weight: 600;
   font-size: 15px;
+  color: var(--c-text);
 }
 .bt-cal-grid {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-rows: auto repeat(6, minmax(96px, 1fr));
-  border-top: 1px solid var(--c-border);
-  border-left: 1px solid var(--c-border);
+  grid-template-rows: auto repeat(6, minmax(98px, 1fr));
+  border: 1px solid var(--c-border);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 8px;
+  overflow: hidden;
 }
 .bt-cal-week {
-  padding: 6px 8px;
+  padding: 7px 10px;
   font-size: 12px;
+  font-weight: 500;
   color: var(--c-text-3);
   border-right: 1px solid var(--c-border);
   border-bottom: 1px solid var(--c-border);
-  background: var(--c-side);
-}
-.bt-cal-week.weekend {
-  color: var(--c-text-3);
+  background: var(--bt-header-bg);
 }
 .bt-cal-day {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
-  padding: 4px 4px 6px;
+  padding: 5px 5px 6px;
   border-right: 1px solid var(--c-border);
   border-bottom: 1px solid var(--c-border);
   background: var(--c-panel);
+  transition: background 0.1s;
 }
 .bt-cal-day.other {
-  background: var(--c-side);
+  background: var(--c-bg);
 }
 .bt-cal-day.other .bt-cal-date {
   color: var(--c-text-3);
@@ -62,6 +65,7 @@
   height: 22px;
   padding-left: 4px;
   font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--c-text-2);
 }
 .bt-cal-day.today .bt-cal-date > span {
@@ -72,12 +76,13 @@
   height: 22px;
   margin-left: -4px;
   border-radius: 11px;
-  background: var(--c-info);
-  color: #fff;
+  background: var(--bt-blue);
+  color: var(--bt-blue-fg);
   font-weight: 600;
 }
 .bt-cal-add {
   opacity: 0;
+  transition: opacity 0.12s;
 }
 .bt-cal-day:hover .bt-cal-add {
   opacity: 1;
@@ -88,19 +93,31 @@
   width: 100%;
   min-width: 0;
   height: 22px;
-  padding: 0 6px;
+  padding: 0 7px;
   border: 0;
-  border-left: 3px solid var(--c-info);
+  border-left: 3px solid var(--bt-blue);
   border-radius: 4px;
   background: var(--bt-accent-light);
   color: var(--c-text);
   font-size: 12px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
+  transition: filter 0.1s;
 }
+.bt-cal-chip.c0 { background: var(--tag-0-bg); color: var(--tag-0-fg); border-left-color: var(--tag-0-fg); }
+.bt-cal-chip.c1 { background: var(--tag-1-bg); color: var(--tag-1-fg); border-left-color: var(--tag-1-fg); }
+.bt-cal-chip.c2 { background: var(--tag-2-bg); color: var(--tag-2-fg); border-left-color: var(--tag-2-fg); }
+.bt-cal-chip.c3 { background: var(--tag-3-bg); color: var(--tag-3-fg); border-left-color: var(--tag-3-fg); }
+.bt-cal-chip.c4 { background: var(--tag-4-bg); color: var(--tag-4-fg); border-left-color: var(--tag-4-fg); }
+.bt-cal-chip.c5 { background: var(--tag-5-bg); color: var(--tag-5-fg); border-left-color: var(--tag-5-fg); }
+.bt-cal-chip.c6 { background: var(--tag-6-bg); color: var(--tag-6-fg); border-left-color: var(--tag-6-fg); }
+.bt-cal-chip.c7 { background: var(--tag-7-bg); color: var(--tag-7-fg); border-left-color: var(--tag-7-fg); }
+.bt-cal-chip.c8 { background: var(--tag-8-bg); color: var(--tag-8-fg); border-left-color: var(--tag-8-fg); }
+.bt-cal-chip.c9 { background: var(--tag-9-bg); color: var(--tag-9-fg); border-left-color: var(--tag-9-fg); }
 .bt-cal-chip.cont {
   border-left-color: transparent;
-  opacity: 0.75;
+  opacity: 0.78;
 }
 .bt-cal-chip:hover {
   filter: brightness(0.96);
@@ -108,26 +125,27 @@
 .bt-cal-more {
   border: 0;
   background: none;
-  padding: 0 6px;
-  font-size: 12px;
+  padding: 1px 6px;
+  font-size: 11.5px;
+  font-weight: 500;
   color: var(--c-text-3);
   text-align: left;
   cursor: pointer;
 }
 .bt-cal-more:hover {
-  color: var(--c-text);
+  color: var(--bt-blue);
 }
 .bt-cal-pop {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px;
+  gap: 5px;
+  padding: 10px;
   max-height: 360px;
   overflow: auto;
 }
 @media (max-width: 600px) {
   .bt-cal {
-    padding: 0 8px 12px;
+    padding: 4px 8px 12px;
   }
   .bt-cal-grid {
     grid-template-rows: auto repeat(6, minmax(64px, 1fr));

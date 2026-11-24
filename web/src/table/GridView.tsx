@@ -3,34 +3,50 @@ import {
   CompactSelection,
   DataEditor,
   GridCellKind,
-  GridColumnIcon,
   type DataEditorRef,
+  type DrawHeaderCallback,
   type EditableGridCell,
   type EditListItem,
   type GridCell,
   type GridColumn,
   type GridKeyEventArgs,
+  type GridMouseEventArgs,
   type GridSelection,
   type Item,
   type Rectangle,
 } from '@glideapps/glide-data-grid'
 import '@glideapps/glide-data-grid/dist/index.css'
-import { confirmDialog, openMenu, toast, type MenuItem } from '../components/dialog'
-import { IconCopy, IconDown, IconEdit, IconEye, IconLink, IconLock, IconPlus, IconTrash, IconUp } from '../components/icons'
-import { IconEyeOff, IconGroup } from './icons'
-import { customRenderers, GRIP_W, type AddCell, type GroupCell, type IndexCell, type ValueCell } from './cells'
-import { safeHref } from './editors'
+import { confirmDialog, openMenu, openPopover, toast, type MenuItem } from '../components/dialog'
+import { IconClose, IconCopy, IconDown, IconEdit, IconEye, IconLink, IconLock, IconPlus, IconTrash, IconUp } from '../components/icons'
+import { FIELD_SPRITE, FieldTypeIcon, HEADER_SPRITES, IconEyeOff, IconFilter, IconGroup } from './icons'
 import {
+  CHECK_END,
+  customRenderers,
+  drawCheckboxBox,
+  GRIP_W,
+  INDEX_W,
+  onThumbLoaded,
+  type AddRowCell,
+  type GroupCell,
+  type IndexCell,
+  type SummaryCell,
+  type ValueCell,
+} from './cells'
+import { FieldInput, safeHref } from './editors'
+import {
+  activeConds,
   cellMatches,
   cellValue,
   choiceCollector,
+  defaultCondValue,
   displayText,
+  filterOps,
   groupKey,
   groupLabel,
-  ruleField,
   groupPaths,
   groupRows,
   parseText,
+  ruleField,
   searchNeedle,
   summarize,
   summaryKinds,
@@ -42,7 +58,7 @@ import { openFieldEditor } from './FieldEditor'
 import { choiceOps, orderIds, type CellChange, type TableModel } from './model'
 import { palette, useGridTheme } from './theme'
 import type { Field, FieldType, Rec, TableData, View } from './types'
-import { baseField, isComputed } from './types'
+import { baseField, isComputed, rowHeightInfo } from './types'
 
 // the overlay editor portal Glide expects at the document root
 if (typeof document !== 'undefined' && !document.getElementById('portal')) {
@@ -52,34 +68,27 @@ if (typeof document !== 'undefined' && !document.getElementById('portal')) {
   document.body.appendChild(p)
 }
 
-const ICONS: Record<FieldType, GridColumnIcon> = {
-  text: GridColumnIcon.HeaderString,
-  longtext: GridColumnIcon.HeaderTextTemplate,
-  number: GridColumnIcon.HeaderNumber,
-  select: GridColumnIcon.HeaderSingleValue,
-  multiselect: GridColumnIcon.HeaderArray,
-  date: GridColumnIcon.HeaderDate,
-  checkbox: GridColumnIcon.HeaderBoolean,
-  url: GridColumnIcon.HeaderUri,
-  attachment: GridColumnIcon.HeaderImage,
-  autonumber: GridColumnIcon.HeaderRowID,
-  created_time: GridColumnIcon.HeaderTime,
-  modified_time: GridColumnIcon.HeaderTime,
-  rating: GridColumnIcon.HeaderEmoji,
-  progress: GridColumnIcon.HeaderNumber,
-  phone: GridColumnIcon.HeaderPhone,
-  email: GridColumnIcon.HeaderEmail,
-  formula: GridColumnIcon.HeaderMath,
-  link: GridColumnIcon.HeaderReference,
-  lookup: GridColumnIcon.HeaderLookup,
-  rollup: GridColumnIcon.HeaderRollup,
-}
-
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 600
-const defaultWidth = (f: Field, primary: boolean) => (primary ? (narrow() ? 150 : 220) : f.type === 'checkbox' ? 90 : f.type === 'longtext' ? 240 : f.type === 'number' || f.type === 'autonumber' || f.type === 'rating' ? 120 : f.type === 'progress' ? 150 : 160)
+const defaultWidth = (f: Field, primary: boolean) =>
+  primary
+    ? narrow()
+      ? 156
+      : 224
+    : f.type === 'checkbox'
+      ? 92
+      : f.type === 'longtext'
+        ? 248
+        : f.type === 'number' || f.type === 'autonumber' || f.type === 'rating'
+          ? 124
+          : f.type === 'progress'
+            ? 156
+            : f.type === 'attachment'
+              ? 180
+              : 164
 
-const INDEX_W = 52
-const ROW_H = 34
+const GROUP_ROW_H = 36
+const ADD_ROW_H = 34
+const SUMMARY_ROW_H = 34
 const HEADER_H = 36
 
 // fields our own type-to-edit box can handle (text parsed into the field's value)
@@ -119,16 +128,96 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const theme = useGridTheme()
   const ref = useRef<DataEditorRef>(null)
   const cfg = view.config
+  const recRowH = rowHeightInfo(cfg.rowHeight).px
   const fields = useMemo(() => visibleFields(table, view), [table, view])
   const records = useMemo(() => viewRecords(table, view, model.sticky), [table, view, model])
   const collapsed = useMemo(() => new Set(cfg.collapsed ?? []), [cfg.collapsed])
   const rows = useMemo(() => groupRows(table, records, cfg.groups ?? [], collapsed), [table, records, cfg.groups, collapsed])
   const ordinal = useMemo(() => new Map(records.map((r, i) => [r.id, i + 1])), [records])
   const recordIds = useMemo(() => records.map((r) => r.id), [records])
+  const recordIdSet = useMemo(() => new Set(recordIds), [recordIds])
+
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({})
   const [selection, setSelection] = useState<GridSelection>({ columns: CompactSelection.empty(), rows: CompactSelection.empty() })
-  const total = rows.length + 1 // trailing summary row
   const [dragId, setDragId] = useState<string | null>(null)
+  const [hoveredRow, setHoveredRow] = useState<number>(-1)
+  const prevHoverRef = useRef<number>(-1)
+  const [checkedRaw, setCheckedRaw] = useState<Set<string>>(() => new Set())
+  const lastCheckedIdRef = useRef<string | null>(null)
+
+  const checkedSet = useMemo(() => {
+    if (!checkedRaw.size) return checkedRaw
+    const next = new Set<string>()
+    for (const id of checkedRaw) if (recordIdSet.has(id)) next.add(id)
+    return next
+  }, [checkedRaw, recordIdSet])
+  const checkedIds = useMemo(() => recordIds.filter((id) => checkedSet.has(id)), [recordIds, checkedSet])
+
+  const hasAddRow = !readOnly
+  const addRowIdx = hasAddRow ? rows.length : -1
+  const summaryRowIdx = rows.length + (hasAddRow ? 1 : 0)
+  const total = summaryRowIdx + 1
+
+  // cumulative y offsets of rows 0..rows.length for exact variable-height drag-and-drop
+  const rowOffsets = useMemo(() => {
+    const out = new Array<number>(rows.length + 1)
+    let y = 0
+    for (let i = 0; i < rows.length; i++) {
+      out[i] = y
+      y += rows[i].kind === 'group' ? GROUP_ROW_H : recRowH
+    }
+    out[rows.length] = y
+    return out
+  }, [rows, recRowH])
+
+  const getRowHeight = useCallback(
+    (r: number) => {
+      if (r === summaryRowIdx) return SUMMARY_ROW_H
+      if (r === addRowIdx) return ADD_ROW_H
+      return rows[r]?.kind === 'group' ? GROUP_ROW_H : recRowH
+    },
+    [rows, recRowH, addRowIdx, summaryRowIdx],
+  )
+
+  // repaint attachment cells when any thumbnail finishes decoding
+  useEffect(() => {
+    return onThumbLoaded(() => {
+      const cells: { cell: Item }[] = []
+      fields.forEach((f, fi) => {
+        if (f.type !== 'attachment') return
+        rows.forEach((r, ri) => {
+          if (r.kind === 'record' && r.rec.data[f.id]?.length) cells.push({ cell: [fi + 1, ri] })
+        })
+      })
+      if (cells.length) ref.current?.updateCells(cells)
+    })
+  }, [fields, rows])
+
+  // repaint previous & current hovered row so full-row tint and index controls update immediately
+  useEffect(() => {
+    const prev = prevHoverRef.current
+    prevHoverRef.current = hoveredRow
+    const damage: { cell: Item }[] = []
+    for (const r of [prev, hoveredRow]) {
+      if (r >= 0 && r < total) {
+        for (let c = 0; c <= fields.length; c++) damage.push({ cell: [c, r] })
+      }
+    }
+    if (damage.length) ref.current?.updateCells(damage)
+  }, [hoveredRow, fields.length, total])
+
+  // Escape clears checked rows when no overlay/modal is open
+  useEffect(() => {
+    if (!checkedSet.size) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('.popover, .bt-sheet, .modal-backdrop, [data-modal]')) return
+      if (typing.current) return
+      setCheckedRaw(new Set())
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [checkedSet.size])
 
   // ---------- search ----------
   const needle = searchNeedle(search)
@@ -140,30 +229,57 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const matchKeys = useMemo(() => new Set(matches.map((m) => m.rec.id + ':' + m.field.id)), [matches])
   const current = matches.length ? matches[((searchCursor % matches.length) + matches.length) % matches.length] : undefined
   const currentKey = current ? current.rec.id + ':' + current.field.id : ''
-  // layout effect: the toolbar count must not show a stale value for a frame
   useLayoutEffect(() => onSearchCount(matches.length), [matches.length, onSearchCount])
 
   useEffect(() => setLiveWidths({}), [cfg.widths])
 
+  // active sort & filter indicators per field
+  const sortedMap = useMemo(() => {
+    const m = new Map<string, 'asc' | 'desc'>()
+    for (const s of cfg.sorts ?? []) if (s.field && s.expr === undefined) m.set(s.field, s.desc ? 'desc' : 'asc')
+    return m
+  }, [cfg.sorts])
+
+  const filteredSet = useMemo(() => {
+    const s = new Set<string>()
+    for (const c of activeConds(table, view)) if (c.field) s.add(c.field)
+    return s
+  }, [table, view])
+
   const columns: GridColumn[] = useMemo(
     () => [
       { id: '__idx', title: '', width: INDEX_W },
-      ...fields.map((f, i) => ({
-        id: f.id,
-        // a broken formula / lookup shows its problem in the header
-        title: f.rt?.error ? `${f.name} ⚠` : f.name,
-        width: liveWidths[f.id] ?? cfg.widths?.[f.id] ?? defaultWidth(f, i === 0),
-        icon: ICONS[f.type],
-        hasMenu: !readOnly,
-      })),
+      ...fields.map((f, i) => {
+        const isSorted = sortedMap.has(f.id)
+        const isFiltered = filteredSet.has(f.id)
+        return {
+          id: f.id,
+          title: f.rt?.error ? `${f.name} ⚠` : f.name,
+          width: liveWidths[f.id] ?? cfg.widths?.[f.id] ?? defaultWidth(f, i === 0),
+          icon: FIELD_SPRITE[f.type],
+          hasMenu: !readOnly,
+          themeOverride: isSorted
+            ? { bgHeader: palette.headerSortBg, textHeader: palette.accent, bgIconHeader: palette.accent }
+            : isFiltered
+              ? { bgHeader: palette.headerFilterBg }
+              : undefined,
+        }
+      }),
     ],
-    [fields, liveWidths, cfg.widths, readOnly],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fields, liveWidths, cfg.widths, readOnly, sortedMap, filteredSet, theme],
   )
   const freeze = 1 + Math.max(0, Math.min(cfg.frozen ?? 1, fields.length))
 
-  // summary row texts: computed once per data change, not on every repaint of the row
+  // summary row texts: computed once per data change
   const summaries = useMemo(
-    () => fields.map((f, i) => summarize(f, cfg.summary?.[f.id] ?? (i === 0 ? 'count' : 'none'), records)),
+    () =>
+      fields.map((f, i) => {
+        const text = summarize(f, cfg.summary?.[f.id] ?? (i === 0 ? 'count' : 'none'), records)
+        if (!text) return { label: '', value: '' }
+        const sp = text.indexOf(' ')
+        return sp > 0 ? { label: text.slice(0, sp), value: text.slice(sp + 1) } : { label: '', value: text }
+      }),
     [fields, records, cfg.summary],
   )
 
@@ -173,55 +289,151 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     return r?.kind === 'record' ? r.rec : undefined
   }
 
+  const drawHeader: DrawHeaderCallback = useCallback(
+    (args, drawContent) => {
+      const { ctx, columnIndex, rect, theme: hTheme, isHovered } = args
+      const cy = rect.y + rect.height / 2
+      if (columnIndex === 0) {
+        if (!readOnly && records.length > 0 && (isHovered || checkedSet.size > 0)) {
+          const allChecked = checkedSet.size >= records.length
+          drawCheckboxBox(ctx, rect.x + 30, cy, allChecked, checkedSet.size > 0 && !allChecked, isHovered)
+        } else {
+          ctx.font = `${hTheme.markerFontStyle} ${hTheme.fontFamily}`
+          ctx.fillStyle = hTheme.textLight
+          ctx.textBaseline = 'middle'
+          ctx.textAlign = 'center'
+          ctx.fillText('#', rect.x + rect.width / 2 - 2, cy)
+          ctx.textAlign = 'start'
+        }
+        return
+      }
+      drawContent()
+      const f = fields[columnIndex - 1]
+      if (!f) return
+      const sortDir = sortedMap.get(f.id)
+      if (sortDir) {
+        const ax = rect.x + rect.width - (isHovered && !readOnly ? 32 : 13)
+        ctx.save()
+        ctx.strokeStyle = palette.accent
+        ctx.lineWidth = 1.6
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.beginPath()
+        if (sortDir === 'asc') {
+          ctx.moveTo(ax, cy + 4)
+          ctx.lineTo(ax, cy - 4)
+          ctx.moveTo(ax - 3, cy - 1)
+          ctx.lineTo(ax, cy - 4)
+          ctx.lineTo(ax + 3, cy - 1)
+        } else {
+          ctx.moveTo(ax, cy - 4)
+          ctx.lineTo(ax, cy + 4)
+          ctx.moveTo(ax - 3, cy + 1)
+          ctx.lineTo(ax, cy + 4)
+          ctx.lineTo(ax + 3, cy + 1)
+        }
+        ctx.stroke()
+        ctx.restore()
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [readOnly, records.length, checkedSet.size, fields, sortedMap, theme],
+  )
+
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
       const empty: GridCell = { kind: GridCellKind.Text, data: '', displayData: '', allowOverlay: false, readonly: true }
-      if (row >= rows.length) {
-        // summary row
+      if (row === summaryRowIdx) {
         const foot = { bgCell: palette.footBg }
-        if (col === 0)
-          return readOnly ? { ...empty, themeOverride: foot } : ({ kind: GridCellKind.Custom, data: { kind: 'qj-add' }, copyData: '', allowOverlay: false, cursor: 'pointer', themeOverride: foot } as AddCell)
-        const text = summaries[col - 1] ?? ''
-        return { ...empty, displayData: text, data: text, contentAlign: 'right', themeOverride: { ...foot, textDark: theme.textLight } }
+        if (col === 0) return { ...empty, themeOverride: foot }
+        const sum = summaries[col - 1] ?? { label: '', value: '' }
+        return {
+          kind: GridCellKind.Custom,
+          data: { kind: 'qj-summary', label: sum.label, value: sum.value, isPrimary: col === 1, editable: !readOnly },
+          copyData: sum.label ? `${sum.label} ${sum.value}` : sum.value,
+          allowOverlay: false,
+          readonly: true,
+          cursor: readOnly ? undefined : 'pointer',
+          themeOverride: foot,
+        } as SummaryCell
       }
-      const item = rows[row]!
+      if (row === addRowIdx) {
+        return {
+          kind: GridCellKind.Custom,
+          data: { kind: 'qj-add-row' },
+          copyData: '',
+          allowOverlay: false,
+          readonly: true,
+          cursor: 'pointer',
+          span: [0, fields.length],
+        } as AddRowCell
+      }
+      const item = rows[row]
+      if (!item) return empty
       if (item.kind === 'group') {
-        if (col === 1) {
-          const f = item.field
-          const color = f.type === 'select' ? f.options.choices?.find((c) => c.id === item.key)?.color : undefined
-          return {
-            kind: GridCellKind.Custom,
-            data: { kind: 'qj-group', label: groupLabel(f, item.key), count: item.count, depth: item.depth, collapsed: item.collapsed, color },
-            copyData: groupLabel(f, item.key),
-            allowOverlay: false,
-            readonly: true,
-            cursor: 'pointer',
-          } as GroupCell
-        }
-        return empty
+        const f = item.field
+        const color = f.type === 'select' ? f.options.choices?.find((c) => c.id === item.key)?.color : undefined
+        return {
+          kind: GridCellKind.Custom,
+          data: {
+            kind: 'qj-group',
+            fieldName: f.name,
+            label: groupLabel(f, item.key),
+            count: item.count,
+            depth: item.depth,
+            collapsed: item.collapsed,
+            color,
+            canAdd: !readOnly && !isComputed(f.type),
+          },
+          copyData: groupLabel(f, item.key),
+          allowOverlay: false,
+          readonly: true,
+          cursor: 'pointer',
+          span: [0, fields.length],
+        } as GroupCell
       }
       const rec = item.rec
       if (col === 0)
-        return { kind: GridCellKind.Custom, data: { kind: 'qj-index', n: ordinal.get(rec.id) ?? 0, grip: !readOnly }, copyData: '', allowOverlay: false, readonly: true, cursor: 'pointer' } as IndexCell
+        return {
+          kind: GridCellKind.Custom,
+          data: {
+            kind: 'qj-index',
+            n: ordinal.get(rec.id) ?? 0,
+            grip: !readOnly,
+            checked: checkedSet.has(rec.id),
+            anyChecked: checkedSet.size > 0,
+            rowHovered: row === hoveredRow,
+          },
+          copyData: '',
+          allowOverlay: false,
+          readonly: true,
+          cursor: 'pointer',
+        } as IndexCell
       const f = fields[col - 1]
       if (!f) return empty
-      const cell = makeCell(model, f, rec, readOnly)
+      const cell = makeCell(model, f, rec, readOnly, recRowH > 42)
       const key = rec.id + ':' + f.id
       if (!matchKeys.has(key)) return cell
       return { ...cell, themeOverride: { ...cell.themeOverride, bgCell: key === currentKey ? palette.searchCurrent : palette.searchHit } } as GridCell
     },
-    [rows, fields, ordinal, summaries, readOnly, model, theme.textLight, matchKeys, currentKey],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, fields, ordinal, summaries, readOnly, model, matchKeys, currentKey, summaryRowIdx, addRowIdx, checkedSet, hoveredRow, recRowH, theme],
   )
 
   const getRowThemeOverride = useCallback(
     (row: number) => {
-      // the summary row is styled per cell: glide also uses this index for blank space
+      if (row >= rows.length) return undefined
       const item = rows[row]
       if (item?.kind === 'group') return { bgCell: palette.groupBg }
-      if (item?.kind === 'record' && item.rec.id === dragId) return { bgCell: palette.groupBg, textDark: palette.muted }
+      if (item?.kind === 'record') {
+        if (item.rec.id === dragId) return { bgCell: palette.groupBg, textDark: palette.muted }
+        if (checkedSet.has(item.rec.id)) return { bgCell: palette.rowSelected }
+        if (row === hoveredRow) return { bgCell: palette.rowHover }
+      }
       return undefined
     },
-    [rows, dragId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, dragId, checkedSet, hoveredRow, theme],
   )
 
   // ---------- editing ----------
@@ -310,6 +522,10 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   }
 
   const selectedRecordIds = (sel: GridSelection, fallbackRow?: number): string[] => {
+    if (checkedIds.length > 0) {
+      const fb = fallbackRow !== undefined ? recAt(fallbackRow)?.id : undefined
+      if (!fb || checkedSet.has(fb)) return checkedIds
+    }
     const ids = new Set<string>()
     const ranges: Rectangle[] = sel.current ? [sel.current.range, ...sel.current.rangeStack] : []
     for (const r of ranges) for (let y = r.y; y < r.y + r.height; y++) recAt(y) && ids.add(recAt(y)!.id)
@@ -318,10 +534,34 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     return [...ids]
   }
 
+  const toggleRowCheck = (recId: string, shiftKey = false) => {
+    setCheckedRaw((prev) => {
+      const next = new Set(prev)
+      const willCheck = !next.has(recId)
+      if (shiftKey && lastCheckedIdRef.current && lastCheckedIdRef.current !== recId) {
+        const a = recordIds.indexOf(lastCheckedIdRef.current)
+        const b = recordIds.indexOf(recId)
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a]
+          for (let i = lo; i <= hi; i++) willCheck ? next.add(recordIds[i]) : next.delete(recordIds[i])
+          lastCheckedIdRef.current = recId
+          return next
+        }
+      }
+      willCheck ? next.add(recId) : next.delete(recId)
+      lastCheckedIdRef.current = recId
+      return next
+    })
+  }
+
   const onDelete = useCallback(
     (sel: GridSelection) => {
       if (readOnly) return false
-      model.setCells(selectedCells(sel).filter((c) => !isComputed(c.field.type)).map((c) => ({ rec: c.rec.id, field: c.field.id, value: undefined })))
+      model.setCells(
+        selectedCells(sel)
+          .filter((c) => !isComputed(c.field.type))
+          .map((c) => ({ rec: c.rec.id, field: c.field.id, value: undefined })),
+      )
       return false
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,7 +588,6 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       const i = recs.findIndex((r) => r.id === near.id)
       after = i > 0 ? recs[i - 1].id : undefined
       if (i === 0) {
-        // insert before the very first record
         const id = model.addRecords([groupValues(near)])[0]
         model.moveRecord(id, near.sort - 1)
         return id
@@ -358,20 +597,32 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     return id
   }
 
-  const addAndFocus = (near?: Rec, above = false) => {
+  const addAndFocus = (near?: Rec, above = false, focusCol = 1, startTyping = false) => {
     const id = insertRecord(near, above)
-    requestAnimationFrame(() => {
-      const row = rowsRef.current.findIndex((r) => r.kind === 'record' && r.rec.id === id)
-      if (row >= 0) {
-        ref.current?.scrollTo(1, row)
-        setSelection(cellSelection(1, row))
-      }
-    })
+    const col = Math.max(1, Math.min(fieldsRef.current.length, focusCol))
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const row = rowsRef.current.findIndex((r) => r.kind === 'record' && r.rec.id === id)
+        if (row < 0) return
+        ref.current?.scrollTo(col, row)
+        setSelection(cellSelection(col, row))
+        ref.current?.focus()
+        if (startTyping) {
+          setTimeout(() => {
+            const f = model.field(fieldsRef.current[col - 1]?.id ?? '')
+            const b = ref.current?.getBounds(col, row)
+            if (f && b && TYPEABLE.has(f.type) && !typing.current) openTyping(col, row, b, '')
+          }, 30)
+        }
+      }),
+    )
   }
   const rowsRef = useRef(rows)
   rowsRef.current = rows
   const fieldsRef = useRef(fields)
   fieldsRef.current = fields
+  const rowOffsetsRef = useRef(rowOffsets)
+  rowOffsetsRef.current = rowOffsets
 
   // jump to the current search match, expanding the groups it is collapsed in
   const jumpRef = useRef('')
@@ -402,31 +653,63 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     model.updateView(view.id, { collapsed: [...s] })
   }
 
+  const onHeaderClicked = useCallback(
+    (col: number, e: { isDoubleClick?: boolean; bounds: Rectangle; preventDefault: () => void }) => {
+      if (readOnly) return
+      if (col === 0 && records.length > 0) {
+        e.preventDefault()
+        setCheckedRaw((prev) => (prev.size >= records.length ? new Set() : new Set(recordIds)))
+        return
+      }
+      if (col >= 1 && e.isDoubleClick) {
+        const f = fieldAt(col)
+        if (f) {
+          e.preventDefault()
+          openFieldEditor({ left: e.bounds.x, right: e.bounds.x + e.bounds.width, top: e.bounds.y, bottom: e.bounds.y + e.bounds.height }, model, { field: f })
+        }
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [readOnly, records.length, recordIds, fields, model],
+  )
+
   const onCellClicked = useCallback(
-    ([col, row]: Item, e: { isDoubleClick?: boolean; bounds: Rectangle; localEventX: number }) => {
-      if (row >= rows.length) {
-        if (col === 0 && !readOnly) addAndFocus(records.at(-1))
-        else if (col >= 1 && !readOnly) {
+    ([col, row]: Item, e: { isDoubleClick?: boolean; bounds: Rectangle; localEventX: number; shiftKey?: boolean }) => {
+      if (row === summaryRowIdx) {
+        if (col >= 1 && !readOnly) {
           const f = fieldAt(col)!
           const cur = cfg.summary?.[f.id] ?? (col === 1 ? 'count' : 'none')
           openMenu(
             { left: e.bounds.x, right: e.bounds.x + e.bounds.width, top: e.bounds.y, bottom: e.bounds.y + e.bounds.height },
             summaryKinds(f.type).map((k) => ({ label: k.label, checked: k.kind === cur, onClick: () => model.updateView(view.id, { summary: { ...cfg.summary, [f.id]: k.kind } }) })),
-            { align: 'left', width: 160 },
+            { align: 'left', width: 164 },
           )
         }
         return
       }
+      if (row === addRowIdx && !readOnly) {
+        addAndFocus(records.at(-1), false, Math.max(1, col), true)
+        return
+      }
       const item = rows[row]
-      if (item?.kind === 'group' && col <= 1) toggleGroup(item.path)
-      else if (item?.kind === 'record' && col === 0) onOpenRecord(item.rec.id, recordIds)
-      else if (item?.kind === 'record' && e.isDoubleClick) {
+      if (!item) return
+      if (item.kind === 'group') {
+        toggleGroup(item.path)
+        return
+      }
+      if (col === 0) {
+        if (!readOnly && e.localEventX >= GRIP_W && e.localEventX < CHECK_END) {
+          toggleRowCheck(item.rec.id, !!e.shiftKey)
+        } else {
+          onOpenRecord(item.rec.id, recordIds)
+        }
+      } else if (e.isDoubleClick) {
         const f = fieldAt(col)
         if (f && isComputed(f.type)) onOpenRecord(item.rec.id, recordIds)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, records, fields, cfg.summary, readOnly, recordIds, collapsed],
+    [rows, records, fields, cfg.summary, readOnly, recordIds, collapsed, summaryRowIdx, addRowIdx],
   )
 
   const onCellActivated = useCallback(
@@ -441,20 +724,46 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const onCellContextMenu = useCallback(
     ([col, row]: Item, e: { bounds: Rectangle; localEventX: number; localEventY: number; preventDefault: () => void }) => {
       e.preventDefault()
+      const at = { left: e.bounds.x + e.localEventX, right: e.bounds.x + e.localEventX, top: e.bounds.y + e.localEventY, bottom: e.bounds.y + e.localEventY }
+      const item = rows[row]
+      if (item?.kind === 'group') {
+        const allPaths = rows.filter((x): x is Extract<GridRow, { kind: 'group' }> => x.kind === 'group').map((x) => x.path)
+        openMenu(
+          at,
+          [
+            {
+              label: '在此分组新建记录',
+              icon: <IconPlus />,
+              hidden: readOnly || isComputed(item.field.type),
+              onClick: () => {
+                if (item.collapsed) toggleGroup(item.path)
+                addAndFocus(item.sample, false, 1, true)
+              },
+            },
+            { label: item.collapsed ? '展开此分组' : '折叠此分组', onClick: () => toggleGroup(item.path) },
+            { label: '展开全部分组', divider: true, onClick: () => model.updateView(view.id, { collapsed: [] }) },
+            { label: '折叠全部分组', onClick: () => model.updateView(view.id, { collapsed: [...new Set([...collapsed, ...allPaths])] }) },
+          ],
+          { align: 'left', width: 176 },
+        )
+        return
+      }
       const rec = recAt(row)
       if (!rec) return
       const ids = selectedRecordIds(selection, row)
-      const at = { left: e.bounds.x + e.localEventX, right: e.bounds.x + e.localEventX, top: e.bounds.y + e.localEventY, bottom: e.bounds.y + e.localEventY }
       const f = fieldAt(col)
       const items: MenuItem[] = [
-        { label: '展开记录', icon: <IconEye />, onClick: () => onOpenRecord(rec.id, recordIds) },
-        { label: '在上方插入记录', icon: <IconUp />, hidden: readOnly, onClick: () => addAndFocus(rec, true) },
+        { label: '展开记录详情', icon: <IconEye />, onClick: () => onOpenRecord(rec.id, recordIds) },
+        { label: '在上方插入记录', icon: <IconUp />, hidden: readOnly, divider: true, onClick: () => addAndFocus(rec, true) },
         { label: '在下方插入记录', icon: <IconDown />, hidden: readOnly, onClick: () => addAndFocus(rec) },
         {
-          label: '复制记录',
+          label: ids.length > 1 ? `复制 ${ids.length} 条记录` : '复制记录',
           icon: <IconCopy />,
           hidden: readOnly,
-          onClick: () => model.addRecords([JSON.parse(JSON.stringify(rec.data))], rec.id),
+          onClick: () => {
+            const picked = ids.map((id) => model.record(id)).filter((x): x is Rec => !!x)
+            if (picked.length) model.addRecords(picked.map((x) => JSON.parse(JSON.stringify(x.data))), picked.at(-1)!.id)
+          },
         },
         {
           label: '打开链接',
@@ -471,20 +780,18 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
           onClick: async () => {
             if (ids.length > 1 && !(await confirmDialog(`确定删除选中的 ${ids.length} 条记录吗？可用 Ctrl+Z 撤销。`, { danger: true, okText: '删除' }))) return
             model.deleteRecords(ids)
+            setCheckedRaw(new Set())
             setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() })
           },
         },
       ]
-      openMenu(at, items, { align: 'left' })
+      openMenu(at, items, { align: 'left', width: 184 })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, fields, selection, readOnly, recordIds],
+    [rows, fields, selection, readOnly, recordIds, checkedIds, collapsed],
   )
 
   // ---------- row drag ----------
-  // Rows are dragged by the handle at the left of the index cell. Glide's own row moving
-  // needs its row-marker column, so the drag is tracked here: the pointer y maps to a row
-  // (fixed row height), a line marks the drop gap and the grid auto-scrolls near its edges.
   const wrapRef = useRef<HTMLDivElement>(null)
   const lineRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef<HTMLDivElement>(null)
@@ -493,19 +800,44 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   const bodyRange = () => {
     const g = ref.current
     const head = g?.getBounds(0, -1)
-    const foot = g?.getBounds(0, rowsRef.current.length)
+    const foot = g?.getBounds(0, summaryRowIdx)
     const top = head ? head.y + head.height : (wrapRef.current?.getBoundingClientRect().top ?? 0) + HEADER_H
     return { top, bottom: foot ? foot.y : top + height }
+  }
+
+  const rowAtRelY = (relY: number, offsets: number[]): number => {
+    const n = offsets.length - 1
+    if (n <= 0 || relY <= 0) return 0
+    if (relY >= offsets[n]) return n - 1
+    let lo = 0
+    let hi = n - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (relY < offsets[mid]) hi = mid - 1
+      else if (relY >= offsets[mid + 1]) lo = mid + 1
+      else return mid
+    }
+    return Math.min(lo, n - 1)
   }
 
   const dropTarget = (clientY: number, rec: Rec): DropTarget | null => {
     const b0 = ref.current?.getBounds(0, 0)
     if (!b0) return null
     const rs = rowsRef.current
+    const offsets = rowOffsetsRef.current
+    if (!rs.length) return null
     const { top, bottom } = bodyRange()
-    const pos = (Math.max(top, Math.min(bottom - 1, clientY)) - b0.y) / ROW_H
-    const r = Math.floor(pos)
-    const gap = r >= rs.length ? rs.length : Math.max(0, pos - r < 0.5 ? r : r + 1)
+    const relY = Math.max(top, Math.min(bottom - 1, clientY)) - b0.y
+    let gap: number
+    if (relY >= offsets[rs.length]) {
+      gap = rs.length
+    } else if (relY <= 0) {
+      gap = 0
+    } else {
+      const r = rowAtRelY(relY, offsets)
+      const mid = (offsets[r] + offsets[r + 1]) / 2
+      gap = relY < mid ? r : r + 1
+    }
     const above = rs[gap - 1]
     const below = rs[gap]
     const [anchor, place]: [Rec, 'before' | 'after'] | [undefined, undefined] =
@@ -517,13 +849,12 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       if (!f) continue
       const v = cellValue(anchor, f)
       if (groupKey(f, v) === groupKey(f, cellValue(rec, f))) continue
-      // computed values (created time…) cannot follow the record into another group
       if (isComputed(f.type)) return null
       data[f.id] = v ?? null
     }
     const from = rs.findIndex((x) => x.kind === 'record' && x.rec.id === rec.id)
     if (anchor.id === rec.id || (!Object.keys(data).length && (gap === from || gap === from + 1))) return null
-    return { anchor, place, data, gap, y: b0.y + gap * ROW_H }
+    return { anchor, place, data, gap, y: b0.y + offsets[gap] }
   }
 
   const startRowDrag = (rec: Rec, x0: number, y0: number) => {
@@ -546,7 +877,6 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       ghost.style.transform = `translate(${lastX - wr.left + 14}px, ${lastY - wr.top - 14}px)`
     }
     const tick = () => {
-      // auto-scroll while the pointer is near the top / bottom edge
       const { top, bottom } = bodyRange()
       const edge = 36
       const dy = lastY < top + edge ? -(top + edge - lastY) : lastY > bottom - edge ? lastY - bottom + edge : 0
@@ -581,7 +911,6 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       document.body.classList.remove('bt-row-dragging')
       if (lineRef.current) lineRef.current.style.display = 'none'
       if (ghostRef.current) ghostRef.current.style.display = 'none'
-      // the grid never saw the pointerdown; keep the click that follows from reaching it
       const stop = (ev: Event) => {
         ev.stopPropagation()
         ev.preventDefault()
@@ -615,7 +944,10 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     if (!b0 || e.clientX < b0.x || e.clientX > b0.x + GRIP_W) return
     const { top, bottom } = bodyRange()
     if (e.clientY < top || e.clientY >= bottom) return
-    const item = rowsRef.current[Math.floor((e.clientY - b0.y) / ROW_H)]
+    const relY = e.clientY - b0.y
+    const offsets = rowOffsetsRef.current
+    if (relY < 0 || relY >= offsets[rowsRef.current.length]) return
+    const item = rowsRef.current[rowAtRelY(relY, offsets)]
     if (item?.kind !== 'record') return
     e.preventDefault()
     e.stopPropagation()
@@ -627,28 +959,23 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   }
 
   // ---------- double-click on blank space ----------
-  // Double-clicking the blank area under the last row adds a record and starts editing the
-  // cell in the clicked column; double-clicking the blank area right of the last column
-  // adds a field there.
   const onBlankDoubleClick = (e: React.MouseEvent) => {
     if (readOnly || dragId || typing.current) return
     const target = e.target as Element
     if (target.closest('textarea, input, button')) return
     const g = ref.current
     if (!g) return
-    const rs = rowsRef.current
     const lastCol = g.getBounds(fields.length, -1)
     const head = g.getBounds(0, -1)
     if (!lastCol || !head) return
-    // right of the last column (header or body)
     if (e.clientX > lastCol.x + lastCol.width && e.clientY >= head.y) {
       const f = fields.at(-1)
       openFieldEditor({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY }, model, { viewId: view.id, after: f?.id })
       return
     }
-    // under the last row, above the summary row
     const { top, bottom } = bodyRange()
-    const last = rs.length ? g.getBounds(0, rs.length - 1) : undefined
+    const endIdx = hasAddRow ? addRowIdx : rowsRef.current.length - 1
+    const last = endIdx >= 0 ? g.getBounds(0, endIdx) : undefined
     const rowsEnd = last ? last.y + last.height : top
     if (e.clientY <= rowsEnd || e.clientY >= bottom) return
     let col = 1
@@ -657,23 +984,7 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       if (b && e.clientX >= b.x && e.clientX < b.x + b.width) col = c
     }
     if (cfg.sorts?.length) toast('视图已设置排序，新记录会按排序规则显示')
-    const id = insertRecord(records.at(-1))
-    // the new row is rendered on the next frame; then open the cell for typing
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const row = rowsRef.current.findIndex((r) => r.kind === 'record' && r.rec.id === id)
-        if (row < 0) return
-        ref.current?.scrollTo(col, row)
-        setSelection(cellSelection(col, row))
-        ref.current?.focus()
-        // after the grid has taken focus for the new selection, open the cell editor
-        setTimeout(() => {
-          const f = model.field(fieldsRef.current[col - 1]?.id ?? '')
-          const b = ref.current?.getBounds(col, row)
-          if (f && b && TYPEABLE.has(f.type) && !typing.current) openTyping(col, row, b, '')
-        }, 30)
-      }),
-    )
+    addAndFocus(records.at(-1), false, col, true)
   }
 
   // ---------- columns ----------
@@ -683,26 +994,57 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     if (!f || readOnly) return
     const anchor = { left: bounds.x, right: bounds.x + bounds.width, top: bounds.y, bottom: bounds.y + bounds.height }
     const isPrimary = col === 1
+    const prevField = col > 2 ? fields[col - 2] : undefined
     const order = orderIds(table, view)
+    const bf = baseField(f)
     openMenu(
       anchor,
       [
-        { label: '编辑字段', icon: <IconEdit />, onClick: () => openFieldEditor(anchor, model, { field: f }) },
+        { label: '编辑字段配置', icon: <IconEdit />, onClick: () => openFieldEditor(anchor, model, { field: f }) },
         {
-          label: '在右侧插入字段',
+          label: '向左插入字段',
           icon: <IconPlus />,
+          hidden: isPrimary,
+          divider: true,
+          onClick: () => openFieldEditor(anchor, model, { viewId: view.id, after: prevField?.id, first: col === 2 }),
+        },
+        {
+          label: '向右插入字段',
+          icon: <IconPlus />,
+          divider: isPrimary,
           onClick: () => openFieldEditor(anchor, model, { viewId: view.id, after: isPrimary ? undefined : f.id, first: isPrimary }),
         },
-        { label: '升序排列', icon: <IconUp />, divider: true, onClick: () => model.updateView(view.id, { sorts: [{ field: f.id }] }) },
-        { label: '降序排列', icon: <IconDown />, onClick: () => model.updateView(view.id, { sorts: [{ field: f.id, desc: true }] }) },
-        { label: '按此字段分组', icon: <IconGroup />, onClick: () => model.updateView(view.id, { groups: [{ field: f.id }], collapsed: [] }) },
+        { label: '升序排列 (A → Z)', icon: <IconUp />, divider: true, onClick: () => model.updateView(view.id, { sorts: [{ field: f.id }] }) },
+        { label: '降序排列 (Z → A)', icon: <IconDown />, onClick: () => model.updateView(view.id, { sorts: [{ field: f.id, desc: true }] }) },
         {
-          label: col < freeze ? '取消冻结' : '冻结至此列',
+          label: '按此字段筛选',
+          icon: <IconFilter />,
+          onClick: () => {
+            const cur = cfg.filter ?? { conj: 'and' as const, conds: [] }
+            const ops = filterOps(bf.type)
+            model.updateView(view.id, {
+              filter: {
+                conj: cur.conj,
+                conds: [...cur.conds, { id: Math.random().toString(36).slice(2, 12), field: f.id, op: ops[0].op, value: defaultCondValue(bf.type) }],
+              },
+            })
+            toast(`已添加「${f.name}」筛选条件，可在工具栏「筛选」中调整`)
+          },
+        },
+        {
+          label: '按此字段分组',
+          icon: <IconGroup />,
+          hidden: f.type === 'attachment',
+          onClick: () => model.updateView(view.id, { groups: [{ field: f.id }], collapsed: [] }),
+        },
+        {
+          label: col < freeze ? '取消冻结列' : '冻结至此列',
           icon: <IconLock />,
+          divider: true,
           onClick: () => model.updateView(view.id, { frozen: col < freeze ? Math.max(0, col - 1) : col }),
         },
         {
-          label: '隐藏字段',
+          label: '隐藏此字段',
           icon: <IconEyeOff />,
           hidden: isPrimary,
           onClick: () => model.updateView(view.id, { hidden: [...(cfg.hidden ?? []), f.id] }),
@@ -720,18 +1062,16 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
           },
         },
       ],
-      { align: 'left', width: 180 },
+      { align: 'left', width: 196 },
     )
   }
 
   const onColumnMoved = useCallback(
     (from: number, to: number) => {
-      // the index and primary columns stay put
       if (from <= 1 || to <= 1) return
       const ids = fields.slice(1).map((f) => f.id)
       const [moved] = ids.splice(from - 2, 1)
       ids.splice(to - 2, 0, moved)
-      // keep hidden fields in their relative place
       const all = orderIds(table, view).filter((id) => !ids.includes(id))
       model.updateView(view.id, { order: [...ids, ...all] })
     },
@@ -748,17 +1088,12 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     [model, view.id, cfg.widths, liveWidths],
   )
 
-  // ---------- type-to-edit ----------
-  // Glide does not start editing when typing into frozen columns, nor for IME input
-  // (Chinese / Japanese), whose keydown reports "Process". A plain textarea placed over
-  // the cell takes over in those cases; it is focused synchronously inside keydown so
-  // the IME composition lands in it.
+  // ---------- type-to-edit & keyboard shortcuts ----------
   const typeRef = useRef<HTMLTextAreaElement>(null)
   const typing = useRef<{ rec: string; field: string; col: number; row: number } | null>(null)
 
   const openTyping = (col: number, row: number, b: Rectangle, initial: string) => {
     const el = typeRef.current
-    // through the refs: also called a moment after adding a record, from an older render
     const item = rowsRef.current[row]
     const rec = item?.kind === 'record' ? item.rec : undefined
     const f = fieldsRef.current[col - 1]
@@ -798,11 +1133,37 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   }
 
   const onGridKeyDown = (e: GridKeyEventArgs) => {
-    if (readOnly || e.ctrlKey || e.metaKey || e.altKey || !e.location || !e.bounds) return
+    if (e.ctrlKey || e.metaKey || e.altKey || !e.location || !e.bounds) return
     const [col, row] = e.location
     const rec = recAt(row)
     const f = fieldAt(col)
-    if (!rec || !f || !TYPEABLE.has(f.type)) return
+    if (!rec) return
+
+    // Spacebar: Shift+Space toggles row selection; plain Space expands record detail (except on editable checkbox)
+    if (e.key === ' ') {
+      if (e.shiftKey && !readOnly) {
+        e.cancel()
+        e.preventDefault()
+        toggleRowCheck(rec.id)
+        return
+      }
+      if (!e.shiftKey && f?.type !== 'checkbox') {
+        e.cancel()
+        e.preventDefault()
+        onOpenRecord(rec.id, recordIds)
+        return
+      }
+    }
+
+    // Shift+Enter: insert a new record right below the current row
+    if (e.key === 'Enter' && e.shiftKey && !readOnly) {
+      e.cancel()
+      e.preventDefault()
+      addAndFocus(rec, false, Math.max(1, col))
+      return
+    }
+
+    if (readOnly || !f || !TYPEABLE.has(f.type)) return
     const ime = e.key === 'Process' || e.keyCode === 229
     const frozen = col < freeze
     if (ime || (frozen && e.key.length === 1 && e.key !== ' ')) {
@@ -817,10 +1178,26 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     }
   }
 
+  const onItemHovered = useCallback((args: GridMouseEventArgs) => {
+    setHoveredRow(args.kind === 'cell' ? args.location[1] : -1)
+  }, [])
+
+  // ---------- batch bar actions ----------
+  const openBatchFill = (el: HTMLElement) => {
+    const writableFields = fields.filter((f) => !isComputed(f.type))
+    if (!writableFields.length) return toast('没有可批量修改的字段')
+    openPopover(
+      el,
+      (close) => <BatchFillPopover model={model} fields={writableFields} recordIds={checkedIds} onDone={close} />,
+      { width: 320, align: 'left' },
+    )
+  }
+
   const rightElement = readOnly ? undefined : (
     <button
       className="bt-add-col"
-      title="添加字段" aria-label="添加字段"
+      title="新建字段"
+      aria-label="新建字段"
       onClick={(e) => openFieldEditor(e.currentTarget, model, { viewId: view.id, after: fields.at(-1)?.id })}
     >
       <IconPlus width={16} height={16} />
@@ -828,7 +1205,14 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
   )
 
   return (
-    <div className="bt-grid" ref={wrapRef} onContextMenu={(e) => e.preventDefault()} onPointerDownCapture={onPointerDownCapture} onDoubleClick={onBlankDoubleClick}>
+    <div
+      className="bt-grid"
+      ref={wrapRef}
+      onContextMenu={(e) => e.preventDefault()}
+      onPointerDownCapture={onPointerDownCapture}
+      onDoubleClick={onBlankDoubleClick}
+      onMouseLeave={() => setHoveredRow(-1)}
+    >
       <div ref={lineRef} className="bt-drop-line" style={{ left: INDEX_W }} />
       <div ref={ghostRef} className="bt-drag-ghost ellipsis" />
       <textarea
@@ -855,11 +1239,13 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
       <DataEditor
         ref={ref}
         theme={theme}
+        headerIcons={HEADER_SPRITES}
+        drawHeader={drawHeader}
         columns={columns}
         rows={total}
         width="100%"
         height={height}
-        rowHeight={ROW_H}
+        rowHeight={getRowHeight}
         headerHeight={HEADER_H}
         freezeColumns={freeze}
         freezeTrailingRows={1}
@@ -883,7 +1269,9 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         onCellClicked={onCellClicked}
         onCellActivated={onCellActivated}
         onCellContextMenu={onCellContextMenu}
+        onItemHovered={onItemHovered}
         onKeyDown={onGridKeyDown}
+        onHeaderClicked={onHeaderClicked}
         onHeaderMenuClick={fieldMenu}
         onHeaderContextMenu={(col, e) => {
           e.preventDefault()
@@ -900,18 +1288,130 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
         keybindings={{ search: false, downFill: true, rightFill: true, selectAll: true, copy: true, paste: !readOnly, cut: !readOnly, clear: !readOnly }}
         trapFocus={false}
       />
+
+      {!readOnly && checkedIds.length > 0 && (
+        <div className="bt-batch-bar" role="toolbar" aria-label="批量操作">
+          <span className="bt-batch-count">
+            <span className="bt-batch-dot">{checkedIds.length}</span>
+            <span>已选记录</span>
+          </span>
+          {checkedIds.length === 1 && (
+            <button className="bt-batch-btn" onClick={() => onOpenRecord(checkedIds[0], recordIds)}>
+              <IconEye width={14} height={14} /> 展开
+            </button>
+          )}
+          <button className="bt-batch-btn" onClick={(e) => openBatchFill(e.currentTarget)}>
+            <IconEdit width={14} height={14} /> 批量修改
+          </button>
+          <button
+            className="bt-batch-btn"
+            onClick={() => {
+              const picked = checkedIds.map((id) => model.record(id)).filter((x): x is Rec => !!x)
+              if (!picked.length) return
+              model.addRecords(picked.map((x) => JSON.parse(JSON.stringify(x.data))), picked.at(-1)!.id)
+              toast(`已复制 ${picked.length} 条记录`)
+            }}
+          >
+            <IconCopy width={14} height={14} /> 复制
+          </button>
+          <button
+            className="bt-batch-btn danger"
+            onClick={async () => {
+              if (checkedIds.length > 1 && !(await confirmDialog(`确定删除选中的 ${checkedIds.length} 条记录吗？可用 Ctrl+Z 撤销。`, { danger: true, okText: '删除' }))) return
+              const count = checkedIds.length
+              model.deleteRecords(checkedIds)
+              setCheckedRaw(new Set())
+              toast(`已删除 ${count} 条记录（Ctrl+Z 撤销）`)
+            }}
+          >
+            <IconTrash width={14} height={14} /> 删除
+          </button>
+          <button className="icon-btn sm" title="取消选择 (Esc)" aria-label="取消选择" onClick={() => setCheckedRaw(new Set())}>
+            <IconClose width={14} height={14} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function makeCell(model: TableModel, f: Field, rec: Rec, readOnly: boolean): GridCell {
+function BatchFillPopover({ model, fields, recordIds, onDone }: { model: TableModel; fields: Field[]; recordIds: string[]; onDone: () => void }) {
+  const [fieldId, setFieldId] = useState(fields[0]?.id ?? '')
+  const field = fields.find((f) => f.id === fieldId) ?? fields[0]
+  const [draft, setDraft] = useState<Rec>(() => ({ id: '__batch', seq: 0, sort: 0, created_at: 0, updated_at: 0, data: {} }))
+
+  // lightweight proxy model for FieldInput so editing updates `draft` locally until user clicks "应用"
+  const draftModel = useMemo(() => {
+    const proxy = Object.create(model) as TableModel
+    proxy.setCells = (changes: CellChange[]) => {
+      setDraft((d) => {
+        const next = { ...d.data }
+        for (const c of changes) next[c.field] = c.value
+        return { ...d, data: next }
+      })
+    }
+    return proxy
+  }, [model])
+
+  if (!field) return null
+  const apply = (clear = false) => {
+    const val = clear ? undefined : draft.data[field.id]
+    model.setCells(recordIds.map((rec) => ({ rec, field: field.id, value: val })))
+    toast(clear ? `已清空 ${recordIds.length} 条记录的「${field.name}」` : `已更新 ${recordIds.length} 条记录的「${field.name}」`)
+    onDone()
+  }
+
+  return (
+    <div className="bt-panel">
+      <div className="bt-panel-title">批量修改（{recordIds.length} 条记录）</div>
+      <label className="bt-form-row">
+        <span>目标字段</span>
+        <div className="bt-select-with-icon">
+          <FieldTypeIcon type={field.type} size={14} />
+          <select className="bt-input sm" value={field.id} onChange={(e) => setFieldId(e.target.value)}>
+            {fields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </label>
+      <div className="bt-form-row">
+        <span>修改为</span>
+        <FieldInput key={field.id} model={draftModel} field={field} rec={draft} />
+      </div>
+      <div className="bt-form-actions">
+        <button type="button" className="btn ghost sm" onClick={() => apply(true)}>
+          清空该字段
+        </button>
+        <span className="spacer" />
+        <button type="button" className="btn sm" onClick={onDone}>
+          取消
+        </button>
+        <button type="button" className="btn sm primary" onClick={() => apply(false)}>
+          应用
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function makeCell(model: TableModel, f: Field, rec: Rec, readOnly: boolean, tall: boolean): GridCell {
   const v = cellValue(rec, f)
   const ro = readOnly || isComputed(f.type)
   const text = displayText(f, v)
   switch (f.type) {
     case 'text':
     case 'longtext':
-      return { kind: GridCellKind.Text, data: v ?? '', displayData: f.type === 'longtext' ? text.replace(/\s*\n\s*/g, ' ') : text, allowOverlay: true, readonly: ro }
+      return {
+        kind: GridCellKind.Text,
+        data: v ?? '',
+        displayData: !tall && f.type === 'longtext' ? text.replace(/\s*\n\s*/g, ' ') : text,
+        allowWrapping: tall,
+        allowOverlay: true,
+        readonly: ro,
+      }
     case 'autonumber':
     case 'created_time':
     case 'modified_time':

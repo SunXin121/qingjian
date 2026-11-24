@@ -1,31 +1,42 @@
-/* ---------- kanban ---------- */
+/* ---------- Feishu-style kanban board ---------- */
 .bt-kanban {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   min-height: 100%;
-  padding: 4px 16px 24px;
+  padding: 12px 16px 24px;
   width: max-content;
 }
 .bt-col {
   display: flex;
   flex-direction: column;
-  width: 272px;
+  width: 280px;
   max-height: 100%;
-  border-radius: var(--radius-lg);
+  border-radius: 10px;
   background: var(--c-surface);
-  border: 1px solid transparent;
-  transition: border-color 0.12s, background 0.12s;
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--c-border-strong);
+  transition: border-color 0.14s, background 0.14s;
 }
+.bt-col.c0 { border-top-color: var(--tag-0-fg); }
+.bt-col.c1 { border-top-color: var(--tag-1-fg); }
+.bt-col.c2 { border-top-color: var(--tag-2-fg); }
+.bt-col.c3 { border-top-color: var(--tag-3-fg); }
+.bt-col.c4 { border-top-color: var(--tag-4-fg); }
+.bt-col.c5 { border-top-color: var(--tag-5-fg); }
+.bt-col.c6 { border-top-color: var(--tag-6-fg); }
+.bt-col.c7 { border-top-color: var(--tag-7-fg); }
+.bt-col.c8 { border-top-color: var(--tag-8-fg); }
+.bt-col.c9 { border-top-color: var(--tag-9-fg); }
 .bt-col.over {
-  border-color: var(--c-info);
-  background: var(--bt-accent-light);
+  border-color: var(--bt-blue);
+  background: var(--bt-accent-subtle);
 }
 .bt-col-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 8px 6px 12px;
+  gap: 7px;
+  padding: 9px 8px 6px 12px;
 }
 .bt-col-none {
   font-size: 13px;
@@ -46,8 +57,18 @@
   color: var(--c-text-3);
 }
 .bt-col-count {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--c-surface-low);
+  font-size: 11.5px;
+  font-weight: 500;
   color: var(--c-text-3);
+  font-variant-numeric: tabular-nums;
 }
 .bt-col-body {
   display: flex;
@@ -59,45 +80,64 @@
 .bt-card {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--c-border);
-  border-radius: var(--radius);
+  border-radius: 8px;
   background: var(--c-panel);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: box-shadow 0.12s, border-color 0.12s;
+  transition: box-shadow 0.14s, border-color 0.14s, transform 0.14s;
 }
 .bt-card:hover {
-  border-color: var(--c-border-strong);
+  border-color: color-mix(in oklab, var(--bt-blue) 45%, var(--c-border-strong));
   box-shadow: var(--shadow-md);
 }
 .bt-card.dragging {
   opacity: 0.4;
 }
 .bt-card.drop-before {
-  box-shadow: 0 -3px 0 -1px var(--c-info);
+  box-shadow: 0 -3px 0 -1px var(--bt-blue);
+}
+.bt-card-cover {
+  margin: -10px -12px 4px;
+  height: 124px;
+  overflow: hidden;
+  border-radius: 7px 7px 0 0;
+  background: var(--c-surface-low);
+}
+.bt-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .bt-card-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.45;
+  color: var(--c-text);
   word-break: break-word;
 }
 .bt-card-line {
   display: flex;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
   font-size: 12.5px;
   min-width: 0;
 }
 .bt-card-label {
   flex: none;
-  max-width: 40%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 42%;
   color: var(--c-text-3);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.bt-card-label svg {
+  flex: none;
+  opacity: 0.85;
 }
 .bt-card-value {
   min-width: 0;
@@ -116,27 +156,30 @@
   height: 32px;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 7px;
   background: transparent;
   color: var(--c-text-3);
   font-size: 13px;
   cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
 .bt-col-add:hover,
 .bt-col-new:hover {
   background: var(--c-hover);
-  color: var(--c-text);
+  color: var(--bt-blue);
 }
 .bt-col-new {
   flex: none;
-  margin-top: 4px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px dashed var(--c-border-strong);
   white-space: nowrap;
 }
 .bt-col-more {
   flex: none;
   height: 32px;
   border: 1px dashed var(--c-border);
-  border-radius: var(--radius);
+  border-radius: 7px;
   background: transparent;
   color: var(--c-text-3);
   font-size: 12px;

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useState, type DragEvent } from 'react'
 import { openPopover } from '../components/dialog'
 import { IconChevron, IconPlus } from '../components/icons'
-import { cellMatches, cellValue, fmtDateTime, searchNeedle, titleReader, viewRecords, visibleFields } from './engine'
+import { cellMatches, cellValue, choiceOf, fmtDateTime, searchNeedle, titleReader, viewRecords, visibleFields } from './engine'
 import type { TableModel } from './model'
 import { baseField, type Field, type Rec, type TableData, type View } from './types'
 
@@ -15,7 +15,6 @@ interface Props {
   onSearchCount?: (n: number) => void
 }
 
-/** Fields a calendar can place records by: dates (formula dates too) and created / modified time. */
 export const calendarFieldOk = (f: Field) => baseField(f).type === 'date' || f.type === 'created_time' || f.type === 'modified_time'
 
 export function calendarField(t: TableData, v: View): Field | undefined {
@@ -27,13 +26,10 @@ export function calendarEndField(t: TableData, v: View): Field | undefined {
 }
 
 const DAY = 86_400_000
-const WEEK = ['一', '二', '三', '四', '五', '六', '日']
-/** chips shown per day before "+N" */
+const WEEK = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const MAX_CHIPS = 3
-/** longest span a record is drawn over */
 const MAX_SPAN = 62
 
-/** YYYY-MM-DD of a date-ish cell value. */
 export function dayOf(v: any): string | undefined {
   if (typeof v === 'number') return fmtDateTime(v, false)
   if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10)
@@ -52,10 +48,13 @@ export const addDays = (s: string, n: number) => {
 }
 export const diffDays = (a: string, b: string) => Math.round((parseDay(a).getTime() - parseDay(b).getTime()) / DAY)
 
-/** A month grid; records sit on the day of the date field (spanning to the end date if set). */
 export default function CalendarView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {
   const field = calendarField(table, view)
   const end = calendarEndField(table, view)
+  const colorField = useMemo(
+    () => table.fields.find((f) => f.id === view.config.colorField && f.type === 'select') ?? table.fields.find((f) => f.type === 'select'),
+    [table.fields, view.config.colorField],
+  )
   const needle = searchNeedle(search)
   const records = useMemo(() => {
     const list = viewRecords(table, view, model.sticky)
@@ -70,7 +69,6 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
   const [over, setOver] = useState<string | null>(null)
   const writable = !readOnly && field?.type === 'date'
 
-  // 6 weeks starting on the Monday on / before the 1st
   const days = useMemo(() => {
     const first = parseDay(month + '-01')
     const start = new Date(first)
@@ -120,6 +118,11 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
   const ids = records.map((r) => r.id)
   const readTitle = titleReader(table, view)
   const title = (r: Rec) => readTitle(r) || '未命名记录'
+  const chipColorCls = (r: Rec) => {
+    if (!colorField) return ''
+    const c = choiceOf(colorField, r.data[colorField.id])
+    return c ? ` c${c.color % 10}` : ''
+  }
   const shift = (n: number) => {
     const d = parseDay(month + '-01')
     d.setMonth(d.getMonth() + n)
@@ -144,9 +147,8 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
     const nextStart = start ? addDays(start, delta) : day
     if (nextStart === start) return
     const changes = [{ rec: rec.id, field: field.id, value: withTime(nextStart, rec.data[field.id]) }]
-    // keep the duration when there is an end date
     const e0 = end?.type === 'date' ? dayOf(rec.data[end.id]) : undefined
-    if (end && e0) changes.push({ rec: rec.id, field: end.id, value: (end.options.time ? addDays(e0, delta) + (rec.data[end.id].slice(10) || '') : addDays(e0, delta)) })
+    if (end && e0) changes.push({ rec: rec.id, field: end.id, value: end.options.time ? addDays(e0, delta) + (rec.data[end.id].slice(10) || '') : addDays(e0, delta) })
     model.sticky.add(rec.id)
     model.setCells(changes)
   }
@@ -160,7 +162,7 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
           {list.map((r) => (
             <button
               key={r.id}
-              className="bt-cal-chip"
+              className={'bt-cal-chip' + chipColorCls(r)}
               onClick={() => {
                 close()
                 onOpenRecord(r.id, list.map((x) => x.id))
@@ -171,20 +173,20 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
           ))}
         </div>
       ),
-      { width: 260 },
+      { width: 268 },
     )
 
   const [y, m] = month.split('-').map(Number)
   return (
     <div className="bt-cal">
       <div className="bt-cal-head">
-        <button className="icon-btn" title="上个月" aria-label="上个月" onClick={() => shift(-1)}>
+        <button className="icon-btn sm" title="上个月" aria-label="上个月" onClick={() => shift(-1)}>
           <IconChevron width={16} height={16} style={{ transform: 'rotate(180deg)' }} />
         </button>
         <div className="bt-cal-month">
           {y} 年 {m} 月
         </div>
-        <button className="icon-btn" title="下个月" aria-label="下个月" onClick={() => shift(1)}>
+        <button className="icon-btn sm" title="下个月" aria-label="下个月" onClick={() => shift(1)}>
           <IconChevron width={16} height={16} />
         </button>
         <button className="btn sm" onClick={() => setMonth(today.slice(0, 7))}>
@@ -193,7 +195,7 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
         <span className="spacer" />
         {unscheduled.length > 0 && (
           <button className="btn ghost sm" onClick={(e) => listPopover(e.currentTarget, unscheduled, `「${field.name}」为空的记录`)}>
-            未安排 {unscheduled.length}
+            未排期 {unscheduled.length}
           </button>
         )}
       </div>
@@ -232,7 +234,7 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
                 return (
                   <button
                     key={r.id}
-                    className={'bt-cal-chip' + (end && s !== d ? ' cont' : '')}
+                    className={'bt-cal-chip' + chipColorCls(r) + (end && s !== d ? ' cont' : '')}
                     draggable={writable}
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = 'move'
@@ -252,7 +254,7 @@ export default function CalendarView({ model, table, view, readOnly, onOpenRecor
               })}
               {list.length > MAX_CHIPS && (
                 <button className="bt-cal-more" onClick={(e) => listPopover(e.currentTarget, list, `${Number(d.slice(5, 7))} 月 ${Number(d.slice(8))} 日`)}>
-                  还有 {list.length - MAX_CHIPS} 条
+                  + {list.length - MAX_CHIPS} 条更多
                 </button>
               )}
             </div>

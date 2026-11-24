@@ -90,8 +90,8 @@
   min-width: 20px;
   height: 20px;
   border-radius: 10px;
-  background: var(--c-info);
-  color: #fff;
+  background: var(--bt-blue);
+  color: var(--bt-blue-fg);
   font-weight: 600;
 }
 .bt-gantt-body {
@@ -120,7 +120,7 @@
   bottom: 0;
   width: 2px;
   margin-left: -1px;
-  background: var(--c-info);
+  background: var(--bt-blue);
   opacity: 0.7;
 }
 .bt-gantt-deps {
@@ -350,10 +350,10 @@
   display: flex;
   align-items: center;
   overflow: hidden;
-  border: 1px dashed var(--c-info);
+  border: 1px dashed var(--bt-blue);
   border-radius: 5px;
   background: var(--bt-accent-light);
-  color: var(--c-info);
+  color: var(--bt-blue);
   font-size: 12px;
   white-space: nowrap;
   pointer-events: none;

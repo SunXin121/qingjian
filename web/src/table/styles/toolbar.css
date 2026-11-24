@@ -1,10 +1,11 @@
-/* ---------- view tabs & toolbar ---------- */
+/* ---------- view tabs & toolbar (Feishu Bitable style) ---------- */
 .bt-tabs {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 2px;
-  padding: 8px 16px 0;
+  padding: 5px 14px 0;
   border-bottom: 1px solid var(--c-border);
+  background: var(--c-panel);
   overflow-x: auto;
   scrollbar-width: none;
   flex: none;
@@ -13,73 +14,174 @@
   display: none;
 }
 .bt-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 220px;
   height: 34px;
-  padding: 0 12px;
+  padding: 0 11px;
   border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--c-text-2);
-  font-size: 13.5px;
-  cursor: pointer;
-  white-space: nowrap;
-  flex: none;
-}
-.bt-tab:hover {
-  color: var(--c-text);
-}
-.bt-tab.active {
-  color: var(--c-text);
-  font-weight: 600;
-  border-bottom-color: var(--c-primary);
-}
-.bt-tab svg {
-  color: var(--c-text-3);
-}
-.bt-tab.add {
-  padding: 0 10px;
-  color: var(--c-text-3);
-}
-.bt-tab-more {
-  margin-right: -4px;
-  padding: 0 4px;
-  border-radius: 4px;
-  color: var(--c-text-3);
-  font-weight: 400;
-}
-.bt-tab-more:hover {
-  background: var(--c-hover);
-  color: var(--c-text);
-}
-.bt-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  flex: none;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.bt-toolbar .btn.primary {
-  margin-right: 6px;
-}
-.bt-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 6px 6px 0 0;
   background: transparent;
   color: var(--c-text-2);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
   flex: none;
+  transition: color 0.14s, background 0.14s;
+}
+.bt-tab::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  transition: background 0.15s;
+}
+.bt-tab:hover {
+  color: var(--c-text);
+  background: var(--c-hover);
+}
+.bt-tab.active {
+  color: var(--bt-blue);
+  font-weight: 600;
+}
+.bt-tab.active::after {
+  background: var(--bt-blue);
+}
+.bt-tab.dragging {
+  opacity: 0.45;
+}
+.bt-tab.drop-before {
+  box-shadow: inset 2px 0 0 var(--bt-blue);
+}
+.bt-tab.drop-after {
+  box-shadow: inset -2px 0 0 var(--bt-blue);
+}
+.bt-view-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--c-text-3);
+  transition: color 0.14s;
+}
+.bt-tab:hover .bt-view-icon {
+  color: var(--c-text-2);
+}
+.bt-tab.active .bt-view-icon {
+  color: var(--bt-blue);
+}
+.bt-tab-rename {
+  width: 112px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--bt-blue);
+  border-radius: 4px;
+  background: var(--c-panel);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bt-blue-ring);
+}
+.bt-tab.add {
+  height: 28px;
+  margin-left: 2px;
+  margin-bottom: 3px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--c-text-3);
+  font-size: 12.5px;
+}
+.bt-tab.add:hover {
+  color: var(--c-text);
+  background: var(--c-hover);
+}
+.bt-tab-add-label {
+  font-size: 12.5px;
+}
+.bt-tab-more {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -3px;
+  border-radius: 4px;
+  color: var(--c-text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+.bt-tab-more:hover {
+  background: var(--bt-accent-light);
+  color: var(--bt-blue);
+}
+
+/* ---------- toolbar ---------- */
+.bt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 14px;
+  background: var(--c-panel);
+  flex: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bt-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.bt-btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bt-blue);
+  color: var(--bt-blue-fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+  transition: background 0.14s, transform 0.1s;
+}
+.bt-btn-add:hover {
+  background: var(--bt-blue-hover);
+}
+.bt-btn-add:active {
+  transform: scale(0.98);
+}
+.bt-toolbar-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0 5px;
+  background: var(--c-border);
+  flex: none;
+}
+.bt-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+  transition: background 0.12s, color 0.12s;
 }
 .bt-tool:hover {
   background: var(--c-hover);
@@ -87,10 +189,36 @@
 }
 .bt-tool.on {
   background: var(--bt-accent-light);
-  color: var(--c-info);
+  color: var(--bt-blue);
+  font-weight: 500;
+}
+.bt-tool.on:hover {
+  background: color-mix(in oklab, var(--bt-blue) 16%, transparent);
 }
 .bt-tool svg {
   flex: none;
+}
+.bt-tool-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bt-blue) 16%, transparent);
+  color: var(--bt-blue);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.bt-record-stat {
+  font-size: 12px;
+  color: var(--c-text-3);
+  padding: 0 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .bt-toolbar .icon-btn:disabled {
   opacity: 0.35;
@@ -102,9 +230,11 @@
   min-height: 0;
   position: relative;
   border-top: 1px solid var(--c-border);
+  background: var(--c-panel);
 }
 .bt-body.kanban {
-  border-top: 0;
+  border-top: 1px solid var(--c-border);
+  background: var(--c-bg);
   overflow: auto;
 }
 .bt-grid {
@@ -117,7 +247,7 @@
   position: absolute;
   right: 0;
   height: 2px;
-  background: var(--c-info);
+  background: var(--bt-blue);
   z-index: 3;
   pointer-events: none;
 }
@@ -129,7 +259,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 2px solid var(--c-info);
+  border: 2px solid var(--bt-blue);
   background: var(--c-panel);
   box-sizing: border-box;
 }
@@ -160,15 +290,89 @@ body.bt-row-dragging * {
   width: 44px;
   height: 36px;
   border: 0;
-  border-bottom: 1px solid var(--c-border-strong);
-  border-right: 1px solid var(--c-border);
-  background: var(--c-side);
+  border-bottom: 1px solid var(--c-border);
+  border-right: 1px solid var(--bt-grid-line);
+  background: var(--bt-header-bg);
   color: var(--c-text-3);
   cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
 .bt-add-col:hover {
+  color: var(--bt-blue);
+  background: var(--bt-header-hover);
+}
+/* floating batch action bar (Feishu Bitable multi-row selection) */
+.bt-batch-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 46px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 20px;
+  background: var(--c-panel);
+  box-shadow: var(--shadow-pop);
+  animation: bt-batch-in 0.16s var(--ease-out);
+  white-space: nowrap;
+}
+@keyframes bt-batch-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+.bt-batch-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--c-text);
-  background: var(--c-active);
+  margin-right: 4px;
+}
+.bt-batch-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--bt-blue);
+  color: var(--bt-blue-fg);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.bt-batch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.bt-batch-btn:hover {
+  background: var(--c-hover);
+  color: var(--c-text);
+}
+.bt-batch-btn.danger {
+  color: var(--c-danger);
+}
+.bt-batch-btn.danger:hover {
+  background: color-mix(in oklab, var(--c-danger) 12%, transparent);
 }
 /* Glide overlay editors */
 #portal .gdg-style {

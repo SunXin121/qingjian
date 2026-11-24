@@ -128,6 +128,17 @@ export interface SortRule {
 
 export type SummaryKind = 'none' | 'count' | 'filled' | 'empty' | 'unique' | 'percent_filled' | 'sum' | 'avg' | 'min' | 'max' | 'checked'
 
+export type RowHeight = 'short' | 'medium' | 'tall' | 'xtall'
+
+export const ROW_HEIGHTS: { value: RowHeight; label: string; px: number; lines: number }[] = [
+  { value: 'short', label: '低', px: 34, lines: 1 },
+  { value: 'medium', label: '中', px: 54, lines: 2 },
+  { value: 'tall', label: '高', px: 76, lines: 3 },
+  { value: 'xtall', label: '超高', px: 108, lines: 5 },
+]
+
+export const rowHeightInfo = (rh?: RowHeight) => ROW_HEIGHTS.find((x) => x.value === rh) ?? ROW_HEIGHTS[0]
+
 export interface ViewConfig {
   /** hidden field ids (the primary field cannot be hidden) */
   hidden?: string[]
@@ -136,6 +147,8 @@ export interface ViewConfig {
   widths?: Record<string, number>
   /** number of frozen data columns, primary included */
   frozen?: number
+  /** grid row height preset */
+  rowHeight?: RowHeight
   filter?: { conj: 'and' | 'or'; conds: FilterCond[] }
   sorts?: SortRule[]
   /** grid / gantt grouping, outermost first */
@@ -232,27 +245,27 @@ export interface HistoryEntry {
   updated_at: number
 }
 
-export const FIELD_TYPES: { type: FieldType; label: string }[] = [
-  { type: 'text', label: '文本' },
-  { type: 'longtext', label: '多行文本' },
-  { type: 'number', label: '数字' },
-  { type: 'select', label: '单选' },
-  { type: 'multiselect', label: '多选' },
-  { type: 'date', label: '日期' },
-  { type: 'checkbox', label: '复选框' },
-  { type: 'url', label: '链接' },
-  { type: 'rating', label: '评分' },
-  { type: 'progress', label: '进度' },
-  { type: 'phone', label: '电话' },
-  { type: 'email', label: '邮箱' },
-  { type: 'link', label: '关联' },
-  { type: 'lookup', label: '查找引用' },
-  { type: 'rollup', label: '汇总' },
-  { type: 'formula', label: '公式' },
-  { type: 'attachment', label: '附件' },
-  { type: 'autonumber', label: '自动编号' },
-  { type: 'created_time', label: '创建时间' },
-  { type: 'modified_time', label: '修改时间' },
+export const FIELD_TYPES: { type: FieldType; label: string; group: 'basic' | 'advanced' }[] = [
+  { type: 'text', label: '文本', group: 'basic' },
+  { type: 'longtext', label: '多行文本', group: 'basic' },
+  { type: 'number', label: '数字', group: 'basic' },
+  { type: 'select', label: '单选', group: 'basic' },
+  { type: 'multiselect', label: '多选', group: 'basic' },
+  { type: 'date', label: '日期', group: 'basic' },
+  { type: 'checkbox', label: '复选框', group: 'basic' },
+  { type: 'attachment', label: '附件', group: 'basic' },
+  { type: 'url', label: '超链接', group: 'basic' },
+  { type: 'rating', label: '评分', group: 'basic' },
+  { type: 'progress', label: '进度', group: 'basic' },
+  { type: 'phone', label: '电话', group: 'basic' },
+  { type: 'email', label: '邮箱', group: 'basic' },
+  { type: 'formula', label: '公式', group: 'advanced' },
+  { type: 'link', label: '双向关联', group: 'advanced' },
+  { type: 'lookup', label: '查找引用', group: 'advanced' },
+  { type: 'rollup', label: '汇总', group: 'advanced' },
+  { type: 'autonumber', label: '自动编号', group: 'advanced' },
+  { type: 'created_time', label: '创建时间', group: 'advanced' },
+  { type: 'modified_time', label: '修改时间', group: 'advanced' },
 ]
 
 export const fieldTypeLabel = (t: FieldType) => FIELD_TYPES.find((x) => x.type === t)?.label ?? t

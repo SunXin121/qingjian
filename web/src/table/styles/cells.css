@@ -12,6 +12,7 @@
 }
 .bt-star {
   color: var(--bt-star-off);
+  transition: transform 0.1s, color 0.1s;
 }
 .bt-star.on {
   color: var(--bt-star);
@@ -19,6 +20,9 @@
 .bt-rating.editable .bt-star {
   cursor: pointer;
   padding: 4px 1px;
+}
+.bt-rating.editable .bt-star:hover {
+  transform: scale(1.15);
 }
 .bt-progress {
   display: inline-flex;
@@ -39,7 +43,8 @@
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: var(--c-info);
+  background: var(--bt-blue);
+  transition: width 0.15s ease-out;
 }
 .bt-progress-fill.done {
   background: var(--c-success);
@@ -54,9 +59,18 @@
   align-items: center;
   gap: 8px;
 }
+.bt-progress-range {
+  flex: 1;
+  min-width: 80px;
+  height: 6px;
+  accent-color: var(--bt-blue);
+  cursor: pointer;
+}
 .bt-progress-input .bt-input {
-  width: 80px;
+  width: 72px;
   flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- computed / link fields ---------- */

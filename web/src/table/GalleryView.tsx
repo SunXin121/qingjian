@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { IconDoc, IconPlus } from '../components/icons'
 import { cellMatches, cellValue, displayText, primaryField, searchNeedle, viewRecords, visibleFields } from './engine'
+import { IconGallery } from './icons'
 import { CardLine, LoadMore } from './KanbanView'
 import type { TableModel } from './model'
 import type { AttachmentValue, Field, TableData, View } from './types'
@@ -17,7 +18,6 @@ interface Props {
 
 const PAGE = 60
 
-/** The attachment field a gallery shows as cover: the configured one, else the first. */
 export function coverField(t: TableData, v: View): Field | undefined {
   if (v.config.coverField === '') return undefined
   return t.fields.find((f) => f.id === v.config.coverField && f.type === 'attachment') ?? t.fields.find((f) => f.type === 'attachment')
@@ -25,7 +25,6 @@ export function coverField(t: TableData, v: View): Field | undefined {
 
 const isImage = (a: AttachmentValue) => a.mime.startsWith('image/')
 
-/** Cards in a responsive grid, with an image cover taken from an attachment field. */
 export default function GalleryView({ model, table, view, readOnly, onOpenRecord, search = '', onSearchCount }: Props) {
   const needle = searchNeedle(search)
   const records = useMemo(() => {
@@ -65,7 +64,11 @@ export default function GalleryView({ model, table, view, readOnly, onOpenRecord
                     <IconDoc width={22} height={22} />
                     <span className="ellipsis">{files[0].name}</span>
                   </span>
-                ) : null}
+                ) : (
+                  <span className="bt-gallery-placeholder">
+                    <IconGallery width={22} height={22} />
+                  </span>
+                )}
               </div>
             )}
             <div className="bt-gallery-body">

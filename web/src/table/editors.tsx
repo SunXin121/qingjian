@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { formatSize, uploadFile } from '../api'
-import { openPopover, toast } from '../components/dialog'
-import { IconClose, IconDoc, IconLink, IconPlus, IconUpload } from '../components/icons'
+import { mount, openPopover, toast } from '../components/dialog'
+import { IconChevron, IconClose, IconDoc, IconDownload, IconLink, IconPlus, IconUpload } from '../components/icons'
 import { cellValue, choiceCollector, displayText, formatProgress, parseText } from './engine'
 import type { TableModel } from './model'
 import type { AttachmentValue, Choice, Field, Rec } from './types'
@@ -61,7 +61,6 @@ export function ChoicePicker({
   const [q, setQ] = useState(initialQuery)
   const [hi, setHi] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  // inside the grid overlay, the grid may grab focus back right after opening
   useEffect(() => {
     const focus = () => {
       const el = inputRef.current
@@ -120,7 +119,7 @@ export function ChoicePicker({
         className="bt-picker-input"
         autoFocus
         value={q}
-        placeholder={onCreate ? '搜索或创建选项' : '搜索选项'}
+        placeholder={onCreate ? '搜索或回车新建选项…' : '搜索选项…'}
         onChange={(e) => {
           setQ(e.target.value)
           setHi(0)
@@ -158,16 +157,73 @@ export function ChoicePicker({
         ))}
         {canCreate && (
           <button className={'bt-picker-item create' + (hi === list.length ? ' hi' : '')} onMouseEnter={() => setHi(list.length)} onClick={create}>
-            <IconPlus width={14} height={14} /> 创建 <Tag choice={{ id: '', name: q.trim(), color: choices.length % 10 }} />
+            <IconPlus width={14} height={14} /> 创建选项 <Tag choice={{ id: '', name: q.trim(), color: choices.length % 10 }} />
           </button>
         )}
-        {!list.length && !canCreate && <div className="bt-picker-empty">{choices.length ? '没有匹配的选项' : '还没有选项'}</div>}
+        {!list.length && !canCreate && <div className="bt-picker-empty">{choices.length ? '没有匹配的选项' : '还没有选项，输入名称回车创建'}</div>}
       </div>
     </div>
   )
 }
 
 const isImage = (a: AttachmentValue) => a.mime.startsWith('image/')
+
+/** Full-screen lightbox for image attachments (prev/next with arrow keys, download, Esc to close). */
+export function openImageLightbox(images: AttachmentValue[], initialIndex = 0) {
+  if (!images.length) return
+  mount((close) => <LightboxModal images={images} initialIndex={initialIndex} onClose={close} />)
+}
+
+function LightboxModal({ images, initialIndex, onClose }: { images: AttachmentValue[]; initialIndex: number; onClose: () => void }) {
+  const [idx, setIdx] = useState(() => Math.max(0, Math.min(images.length - 1, initialIndex)))
+  const cur = images[idx]
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      } else if (e.key === 'ArrowLeft' && images.length > 1) {
+        setIdx((i) => (i - 1 + images.length) % images.length)
+      } else if (e.key === 'ArrowRight' && images.length > 1) {
+        setIdx((i) => (i + 1) % images.length)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [images.length, onClose])
+  if (!cur) return null
+  return (
+    <div data-modal className="bt-lightbox" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bt-lightbox-bar">
+        <span className="ellipsis bt-lightbox-title">
+          {cur.name}
+          {cur.size > 0 && <span className="bt-lightbox-size"> · {formatSize(cur.size)}</span>}
+          {images.length > 1 && <span className="bt-lightbox-size"> ({idx + 1}/{images.length})</span>}
+        </span>
+        <span className="spacer" />
+        <a href={cur.url} download={cur.name} target="_blank" rel="noreferrer" className="bt-lightbox-btn" title="下载原图">
+          <IconDownload width={16} height={16} />
+        </a>
+        <button type="button" className="bt-lightbox-btn" title="关闭 (Esc)" aria-label="关闭" onClick={onClose}>
+          <IconClose width={18} height={18} />
+        </button>
+      </div>
+      <div className="bt-lightbox-stage" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        {images.length > 1 && (
+          <button type="button" className="bt-lightbox-nav prev" aria-label="上一张" onClick={() => setIdx((i) => (i - 1 + images.length) % images.length)}>
+            <IconChevron width={20} height={20} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
+        <img src={cur.url} alt={cur.name} className="bt-lightbox-img" />
+        {images.length > 1 && (
+          <button type="button" className="bt-lightbox-nav next" aria-label="下一张" onClick={() => setIdx((i) => (i + 1) % images.length)}>
+            <IconChevron width={20} height={20} />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function pickFiles(multiple = true): Promise<File[]> {
   return new Promise((resolve) => {
@@ -200,13 +256,20 @@ export async function uploadAll(files: File[], onProgress?: (text: string) => vo
 }
 
 export function AttachmentList({ value, onChange, readOnly }: { value: AttachmentValue[] | undefined; onChange: (v: AttachmentValue[]) => void; readOnly?: boolean }) {
-  const list = value ?? []
+  const list = useMemo(() => value ?? [], [value])
+  const images = useMemo(() => list.filter(isImage), [list])
   const [progress, setProgress] = useState('')
   const [over, setOver] = useState(false)
   const add = async (files: File[]) => {
     if (!files.length) return
     const added = await uploadAll(files, setProgress)
     if (added.length) onChange([...list, ...added])
+  }
+  const onPreview = (e: React.MouseEvent, a: AttachmentValue) => {
+    if (!isImage(a)) return
+    e.preventDefault()
+    const i = images.findIndex((x) => x.id === a.id && x.url === a.url)
+    openImageLightbox(images, Math.max(0, i))
   }
   return (
     <div
@@ -226,10 +289,10 @@ export function AttachmentList({ value, onChange, readOnly }: { value: Attachmen
     >
       {list.map((a, i) => (
         <div key={a.id + i} className="bt-file">
-          <a href={a.url} target="_blank" rel="noreferrer" className="bt-file-thumb">
+          <a href={a.url} target="_blank" rel="noreferrer" className="bt-file-thumb" onClick={(e) => onPreview(e, a)}>
             {isImage(a) ? <img src={a.url} alt="" loading="lazy" /> : <IconDoc width={20} height={20} />}
           </a>
-          <a href={a.url} target="_blank" rel="noreferrer" className="bt-file-name ellipsis" title={a.name}>
+          <a href={a.url} target="_blank" rel="noreferrer" className="bt-file-name ellipsis" title={a.name} onClick={(e) => onPreview(e, a)}>
             {a.name}
           </a>
           <span className="bt-file-size">{formatSize(a.size)}</span>
@@ -242,7 +305,7 @@ export function AttachmentList({ value, onChange, readOnly }: { value: Attachmen
       ))}
       {!readOnly && (
         <button className="btn sm bt-file-add" disabled={!!progress} onClick={async () => add(await pickFiles())}>
-          <IconUpload width={14} height={14} /> {progress || '上传文件'}
+          <IconUpload width={14} height={14} /> {progress || '点击或拖拽上传文件'}
         </button>
       )}
       {readOnly && !list.length && <span className="muted">无附件</span>}
@@ -299,7 +362,21 @@ export function ProgressBar({ field, value }: { field: Field; value: any }) {
 }
 
 /** Text input that commits on blur / Enter. */
-function CommitInput({ value, onCommit, multiline, readOnly, inputMode, placeholder }: { value: string; onCommit: (s: string) => void; multiline?: boolean; readOnly?: boolean; inputMode?: 'decimal' | 'url' | 'tel' | 'email'; placeholder?: string }) {
+function CommitInput({
+  value,
+  onCommit,
+  multiline,
+  readOnly,
+  inputMode,
+  placeholder,
+}: {
+  value: string
+  onCommit: (s: string) => void
+  multiline?: boolean
+  readOnly?: boolean
+  inputMode?: 'decimal' | 'url' | 'tel' | 'email'
+  placeholder?: string
+}) {
   const [v, setV] = useState(value)
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => setV(value), [value])
@@ -347,11 +424,11 @@ export function FieldInput({ model, field, rec, readOnly }: { model: TableModel;
     case 'link':
       return <LinkField model={model} field={field} value={v} onChange={set} readOnly={ro} />
     case 'text':
-      return <CommitInput value={v ?? ''} readOnly={ro} onCommit={(s) => set(s.trim())} placeholder={ro ? '' : '输入文本'} />
+      return <CommitInput value={v ?? ''} readOnly={ro} onCommit={(s) => set(s.trim())} placeholder={ro ? '' : '输入文本…'} />
     case 'longtext':
-      return <CommitInput multiline value={v ?? ''} readOnly={ro} onCommit={(s) => set(s)} placeholder={ro ? '' : '输入文本'} />
+      return <CommitInput multiline value={v ?? ''} readOnly={ro} onCommit={(s) => set(s)} placeholder={ro ? '' : '输入多行文本…'} />
     case 'number':
-      return <CommitInput value={displayText(field, v)} readOnly={ro} inputMode="decimal" onCommit={(s) => set(parse(s))} placeholder={ro ? '' : '输入数字'} />
+      return <CommitInput value={displayText(field, v)} readOnly={ro} inputMode="decimal" onCommit={(s) => set(parse(s))} placeholder={ro ? '' : '输入数字…'} />
     case 'url':
       return (
         <div className="bt-url">
@@ -367,7 +444,13 @@ export function FieldInput({ model, field, rec, readOnly }: { model: TableModel;
     case 'email':
       return (
         <div className="bt-url">
-          <CommitInput value={v ?? ''} readOnly={ro} inputMode={field.type === 'phone' ? 'tel' : 'email'} onCommit={(s) => set(s.trim())} placeholder={ro ? '' : field.type === 'phone' ? '输入电话号码' : 'name@example.com'} />
+          <CommitInput
+            value={v ?? ''}
+            readOnly={ro}
+            inputMode={field.type === 'phone' ? 'tel' : 'email'}
+            onCommit={(s) => set(s.trim())}
+            placeholder={ro ? '' : field.type === 'phone' ? '输入电话号码' : 'name@example.com'}
+          />
           {v && (
             <a className="icon-btn" href={contactHref(field.type, v)} title={field.type === 'phone' ? '拨打' : '发送邮件'}>
               <IconLink width={16} height={16} />
@@ -380,7 +463,19 @@ export function FieldInput({ model, field, rec, readOnly }: { model: TableModel;
     case 'progress':
       return (
         <div className="bt-progress-input">
-          <ProgressBar field={field} value={v} />
+          {!ro ? (
+            <input
+              type="range"
+              className="bt-progress-range"
+              min={0}
+              max={100}
+              step={1}
+              value={typeof v === 'number' ? Math.round(Math.max(0, Math.min(1, v)) * 100) : 0}
+              onChange={(e) => set(Number(e.target.value) / 100)}
+            />
+          ) : (
+            <ProgressBar field={field} value={v} />
+          )}
           <CommitInput
             value={typeof v === 'number' ? String(Math.round(v * 1e6) / 1e4) : ''}
             readOnly={ro}
@@ -432,7 +527,7 @@ function ChoiceField({ model, field, value, onChange, readOnly }: { model: Table
   return (
     <button ref={ref} className="bt-input bt-choice-field" onClick={open} disabled={readOnly}>
       <Tags field={field} value={value} />
-      {(value === undefined || (Array.isArray(value) && !value.length)) && <span className="muted">{readOnly ? '—' : '选择选项'}</span>}
+      {(value === undefined || (Array.isArray(value) && !value.length)) && <span className="muted">{readOnly ? '—' : '请选择…'}</span>}
     </button>
   )
 }
@@ -616,7 +711,7 @@ function LinkField({ model, field, value, onChange, readOnly }: { model: TableMo
   return (
     <button ref={ref} className="bt-input bt-choice-field" onClick={open} disabled={readOnly}>
       <LinkChips field={field} value={value} />
-      {!has && <span className="muted">{readOnly ? '—' : '选择关联记录'}</span>}
+      {!has && <span className="muted">{readOnly ? '—' : '选择关联记录…'}</span>}
     </button>
   )
 }
@@ -661,8 +756,18 @@ function AttachmentChips({ value }: { value: AttachmentValue[] | undefined }) {
   const images = list.filter(isImage)
   return (
     <span className="bt-chips">
-      {images.slice(0, 3).map((a) => (
-        <img key={a.id} className="bt-chip-img" src={a.url} alt="" loading="lazy" />
+      {images.slice(0, 3).map((a, idx) => (
+        <img
+          key={a.id}
+          className="bt-chip-img"
+          src={a.url}
+          alt=""
+          loading="lazy"
+          onClick={(e) => {
+            e.stopPropagation()
+            openImageLightbox(images, idx)
+          }}
+        />
       ))}
       {list
         .filter((a) => !isImage(a))
