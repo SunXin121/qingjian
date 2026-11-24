@@ -160,6 +160,32 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/s/{token}/docs/{id}", s.shareDoc)
 	mux.HandleFunc("GET /api/s/{token}/tables/{id}", s.shareTable)
 	mux.HandleFunc("POST /api/s/{token}/plantuml", s.sharePlantUML)
+	mux.HandleFunc("GET /api/s/{token}/markdown", s.shareRootMarkdownAPI)
+	mux.HandleFunc("GET /api/s/{token}/docs/{id}/markdown", s.shareNodeMarkdownAPI)
+	mux.HandleFunc("GET /api/s/{token}/llms.txt", s.shareLLMsTxt)
+	mux.HandleFunc("GET /api/s/{token}/llms-full.txt", s.shareLLMsFullTxt)
+
+	// SEO & public share discovery endpoints
+	mux.HandleFunc("GET /robots.txt", s.serveRobotsTxt)
+	mux.HandleFunc("GET /sitemap.xml", s.serveSitemapXML)
+	mux.HandleFunc("GET /llms.txt", s.serveRootLLMsTxt)
+
+	// Private remote MCP server (Streamable HTTP) + OAuth 2.1 with PKCE + revocable qj_... API keys
+	mux.HandleFunc("/mcp", s.handleMCP)
+	mux.HandleFunc("/.well-known/oauth-protected-resource", s.serveOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", s.serveOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-authorization-server", s.serveOAuthAuthorizationServer)
+	mux.HandleFunc("/oauth/register", s.handleOAuthRegister)
+	mux.HandleFunc("/oauth/token", s.handleOAuthToken)
+	mux.HandleFunc("/oauth/revoke", s.handleOAuthRevoke)
+	mux.Handle("GET /api/mcp/grants", a(s.listMCPGrants))
+	mux.Handle("POST /api/mcp/keys", a(s.createMCPKey))
+	mux.Handle("DELETE /api/mcp/grants/{id}", a(s.revokeMCPGrant))
+	mux.Handle("GET /api/mcp/oauth/authorize-info", a(s.getOAuthAuthorizeInfo))
+	mux.Handle("POST /api/mcp/oauth/approve", a(s.approveOAuthAuthorize))
+
+	// public share pages: content negotiation (text/markdown / .md / llms.txt) + dynamic SEO/OG HTML
+	mux.HandleFunc("GET /s/{rest...}", s.serveShareRoute)
 
 	mux.Handle("GET /api/imgbed", a(s.getImgbed))
 	mux.Handle("PUT /api/imgbed", a(s.putImgbed))

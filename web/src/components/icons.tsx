@@ -4,11 +4,14 @@ import {
   Archive,
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   ArrowUpLeft,
   BookMarked,
+  Bot,
   Check,
   ChevronRight,
+  ChevronsUpDown,
   Clock,
   Cloud,
   Camera,
@@ -17,7 +20,10 @@ import {
   Database,
   Download,
   Ellipsis,
+  ExternalLink,
   Eye,
+  EyeOff,
+  FileCode2,
   FilePlus2,
   FileText,
   Folder,
@@ -28,6 +34,7 @@ import {
   History,
   House,
   Info,
+  Keyboard,
   KeyRound,
   Library,
   Link2,
@@ -38,6 +45,8 @@ import {
   Moon,
   Palette,
   PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   RefreshCw,
@@ -113,11 +122,20 @@ export const IconGlobe = wrap(Globe)
 export const IconInfo = wrap(Info)
 export const IconRefresh = wrap(RefreshCw)
 export const IconSidebar = wrap(PanelLeft)
+export const IconSidebarClose = wrap(PanelLeftClose)
+export const IconSidebarOpen = wrap(PanelLeftOpen)
 export const IconTable = wrap(Sheet)
 export const IconSun = wrap(Sun)
 export const IconMoon = wrap(Moon)
 export const IconMonitor = wrap(Monitor)
 export const IconPalette = wrap(Palette)
+export const IconBot = wrap(Bot)
+export const IconChevronsUpDown = wrap(ChevronsUpDown)
+export const IconExternal = wrap(ExternalLink)
+export const IconEyeOff = wrap(EyeOff)
+export const IconFileCode = wrap(FileCode2)
+export const IconKeyboard = wrap(Keyboard)
+export const IconForward = wrap(ArrowRight)
 
 /** Brand mark: stacked bamboo slips (简) on an ink tile. Inline so it follows the theme. */
 export function Logo({ size = 26, className }: { size?: number; className?: string }) {

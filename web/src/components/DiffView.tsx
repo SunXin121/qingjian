@@ -132,7 +132,11 @@ export default function DiffView({ oldText, newText, oldLabel, newLabel }: { old
           <span className="add">+{added}</span> <span className="del">−{removed}</span>
         </span>
       </div>
-      {added === 0 && removed === 0 ? <div className="side-empty">内容完全相同</div> : <div className="diff-body">{rows.map((r, i) => renderRow(r, i))}</div>}
+      {added === 0 && removed === 0 ? (
+        <div className="px-4 py-12 text-center text-[13px] text-ink-3">内容完全相同</div>
+      ) : (
+        <div className="diff-body">{rows.map((r, i) => renderRow(r, i))}</div>
+      )}
     </div>
   )
 }

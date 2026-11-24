@@ -186,6 +186,38 @@ CREATE TABLE clipper_edit_sessions (
   expires_at INTEGER NOT NULL
 );
 `,
+	// Private remote MCP grants (revocable API keys + OAuth 2.1 with PKCE)
+	`
+DELETE FROM settings WHERE key = 'agent_token';
+CREATE TABLE mcp_grants (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  client_id    TEXT NOT NULL DEFAULT '',
+  token_hash   TEXT NOT NULL UNIQUE,
+  refresh_hash TEXT NOT NULL DEFAULT '',
+  prefix       TEXT NOT NULL DEFAULT '',
+  scopes       TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER,
+  expires_at   INTEGER
+);
+CREATE INDEX mcp_grants_refresh ON mcp_grants(refresh_hash);
+CREATE TABLE mcp_oauth_clients (
+  client_id     TEXT PRIMARY KEY,
+  client_name   TEXT NOT NULL,
+  redirect_uris TEXT NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE TABLE mcp_oauth_codes (
+  code_hash      TEXT PRIMARY KEY,
+  client_id      TEXT NOT NULL,
+  redirect_uri   TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  scopes         TEXT NOT NULL,
+  expires_at     INTEGER NOT NULL
+);
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

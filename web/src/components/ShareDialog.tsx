@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { api, formatTime, shareURL, type Share } from '../api'
-import type { ReactNode } from 'react'
 import { confirmDialog, copyText, Modal, ModalActions, ModalBody, mount, toast } from './dialog'
+import { IconCopy, IconExternal } from './icons'
 import { Badge, Button, cn, inputClass, Loading, Switch, type Tone } from './ui'
 
 const selectClass = cn(
@@ -10,14 +10,10 @@ const selectClass = cn(
 )
 const SHARE_TONE: Record<string, Tone> = { on: 'accent', off: 'neutral', warn: 'warn' }
 
-/** A setting row inside the share dialog: title and description left, control right. */
-function SettingRow({ title, desc, children }: { title: ReactNode; desc?: ReactNode; children?: ReactNode }) {
+function SettingRow({ title, children }: { title: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 border-t border-line-subtle py-3">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium text-ink">{title}</div>
-        {desc && <div className="mt-0.5 text-[11.5px] text-ink-3">{desc}</div>}
-      </div>
+      <div className="min-w-0 text-[13px] font-medium text-ink">{title}</div>
       {children && <div className="flex shrink-0 items-center gap-1.5">{children}</div>}
     </div>
   )
@@ -27,9 +23,7 @@ export interface ShareTarget {
   target_type: 'node' | 'repo'
   target_id: string
   title: string
-  /** node targets: doc | table | group */
   node_type?: string
-  /** tables: the views a link may be restricted to */
   views?: { id: string; name: string }[]
 }
 
@@ -37,14 +31,12 @@ type Preset = 'never' | '1' | '7' | '30' | 'custom' | ''
 
 const DAY = 86_400_000
 
-/** A random access password: 6 characters without look-alikes (0/O, 1/l/I). */
 export function randomPassword(n = 6) {
   const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'
   const bytes = crypto.getRandomValues(new Uint8Array(n))
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
 }
 
-/** Password input prefilled with a random password; it can be edited or re-rolled. */
 function PasswordInput({ value, onChange, autoFocus, placeholder }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; placeholder?: string }) {
   return (
     <span className="flex min-w-0 flex-1 gap-2">
@@ -95,7 +87,6 @@ function ExpiryPicker({ value, custom, current, onChange }: { value: Preset; cus
   return (
     <div className="flex flex-wrap gap-2">
       <select className={cn(selectClass, 'w-auto min-w-36')} value={value} onChange={(e) => onChange(e.target.value as Preset, custom)}>
-        {/* the link's current expiry date (choosing a preset replaces it) */}
         {current && <option value="">{current}</option>}
         <option value="never">永久有效</option>
         <option value="1">1 天</option>
@@ -111,14 +102,14 @@ function ExpiryPicker({ value, custom, current, onChange }: { value: Preset; cus
 function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onClose: () => void; onChanged?: () => void }) {
   const [share, setShare] = useState<Share | null | undefined>(undefined)
   const [busy, setBusy] = useState(false)
-  // creation form / editing state
   const [password, setPassword] = useState(() => randomPassword())
   const [usePw, setUsePw] = useState(true)
+  const [allowIndexing, setAllowIndexing] = useState(false)
   const [preset, setPreset] = useState<Preset>('never')
   const [custom, setCustom] = useState('')
   const [editingPw, setEditingPw] = useState(false)
   const [editPreset, setEditPreset] = useState<Preset>('')
-  const [lastPw, setLastPw] = useState('') // plain password known only right after setting it
+  const [lastPw, setLastPw] = useState('')
   const [viewId, setViewId] = useState('')
 
   useEffect(() => {
@@ -152,6 +143,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
         target_type: target.target_type,
         target_id: target.target_id,
         password: (usePw && password) || undefined,
+        allow_indexing: !usePw && allowIndexing,
         expires_at: presetExpiry(preset, custom),
         view_id: viewId || null,
       })
@@ -180,10 +172,6 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
     body = (
       <>
         <ModalBody className="flex flex-col gap-4">
-          <p className="m-0 rounded-md bg-inset px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-2">
-            创建链接后，任何拿到链接的人都可以<strong className="font-semibold text-ink">只读</strong>访问这个{kind}
-            {target.target_type === 'repo' ? '（含目录中的全部文档）' : folder ? '（含其中的全部文档和子分组）' : ''}。
-          </p>
           {target.views && (
             <label className="flex flex-col gap-1.5">
               <span className="text-[12px] font-medium text-ink-2">可见范围</span>
@@ -193,13 +181,16 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
           <div className="flex flex-col gap-1.5">
             <span className="flex items-center justify-between text-[12px] font-medium text-ink-2">
               访问密码
-              <Switch label={usePw ? '关闭密码保护' : '开启密码保护'} checked={usePw} onChange={setUsePw} />
+              <Switch
+                label={usePw ? '关闭密码保护' : '开启密码保护'}
+                checked={usePw}
+                onChange={(v) => {
+                  setUsePw(v)
+                  if (v) setAllowIndexing(false)
+                }}
+              />
             </span>
-            {usePw ? (
-              <PasswordInput value={password} onChange={setPassword} placeholder="输入访问密码" />
-            ) : (
-              <span className="flex h-10 items-center rounded-md border border-dashed border-line px-3 text-[12.5px] text-ink-3 md:h-9">不设密码，拿到链接即可访问</span>
-            )}
+            {usePw && <PasswordInput value={password} onChange={setPassword} placeholder="输入访问密码" />}
           </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-[12px] font-medium text-ink-2">有效期</span>
@@ -212,11 +203,17 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
               }}
             />
           </label>
+          {!usePw && (
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <span className="text-[12.5px] font-medium text-ink-2">允许搜索引擎收录</span>
+              <Switch label="允许搜索引擎收录" checked={allowIndexing} onChange={setAllowIndexing} />
+            </div>
+          )}
         </ModalBody>
         <ModalActions>
           <Button onClick={onClose}>取消</Button>
           <Button variant="primary" loading={busy} onClick={create}>
-            创建分享链接
+            创建链接
           </Button>
         </ModalActions>
       </>
@@ -229,30 +226,31 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
         <ModalBody className="flex flex-col">
           <div className="flex gap-2">
             <input className={cn(inputClass, 'h-10 min-w-0 flex-1 bg-inset font-mono text-[12px] md:h-9')} readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-            <Button variant="primary" onClick={() => copyText(lastPw ? `${url}\n访问密码：${lastPw}` : url, lastPw ? '已复制链接和密码' : '链接已复制')}>
+            <Button variant="primary" icon={<IconCopy width={14} height={14} />} onClick={() => copyText(lastPw ? `${url}\n访问密码：${lastPw}` : url, lastPw ? '已复制链接和密码' : '链接已复制')}>
               {lastPw ? '复制链接和密码' : '复制链接'}
             </Button>
           </div>
           <div className="mt-2.5 mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-3">
             <Badge tone={SHARE_TONE[st.cls] ?? 'neutral'}>{st.text}</Badge>
+            {share.allow_indexing && <Badge tone="success">SEO</Badge>}
             <span>{formatExpiry(share)}</span>
             <span className="tabular">访问 {share.view_count} 次</span>
-            <a className="text-accent hover:underline" href={url} target="_blank" rel="noreferrer">
-              打开
+            <a className="inline-flex items-center gap-1 text-accent hover:underline" href={url} target="_blank" rel="noreferrer">
+              打开 <IconExternal width={11} height={11} />
             </a>
           </div>
 
-          <SettingRow title="允许访问" desc="关闭后链接立即失效，可随时重新开启">
+          <SettingRow title="允许访问">
             <Switch label="允许访问" checked={share.enabled} disabled={busy} onChange={(v) => run(() => api.updateShare(share.token, { enabled: v }))} />
           </SettingRow>
 
           {target.views && (
-            <SettingRow title="可见范围" desc="访客可以切换的视图">
+            <SettingRow title="可见范围">
               {viewPicker(share.view_id ?? '', (v) => run(() => api.updateShare(share.token, { view_id: v || null })))}
             </SettingRow>
           )}
 
-          <SettingRow title="访问密码" desc={share.has_password ? '已设置，访客需输入密码' : '未设置，拿到链接即可访问'}>
+          <SettingRow title="访问密码">
             {!editingPw && (
               <>
                 <Button
@@ -292,7 +290,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
                   setLastPw(password)
                   setPassword('')
                   setEditingPw(false)
-                  toast('密码已更新，已登录的访客需重新输入')
+                  toast('密码已更新')
                   return sh
                 })
               }}
@@ -312,7 +310,6 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
               current={share.expires_at ? formatExpiry(share).replace('有效期至 ', '至 ') : undefined}
               onChange={(p, c) => {
                 setCustom(c)
-                // re-picking the current date changes nothing
                 if (p === '') return setEditPreset('')
                 if (p === 'custom' && !c) return setEditPreset('custom')
                 setEditPreset('')
@@ -321,6 +318,18 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
               }}
             />
           </SettingRow>
+
+          {!share.has_password && (
+            <SettingRow title="搜索引擎收录">
+              <Switch
+                label="搜索引擎收录"
+                checked={share.allow_indexing}
+                disabled={busy}
+                onChange={(v) => run(() => api.updateShare(share.token, { allow_indexing: v }))}
+              />
+            </SettingRow>
+          )}
+
           <div className="border-t border-line-subtle pt-3 text-[11.5px] text-ink-4">创建于 {formatTime(share.created_at)}</div>
         </ModalBody>
         <ModalActions className="justify-between">
@@ -334,7 +343,7 @@ function ShareDialog({ target, onClose, onChanged }: { target: ShareTarget; onCl
                 run(() => api.regenerateShare(share.token))
               }}
             >
-              重新生成链接
+              重置链接
             </Button>
             <Button
               size="sm"

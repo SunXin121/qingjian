@@ -20,16 +20,17 @@ const (
 // Share is a read-only public link to a single document or table, a folder (group node,
 // with everything below it) or a whole repo.
 type Share struct {
-	Token       string  `json:"token"`
-	TargetType  string  `json:"target_type"` // node | repo
-	TargetID    string  `json:"target_id"`
-	ViewID      *string `json:"view_id"`
-	HasPassword bool    `json:"has_password"`
-	ExpiresAt   *int64  `json:"expires_at"`
-	Enabled     bool    `json:"enabled"`
-	ViewCount   int64   `json:"view_count"`
-	CreatedAt   int64   `json:"created_at"`
-	UpdatedAt   int64   `json:"updated_at"`
+	Token         string  `json:"token"`
+	TargetType    string  `json:"target_type"` // node | repo
+	TargetID      string  `json:"target_id"`
+	ViewID        *string `json:"view_id"`
+	HasPassword   bool    `json:"has_password"`
+	AllowIndexing bool    `json:"allow_indexing"`
+	ExpiresAt     *int64  `json:"expires_at"`
+	Enabled       bool    `json:"enabled"`
+	ViewCount     int64   `json:"view_count"`
+	CreatedAt     int64   `json:"created_at"`
+	UpdatedAt     int64   `json:"updated_at"`
 
 	// resolved from the target
 	Title       string `json:"title"`
@@ -41,11 +42,21 @@ type Share struct {
 	passwordHash string
 }
 
+type shareOptions struct {
+	AllowIndexing bool `json:"allow_indexing,omitempty"`
+}
+
 func (sh *Share) expired() bool {
 	return sh.ExpiresAt != nil && *sh.ExpiresAt <= now()
 }
 
-const shareSelect = `SELECT s.token, s.target_type, s.target_id, s.view_id, COALESCE(n.type, ''), s.password_hash, s.expires_at, s.enabled, s.view_count, s.created_at, s.updated_at,
+// publicIndexable reports whether search engines are allowed to index this share.
+// Password-protected, disabled, dead or expired shares are never indexable.
+func (sh *Share) publicIndexable() bool {
+	return sh.Enabled && sh.TargetAlive && !sh.expired() && !sh.HasPassword && sh.AllowIndexing
+}
+
+const shareSelect = `SELECT s.token, s.target_type, s.target_id, s.view_id, COALESCE(n.type, ''), s.password_hash, s.options, s.expires_at, s.enabled, s.view_count, s.created_at, s.updated_at,
   COALESCE(n.title, r.name, ''), COALESCE(n.repo_id, r.id, ''), COALESCE(nr.name, r.name, ''),
   CASE WHEN s.target_type = 'node'
     THEN n.id IS NOT NULL AND n.deleted_at IS NULL AND nr.deleted_at IS NULL
@@ -58,12 +69,16 @@ LEFT JOIN repos r ON s.target_type = 'repo' AND r.id = s.target_id`
 func scanShare(row rowScanner) (*Share, error) {
 	var sh Share
 	var enabled, alive int
-	err := row.Scan(&sh.Token, &sh.TargetType, &sh.TargetID, &sh.ViewID, &sh.NodeType, &sh.passwordHash, &sh.ExpiresAt, &enabled, &sh.ViewCount,
+	var rawOpts string
+	err := row.Scan(&sh.Token, &sh.TargetType, &sh.TargetID, &sh.ViewID, &sh.NodeType, &sh.passwordHash, &rawOpts, &sh.ExpiresAt, &enabled, &sh.ViewCount,
 		&sh.CreatedAt, &sh.UpdatedAt, &sh.Title, &sh.RepoID, &sh.RepoName, &alive)
 	if err != nil {
 		return nil, err
 	}
+	var opts shareOptions
+	_ = json.Unmarshal([]byte(rawOpts), &opts)
 	sh.Enabled, sh.TargetAlive, sh.HasPassword = enabled == 1, alive == 1, sh.passwordHash != ""
+	sh.AllowIndexing = opts.AllowIndexing && !sh.HasPassword
 	return &sh, nil
 }
 
@@ -104,11 +119,12 @@ func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		TargetType string  `json:"target_type"`
-		TargetID   string  `json:"target_id"`
-		Password   string  `json:"password"`
-		ExpiresAt  *int64  `json:"expires_at"`
-		ViewID     *string `json:"view_id"`
+		TargetType    string  `json:"target_type"`
+		TargetID      string  `json:"target_id"`
+		Password      string  `json:"password"`
+		AllowIndexing bool    `json:"allow_indexing"`
+		ExpiresAt     *int64  `json:"expires_at"`
+		ViewID        *string `json:"view_id"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		httpError(w, http.StatusBadRequest, "请求格式错误")
@@ -146,13 +162,14 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 		}
 		hash = h
 	}
+	optsRaw, _ := json.Marshal(shareOptions{AllowIndexing: in.AllowIndexing && hash == ""})
 	t := now()
 	token := randString(22)
 	if in.TargetType != "node" {
 		in.ViewID = nil
 	}
-	if _, err := s.db.Exec(`INSERT INTO shares(token, target_type, target_id, view_id, password_hash, expires_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)`,
-		token, in.TargetType, in.TargetID, in.ViewID, hash, in.ExpiresAt, t, t); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO shares(token, target_type, target_id, view_id, password_hash, options, expires_at, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+		token, in.TargetType, in.TargetID, in.ViewID, hash, string(optsRaw), in.ExpiresAt, t, t); err != nil {
 		serverError(w, r, err)
 		return
 	}
@@ -164,7 +181,7 @@ func (s *Server) createShare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, sh)
 }
 
-// updateShare accepts any subset of {password, expires_at, enabled, view_id}.
+// updateShare accepts any subset of {password, expires_at, enabled, view_id, allow_indexing}.
 // password "" removes the password; expires_at null makes the link permanent.
 func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
@@ -173,12 +190,16 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
-	if _, err := s.loadShare(token); err != nil {
+	cur, err := s.loadShare(token)
+	if err != nil {
 		httpError(w, http.StatusNotFound, "分享不存在")
 		return
 	}
 	sets := []string{}
 	args := []any{}
+	hasPw := cur.HasPassword
+	allowIdx := cur.AllowIndexing
+	optsChanged := false
 	if raw, ok := in["password"]; ok {
 		var pw string
 		if json.Unmarshal(raw, &pw) != nil {
@@ -193,8 +214,28 @@ func (s *Server) updateShare(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			hash = h
+			hasPw = true
+			if allowIdx {
+				allowIdx = false
+				optsChanged = true
+			}
+		} else {
+			hasPw = false
 		}
 		sets, args = append(sets, "password_hash = ?"), append(args, hash)
+	}
+	if raw, ok := in["allow_indexing"]; ok {
+		var idx bool
+		if json.Unmarshal(raw, &idx) != nil {
+			httpError(w, http.StatusBadRequest, "请求格式错误")
+			return
+		}
+		allowIdx = idx && !hasPw
+		optsChanged = true
+	}
+	if optsChanged {
+		optsRaw, _ := json.Marshal(shareOptions{AllowIndexing: allowIdx})
+		sets, args = append(sets, "options = ?"), append(args, string(optsRaw))
 	}
 	if raw, ok := in["expires_at"]; ok {
 		var exp *int64
@@ -375,7 +416,13 @@ func (s *Server) shareInfo(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.db.Exec(`UPDATE shares SET view_count = view_count + 1 WHERE token = ?`, sh.Token); err != nil {
 		logInternal(1, err) // only a statistic: still show the page
 	}
-	out := map[string]any{"token": sh.Token, "type": sh.TargetType, "title": sh.Title, "expires_at": sh.ExpiresAt}
+	out := map[string]any{
+		"token":          sh.Token,
+		"type":           sh.TargetType,
+		"title":          sh.Title,
+		"expires_at":     sh.ExpiresAt,
+		"allow_indexing": sh.publicIndexable(),
+	}
 	if sh.TargetType == "repo" {
 		repo, err := s.loadRepo(sh.TargetID)
 		if err != nil {

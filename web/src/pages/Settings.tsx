@@ -1,25 +1,43 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { api, formatSize, getConfig, resetConfig, type ClientConfig, type ImgbedConfig, type StorageStats } from '../api'
-import { confirmDialog, toast } from '../components/dialog'
-import { IconArchive, IconCheck, IconCloud, IconDatabase, IconDisk, IconDoc, IconInfo, IconMonitor, IconMoon, IconPalette, IconSparkles, IconSun, IconTrash } from '../components/icons'
+import { api, formatSize, formatTime, getConfig, resetConfig, type ClientConfig, type ImgbedConfig, type MCPGrant, type MCPScope, type StorageStats } from '../api'
+import { confirmDialog, copyText, toast } from '../components/dialog'
+import {
+  IconArchive,
+  IconBot,
+  IconCheck,
+  IconCloud,
+  IconCopy,
+  IconDatabase,
+  IconDisk,
+  IconDoc,
+  IconInfo,
+  IconKey,
+  IconMonitor,
+  IconMoon,
+  IconPalette,
+  IconPlus,
+  IconSparkles,
+  IconSun,
+  IconTrash,
+} from '../components/icons'
 import { Crumb, PageBody } from '../components/page'
 import PageHeader, { Crumbs } from '../components/PageHeader'
-import { Button, cn, Field, inputClass, Loading, Segmented } from '../components/ui'
-import { ACCENTS, getAppearance, getThemeMode, PROSE_WIDTHS, setAppearance, setThemeMode, type Appearance, type ThemeMode } from '../theme'
-import { DEFAULT_TYPOGRAPHY, EMPHASIS_STYLES, HEADING_STYLES, LOCAL_FONTS, QUOTE_STYLES, TYPOGRAPHY_RANGES } from '../typography'
+import { Badge, Button, cn, Field, inputClass, Loading, Segmented } from '../components/ui'
 import { FONT_GROUPS, ONLINE_FONTS } from '../fontCatalog'
 import { ensureOnlineFont, getFontStatus, subscribeFontStatus } from '../fontLoader'
+import { ACCENTS, getAppearance, getThemeMode, PROSE_WIDTHS, setAppearance, setThemeMode, type Appearance, type ThemeMode } from '../theme'
+import { DEFAULT_TYPOGRAPHY, EMPHASIS_STYLES, HEADING_STYLES, LOCAL_FONTS, QUOTE_STYLES, TYPOGRAPHY_RANGES } from '../typography'
 
 const SECTIONS = [
   { id: 'appearance', label: '外观', icon: <IconPalette /> },
+  { id: 'mcp', label: 'MCP', icon: <IconBot /> },
   { id: 'storage', label: '存储空间', icon: <IconDisk /> },
   { id: 'imgbed', label: '图床', icon: <IconCloud /> },
   { id: 'about', label: '关于', icon: <IconInfo /> },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
-/** One setting: label (and hint) on the left, its control on the right; stacks on phones. */
 function Row({ label, hint, children, className }: { label: ReactNode; hint?: ReactNode; children?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex flex-col gap-3 border-b border-line-subtle py-4 last:border-b-0 sm:flex-row sm:items-center sm:gap-6', className)}>
@@ -32,11 +50,14 @@ function Row({ label, hint, children, className }: { label: ReactNode; hint?: Re
   )
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="animate-rise">
-      <h2 className="m-0 text-[17px] font-semibold text-ink">{title}</h2>
-      <div className="mt-4 rounded-lg border border-line-subtle bg-surface px-4 shadow-card md:px-5">{children}</div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="m-0 text-[18px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>
+        {action}
+      </div>
+      <div className="mt-4 rounded-xl border border-line-subtle bg-surface px-4 shadow-card md:px-5">{children}</div>
     </section>
   )
 }
@@ -50,18 +71,24 @@ export default function Settings() {
     <div>
       <PageHeader>
         <Crumbs>
-          <Crumb>设置</Crumb>
+          <Crumb to="/">首页</Crumb>
+          <Crumb current>设置</Crumb>
         </Crumbs>
       </PageHeader>
       <PageBody wide className="flex flex-col gap-6 md:flex-row md:gap-10">
-        <nav className="no-scrollbar -mx-4 flex shrink-0 gap-1 overflow-x-auto px-4 md:sticky md:top-[calc(var(--header-h)+40px)] md:mx-0 md:w-44 md:flex-col md:self-start md:overflow-visible md:px-0">
+        <nav
+          aria-label="设置分类"
+          className="no-scrollbar -mx-4 flex shrink-0 gap-1 overflow-x-auto px-4 md:sticky md:top-[calc(var(--header-h)+40px)] md:mx-0 md:w-44 md:flex-col md:self-start md:overflow-visible md:px-0"
+        >
           <h1 className="m-0 mb-3 hidden px-2.5 text-[20px] font-semibold text-ink md:block">设置</h1>
           {SECTIONS.map((x) => (
             <button
               key={x.id}
+              type="button"
+              aria-current={tab === x.id ? 'page' : undefined}
               onClick={() => select(x.id)}
               className={cn(
-                'flex h-9 shrink-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] whitespace-nowrap transition-colors duration-(--dur-fast) md:h-8 [&_svg]:size-4',
+                'flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-[13px] whitespace-nowrap transition-colors duration-(--dur-fast) md:h-8.5 [&_svg]:size-4',
                 tab === x.id ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-hover hover:text-ink [&_svg]:text-ink-3',
               )}
             >
@@ -72,6 +99,7 @@ export default function Settings() {
         </nav>
         <div className="min-w-0 flex-1">
           {tab === 'appearance' && <AppearancePanel />}
+          {tab === 'mcp' && <MCPPanel />}
           {tab === 'storage' && <StoragePanel />}
           {tab === 'imgbed' && <ImgbedCard />}
           {tab === 'about' && <AboutPanel />}
@@ -96,149 +124,430 @@ function AppearancePanel() {
     setA(getAppearance())
   }
   return (
-      <Panel title="外观">
-        <Row label="主题">
-          <Segmented
-            label="主题"
-            value={theme}
-            options={THEMES.map((t) => ({ ...t, label: t.title }))}
-            onChange={(m) => {
-              setThemeMode(m)
-              setTheme(m)
-            }}
-          />
-        </Row>
-        <Row label="主题色">
-          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="主题色">
-            {ACCENTS.map((x) => (
-              <button
-                key={x.id}
-                role="radio"
-                aria-checked={a.accent === x.id}
-                title={x.name}
-                aria-label={x.name}
-                onClick={() => update({ accent: x.id })}
-                className={cn(
-                  'grid size-7 place-items-center rounded-full text-white transition-[box-shadow,transform] duration-(--dur-fast) ease-spring hover:scale-110 md:size-6',
-                  a.accent === x.id && 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_4px_var(--accent)]',
-                )}
-                style={{ background: x.swatch }}
-              >
-                {a.accent === x.id && <IconCheck width={13} height={13} strokeWidth={2.5} />}
-              </button>
-            ))}
-            <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
-            {/* the label opens the native colour picker; picking a colour also selects it */}
-            <label
-              role="radio"
-              aria-checked={a.accent === 'custom'}
-              title="自定义颜色"
-              className={cn(
-                'relative grid size-7 cursor-pointer place-items-center rounded-full transition-[box-shadow,transform] duration-(--dur-fast) ease-spring hover:scale-110 md:size-6',
-                a.accent === 'custom' && 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_4px_var(--accent)]',
-              )}
-              style={{
-                background:
-                  a.accent === 'custom' ? a.customAccent : 'conic-gradient(from 90deg, #e5484d, #f5a524, #46a758, #0d9488, #3e63dd, #8e4ec6, #e5484d)',
-                color: 'var(--accent-contrast)',
-              }}
-              onClick={() => a.accent !== 'custom' && update({ accent: 'custom' })}
-            >
-              {a.accent === 'custom' && <IconCheck width={13} height={13} strokeWidth={2.5} />}
-              <input
-                type="color"
-                aria-label="自定义主题色"
-                className="absolute inset-0 size-full cursor-pointer opacity-0"
-                value={a.customAccent}
-                onChange={(e) => update({ accent: 'custom', customAccent: e.target.value })}
-              />
-            </label>
-            {a.accent === 'custom' && <span className="font-mono text-[11.5px] text-ink-3 uppercase">{a.customAccent}</span>}
-          </div>
-        </Row>
-        <Row label="背景">
-          {(['paper', 'white'] as const).map((bg) => (
+    <Panel title="外观">
+      <Row label="主题">
+        <Segmented
+          label="主题"
+          value={theme}
+          options={THEMES.map((t) => ({ ...t, label: t.title }))}
+          onChange={(m) => {
+            setThemeMode(m)
+            setTheme(m)
+          }}
+        />
+      </Row>
+      <Row label="主题色">
+        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="主题色">
+          {ACCENTS.map((x) => (
             <button
-              key={bg}
-              onClick={() => update({ background: bg })}
-              aria-pressed={a.background === bg}
+              key={x.id}
+              type="button"
+              role="radio"
+              aria-checked={a.accent === x.id}
+              title={x.name}
+              aria-label={x.name}
+              onClick={() => update({ accent: x.id })}
               className={cn(
-                'flex h-9 items-center gap-2 rounded-md border px-3 text-[12.5px] transition-[border-color,box-shadow] duration-(--dur-fast) md:h-8',
-                a.background === bg ? 'border-accent text-ink shadow-[0_0_0_3px_var(--accent-soft)]' : 'border-line text-ink-2 hover:border-line-strong',
+                'grid size-7 place-items-center rounded-full text-white transition-[box-shadow,transform] duration-(--dur-fast) ease-spring hover:scale-110 md:size-6',
+                a.accent === x.id && 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_4px_var(--accent)]',
               )}
+              style={{ background: x.swatch }}
             >
-              <span className={cn('size-4 rounded-full border border-line-strong', bg === 'paper' ? 'bg-[#f6f2ea]' : 'bg-white')} />
-              {bg === 'paper' ? '暖纸' : '纯白'}
-              {a.background === bg && <IconCheck width={13} height={13} className="text-accent" />}
+              {a.accent === x.id && <IconCheck width={13} height={13} strokeWidth={2.5} />}
             </button>
           ))}
-        </Row>
-        <Row label="正文字体" hint={fontStatus === 'loading' || fontStatus === 'error' ? <span role="status" aria-live="polite">{fontStatus === 'loading' ? '正在加载字体…' : '加载失败，已使用系统字体。'}</span> : undefined}>
-          <select aria-label="正文字体" className={cn(inputClass, 'h-9 w-52 max-w-full')} value={a.proseFont} onChange={(e) => update({ proseFont: e.target.value as Appearance['proseFont'] })}>
-            <optgroup label="系统与本机">
-              {Object.entries(LOCAL_FONTS).map(([value, font]) => <option key={value} value={value}>{font.label}</option>)}
-            </optgroup>
-            {FONT_GROUPS.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.ids.map((id) => <option key={id} value={id}>{ONLINE_FONTS[id].label}</option>)}
-              </optgroup>
+          <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
+          <label
+            role="radio"
+            aria-checked={a.accent === 'custom'}
+            title="自定义颜色"
+            className={cn(
+              'relative grid size-7 cursor-pointer place-items-center rounded-full transition-[box-shadow,transform] duration-(--dur-fast) ease-spring hover:scale-110 md:size-6',
+              a.accent === 'custom' && 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_4px_var(--accent)]',
+            )}
+            style={{
+              background:
+                a.accent === 'custom' ? a.customAccent : 'conic-gradient(from 90deg, #e5484d, #f5a524, #46a758, #0d9488, #3e63dd, #8e4ec6, #e5484d)',
+              color: 'var(--accent-contrast)',
+            }}
+            onClick={() => a.accent !== 'custom' && update({ accent: 'custom' })}
+          >
+            {a.accent === 'custom' && <IconCheck width={13} height={13} strokeWidth={2.5} />}
+            <input
+              type="color"
+              aria-label="自定义主题色"
+              className="absolute inset-0 size-full cursor-pointer opacity-0"
+              value={a.customAccent}
+              onChange={(e) => update({ accent: 'custom', customAccent: e.target.value })}
+            />
+          </label>
+          {a.accent === 'custom' && <span className="font-mono text-[11.5px] text-ink-3 uppercase">{a.customAccent}</span>}
+        </div>
+      </Row>
+      <Row label="背景">
+        {(['paper', 'white'] as const).map((bg) => (
+          <button
+            key={bg}
+            type="button"
+            onClick={() => update({ background: bg })}
+            aria-pressed={a.background === bg}
+            className={cn(
+              'flex h-9 items-center gap-2 rounded-md border px-3 text-[12.5px] transition-[border-color,box-shadow] duration-(--dur-fast) md:h-8',
+              a.background === bg ? 'border-accent text-ink shadow-[0_0_0_3px_var(--accent-soft)]' : 'border-line text-ink-2 hover:border-line-strong',
+            )}
+          >
+            <span className={cn('size-4 rounded-full border border-line-strong', bg === 'paper' ? 'bg-[#f6f2ea]' : 'bg-white')} />
+            {bg === 'paper' ? '暖纸' : '纯白'}
+            {a.background === bg && <IconCheck width={13} height={13} className="text-accent" />}
+          </button>
+        ))}
+      </Row>
+      <Row
+        label="正文字体"
+        hint={
+          fontStatus === 'loading' || fontStatus === 'error' ? (
+            <span role="status" aria-live="polite">
+              {fontStatus === 'loading' ? '正在加载字体…' : '加载失败，已使用系统字体。'}
+            </span>
+          ) : undefined
+        }
+      >
+        <select
+          aria-label="正文字体"
+          className={cn(inputClass, 'h-9 w-52 max-w-full')}
+          value={a.proseFont}
+          onChange={(e) => update({ proseFont: e.target.value as Appearance['proseFont'] })}
+        >
+          <optgroup label="系统与本机">
+            {Object.entries(LOCAL_FONTS).map(([value, font]) => (
+              <option key={value} value={value}>
+                {font.label}
+              </option>
             ))}
-          </select>
-          {fontStatus === 'error' && <Button onClick={() => void ensureOnlineFont(a.proseFont, true)}>重试</Button>}
+          </optgroup>
+          {FONT_GROUPS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.ids.map((id) => (
+                <option key={id} value={id}>
+                  {ONLINE_FONTS[id].label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        {fontStatus === 'error' && <Button onClick={() => void ensureOnlineFont(a.proseFont, true)}>重试</Button>}
+      </Row>
+      {a.proseFont === 'custom' && (
+        <Row label="本机字体名称">
+          <input
+            aria-label="本机字体名称"
+            className={cn(inputClass, 'h-9 w-52')}
+            maxLength={100}
+            value={a.customFont}
+            placeholder="例如 LXGW WenKai"
+            onChange={(e) => update({ customFont: e.target.value })}
+          />
         </Row>
-        {a.proseFont === 'custom' && (
-          <Row label="本机字体名称">
-            <input aria-label="本机字体名称" className={cn(inputClass, 'h-9 w-52')} maxLength={100} value={a.customFont} placeholder="例如 LXGW WenKai" onChange={(e) => update({ customFont: e.target.value })} />
-          </Row>
-        )}
-        {([
+      )}
+      {(
+        [
           ['proseSize', '正文字号', 'px'],
           ['proseLine', '行高', '倍'],
           ['proseTrackingPx', '字间距', 'px'],
           ['paragraphSpace', '额外段间距', 'px'],
-        ] as const).map(([key, label, unit]) => (
-          <Row key={key} label={label}>
-            <input type="range" {...TYPOGRAPHY_RANGES[key]} value={a[key]} aria-label={label} onChange={(e) => update({ [key]: e.target.valueAsNumber })} className="w-28 accent-(--accent) sm:w-36" />
-            <input key={a[key]} type="number" {...TYPOGRAPHY_RANGES[key]} defaultValue={a[key]} aria-label={`${label}数值`} onBlur={(e) => { if (Number.isFinite(e.target.valueAsNumber)) update({ [key]: e.target.valueAsNumber }); e.target.value = String(getAppearance()[key]) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} className={cn(inputClass, 'setting-number tabular h-9 w-14 px-2 text-center')} />
-            <span className="w-5 text-[12px] text-ink-3">{unit}</span>
-          </Row>
-        ))}
-        <Row label="内容宽度">
-          <Segmented label="内容宽度" value={a.proseWidth} options={(Object.keys(PROSE_WIDTHS) as (keyof typeof PROSE_WIDTHS)[]).map((k) => ({ value: k, label: PROSE_WIDTHS[k].label }))} onChange={(v) => update({ proseWidth: v })} />
+        ] as const
+      ).map(([key, label, unit]) => (
+        <Row key={key} label={label}>
+          <input
+            type="range"
+            {...TYPOGRAPHY_RANGES[key]}
+            value={a[key]}
+            aria-label={label}
+            onChange={(e) => update({ [key]: e.target.valueAsNumber })}
+            className="w-28 accent-(--accent) sm:w-36"
+          />
+          <input
+            key={a[key]}
+            type="number"
+            {...TYPOGRAPHY_RANGES[key]}
+            defaultValue={a[key]}
+            aria-label={`${label}数值`}
+            onBlur={(e) => {
+              if (Number.isFinite(e.target.valueAsNumber)) update({ [key]: e.target.valueAsNumber })
+              e.target.value = String(getAppearance()[key])
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+            }}
+            className={cn(inputClass, 'setting-number tabular h-9 w-14 px-2 text-center')}
+          />
+          <span className="w-5 text-[12px] text-ink-3">{unit}</span>
         </Row>
-        <Row label="正文对齐">
-          <Segmented label="正文对齐" value={a.textAlign} options={[{ value: 'left', label: '左对齐' }, { value: 'justify', label: '两端对齐' }]} onChange={(v) => update({ textAlign: v })} />
-        </Row>
-        <Row label="标题样式">
-          <Segmented label="标题样式" value={a.headingStyle} options={(Object.keys(HEADING_STYLES) as (keyof typeof HEADING_STYLES)[]).map((value) => ({ value, label: HEADING_STYLES[value] }))} onChange={(headingStyle) => update({ headingStyle })} />
-        </Row>
-        <Row label="引用样式">
-          <select aria-label="引用样式" className={cn(inputClass, 'h-9 w-44')} value={a.quoteStyle} onChange={(e) => update({ quoteStyle: e.target.value as Appearance['quoteStyle'] })}>
-            {Object.entries(QUOTE_STYLES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </Row>
-        <Row label="强调样式">
-          <Segmented label="强调样式" value={a.emphasisStyle} options={(Object.keys(EMPHASIS_STYLES) as (keyof typeof EMPHASIS_STYLES)[]).map((value) => ({ value, label: EMPHASIS_STYLES[value] }))} onChange={(emphasisStyle) => update({ emphasisStyle })} />
-        </Row>
-        <Row label="恢复默认排版">
-          <Button onClick={() => update(DEFAULT_TYPOGRAPHY)}>恢复默认</Button>
-        </Row>
-        <div className="border-t border-line-subtle py-4">
-          <div id="appearance-preview" className="mb-2 text-[11.5px] font-medium text-ink-4">效果预览</div>
-          <div className="overflow-hidden rounded-lg border border-line-subtle bg-editor px-5 py-4">
-            <div className="ink-editor typography-preview mx-auto" style={{ maxWidth: 'var(--prose-width)' }}>
-              <div className="milkdown"><div className="ProseMirror">
+      ))}
+      <Row label="内容宽度">
+        <Segmented
+          label="内容宽度"
+          value={a.proseWidth}
+          options={(Object.keys(PROSE_WIDTHS) as (keyof typeof PROSE_WIDTHS)[]).map((k) => ({ value: k, label: PROSE_WIDTHS[k].label }))}
+          onChange={(v) => update({ proseWidth: v })}
+        />
+      </Row>
+      <Row label="正文对齐">
+        <Segmented
+          label="正文对齐"
+          value={a.textAlign}
+          options={[
+            { value: 'left', label: '左对齐' },
+            { value: 'justify', label: '两端对齐' },
+          ]}
+          onChange={(v) => update({ textAlign: v })}
+        />
+      </Row>
+      <Row label="标题样式">
+        <Segmented
+          label="标题样式"
+          value={a.headingStyle}
+          options={(Object.keys(HEADING_STYLES) as (keyof typeof HEADING_STYLES)[]).map((value) => ({ value, label: HEADING_STYLES[value] }))}
+          onChange={(headingStyle) => update({ headingStyle })}
+        />
+      </Row>
+      <Row label="引用样式">
+        <select
+          aria-label="引用样式"
+          className={cn(inputClass, 'h-9 w-44')}
+          value={a.quoteStyle}
+          onChange={(e) => update({ quoteStyle: e.target.value as Appearance['quoteStyle'] })}
+        >
+          {Object.entries(QUOTE_STYLES).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </Row>
+      <Row label="强调样式">
+        <Segmented
+          label="强调样式"
+          value={a.emphasisStyle}
+          options={(Object.keys(EMPHASIS_STYLES) as (keyof typeof EMPHASIS_STYLES)[]).map((value) => ({ value, label: EMPHASIS_STYLES[value] }))}
+          onChange={(emphasisStyle) => update({ emphasisStyle })}
+        />
+      </Row>
+      <Row label="恢复默认排版">
+        <Button onClick={() => update(DEFAULT_TYPOGRAPHY)}>恢复默认</Button>
+      </Row>
+      <div className="border-t border-line-subtle py-4">
+        <div id="appearance-preview" className="mb-2 text-[11.5px] font-medium text-ink-4">
+          效果预览
+        </div>
+        <div className="overflow-hidden rounded-xl border border-line-subtle bg-editor px-5 py-4">
+          <div className="ink-editor typography-preview mx-auto" style={{ maxWidth: 'var(--prose-width)' }}>
+            <div className="milkdown">
+              <div className="ProseMirror">
                 <h2>让知识慢慢生长</h2>
                 <p>读完一本书，最值得留下的往往不是摘抄，而是它与自己经历相遇的那一刻。把这些想法写下来，再回头看，零散的记录就有了彼此的联系。</p>
                 <p>本周阅读：Designing Data-Intensive Applications，第 3 章，进度 75%。整理了 12 条笔记，也找到了一个值得继续追问的问题。</p>
                 <h3>从记录到行动</h3>
-                <p>每篇笔记只围绕<strong>一个清晰的问题</strong>展开，用自己的话解释，再补上例子与出处。使用 <a href="https://commonmark.org/" target="_blank" rel="noreferrer">Markdown</a> 时，可以用 <code>[[相关笔记]]</code> 把新想法接到已有的知识上。</p>
-                <blockquote><p>值得留下的，不只是结论，还有抵达结论的过程。</p></blockquote>
-              </div></div>
+                <p>
+                  每篇笔记只围绕<strong>一个清晰的问题</strong>展开，用自己的话解释，再补上例子与出处。使用{' '}
+                  <a href="https://commonmark.org/" target="_blank" rel="noreferrer">
+                    Markdown
+                  </a>{' '}
+                  时，可以用 <code>[[相关笔记]]</code> 把新想法接到已有的知识上。
+                </p>
+                <blockquote>
+                  <p>值得留下的，不只是结论，还有抵达结论的过程。</p>
+                </blockquote>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+    </Panel>
+  )
+}
+
+const SCOPE_OPTS: { scope: MCPScope; label: string }[] = [
+  { scope: 'mcp:read', label: '读取' },
+  { scope: 'mcp:write', label: '写入' },
+  { scope: 'mcp:trash', label: '回收站' },
+]
+
+const SCOPE_NAME: Record<MCPScope, string> = {
+  'mcp:read': '读取',
+  'mcp:write': '写入',
+  'mcp:trash': '回收站',
+}
+
+function MCPPanel() {
+  const [grants, setGrants] = useState<MCPGrant[] | null>(null)
+  const [name, setName] = useState('')
+  const [scopes, setScopes] = useState<Set<MCPScope>>(() => new Set(['mcp:read', 'mcp:write']))
+  const [freshToken, setFreshToken] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => api.mcpGrants().then(setGrants).catch((e) => toast(e.message)), [])
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const toggleScope = (sc: MCPScope) => {
+    const next = new Set(scopes)
+    if (next.has(sc)) {
+      next.delete(sc)
+      if (sc === 'mcp:read') next.delete('mcp:write')
+    } else {
+      next.add(sc)
+      if (sc === 'mcp:write') next.add('mcp:read')
+    }
+    if (next.size === 0) next.add('mcp:read')
+    setScopes(next)
+  }
+
+  const createKey = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const res = await api.createMCPKey(name.trim() || 'API Key', [...scopes])
+      setFreshToken(res.token)
+      setName('')
+      await load()
+      toast('已创建密钥')
+    } catch (err: any) {
+      toast(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const revoke = async (g: MCPGrant) => {
+    if (!(await confirmDialog(`确定撤销「${g.name}」吗？`, { danger: true, okText: '撤销' }))) return
+    try {
+      await api.revokeMCPGrant(g.id)
+      await load()
+      toast('已撤销')
+    } catch (err: any) {
+      toast(err.message)
+    }
+  }
+
+  const mcpURL = `${location.origin}/mcp`
+  const mcpConfigJSON = JSON.stringify(
+    {
+      mcpServers: {
+        qingjian: freshToken
+          ? {
+              url: mcpURL,
+              headers: { Authorization: `Bearer ${freshToken}` },
+            }
+          : {
+              url: mcpURL,
+            },
+      },
+    },
+    null,
+    2,
+  )
+
+  return (
+    <div className="flex flex-col gap-7">
+      <Panel title="远程 MCP">
+        <Row label="服务端地址">
+          <code className="rounded-md bg-inset px-2.5 py-1.5 font-mono text-[12px] text-ink">{mcpURL}</code>
+          <Button size="sm" icon={<IconCopy width={13} height={13} />} onClick={() => copyText(mcpURL, '已复制地址')}>
+            复制
+          </Button>
+          <Button size="sm" onClick={() => copyText(mcpConfigJSON, '已复制 MCP 配置')}>
+            复制 JSON 配置
+          </Button>
+        </Row>
+
+        <form onSubmit={createKey} className="border-b border-line-subtle py-4 last:border-b-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              className={cn(inputClass, 'h-9 sm:w-52')}
+              value={name}
+              placeholder="密钥名称（如 Claude Code）"
+              aria-label="密钥名称"
+              onChange={(e) => setName(e.target.value)}
+            />
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="权限范围">
+              {SCOPE_OPTS.map((o) => {
+                const on = scopes.has(o.scope)
+                return (
+                  <button
+                    key={o.scope}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleScope(o.scope)}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium transition-colors',
+                      on ? 'border-accent bg-accent-softer text-accent' : 'border-line text-ink-3 hover:border-line-strong hover:text-ink',
+                    )}
+                  >
+                    {on && <IconCheck width={12} height={12} />}
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+            <span className="sm:ml-auto">
+              <Button type="submit" variant="primary" size="sm" loading={busy} icon={<IconPlus width={14} height={14} />}>
+                新建密钥
+              </Button>
+            </span>
+          </div>
+        </form>
+
+        {freshToken && (
+          <div className="flex items-center gap-2 py-3.5">
+            <IconKey width={15} height={15} className="shrink-0 text-accent" />
+            <input
+              className={cn(inputClass, 'h-9 min-w-0 flex-1 bg-inset font-mono text-[12px]')}
+              readOnly
+              value={freshToken}
+              aria-label="新生成的 API 密钥"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <Button variant="primary" size="sm" icon={<IconCopy width={13} height={13} />} onClick={() => copyText(freshToken, '已复制密钥')}>
+              复制密钥
+            </Button>
+          </div>
+        )}
       </Panel>
+
+      <Panel title="授权与密钥">
+        {!grants ? (
+          <Loading className="py-10" />
+        ) : grants.length === 0 ? (
+          <div className="py-10 text-center text-[13px] text-ink-4">暂无已授权客户端或密钥</div>
+        ) : (
+          grants.map((g) => (
+            <div key={g.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle py-3.5 last:border-b-0">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate text-[13px] font-medium text-ink">{g.name}</span>
+                  <Badge tone={g.kind === 'oauth' ? 'accent' : 'neutral'}>{g.kind === 'oauth' ? 'OAuth 2.1' : 'API Key'}</Badge>
+                  {g.scopes.map((sc) => (
+                    <Badge key={sc} tone={sc === 'mcp:trash' ? 'warn' : 'neutral'}>
+                      {SCOPE_NAME[sc] ?? sc}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-ink-4">
+                  <span className="font-mono">{g.prefix}</span>
+                  <span>创建于 {formatTime(g.created_at)}</span>
+                  {g.last_used_at && <span>最近使用 {formatTime(g.last_used_at)}</span>}
+                </div>
+              </div>
+              <Button size="sm" variant="danger-ghost" onClick={() => revoke(g)}>
+                撤销
+              </Button>
+            </div>
+          ))
+        )}
+      </Panel>
+    </div>
   )
 }
 
@@ -274,15 +583,12 @@ function StoragePanel() {
       {stats ? (
         <>
           <div className="grid grid-cols-2 gap-2.5 py-4 lg:grid-cols-4">
-            <Stat icon={<IconDoc width={14} height={14} />} label="文档" value={String(stats.docs)} sub={`${stats.versions} 个历史版本`} />
+            <Stat icon={<IconDoc width={14} height={14} />} label="文档" value={String(stats.docs)} sub={`${stats.versions} 个版本`} />
             <Stat icon={<IconDatabase width={14} height={14} />} label="数据库" value={formatSize(stats.db_bytes)} />
-            <Stat icon={<IconArchive width={14} height={14} />} label="附件" value={formatSize(stats.stored_bytes)} sub={`${stats.attachments} 个，去重后 ${stats.blobs} 份`} />
+            <Stat icon={<IconArchive width={14} height={14} />} label="附件" value={formatSize(stats.stored_bytes)} sub={`${stats.blobs} 份`} />
             <Stat icon={<IconTrash width={14} height={14} />} label="未引用附件" value={formatSize(stats.unreferenced_bytes)} sub={`${stats.unreferenced} 个`} />
           </div>
-          <Row
-            label="清理未引用附件"
-            hint="仅清理未被文档或历史版本引用的附件。"
-          >
+          <Row label="清理未引用附件">
             <Button icon={<IconSparkles width={14} height={14} />} loading={cleaning} disabled={stats.unreferenced === 0} onClick={cleanup}>
               {cleaning ? '清理中…' : '清理'}
             </Button>
@@ -304,6 +610,7 @@ function AboutPanel() {
     ['版本', config?.version ?? '—'],
     ['附件上限', config ? `${config.max_upload_mb} MB` : '—'],
     ['回收站保留', config ? `${config.trash_days} 天` : '—'],
+    ['PlantUML', config ? (config.plantuml ? '已启用' : '未启用') : '—'],
     ['draw.io', config?.drawio_url ?? '—'],
   ]
   return (
@@ -319,12 +626,12 @@ function AboutPanel() {
 
 function Stat({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-line-subtle bg-editor p-3">
+    <div className="rounded-xl border border-line-subtle bg-editor p-3.5">
       <div className="flex items-center gap-1.5 text-[11.5px] text-ink-3">
         {icon}
         {label}
       </div>
-      <div className="tabular mt-2 text-[18px] leading-none font-semibold text-ink">{value}</div>
+      <div className="tabular mt-2 text-[19px] leading-none font-semibold text-ink">{value}</div>
       {sub && <div className="mt-1.5 text-[11px] text-ink-4">{sub}</div>}
     </div>
   )
@@ -350,7 +657,6 @@ const NAME_TYPES: { value: ImgbedConfig['name_type']; label: string }[] = [
 
 const EMPTY_IMGBED: ImgbedConfig = { url: '', auth_code: '', token: '', channel: '', channel_name: '', folder: '', name_type: '' }
 
-/** CloudFlare ImgBed settings: where exports upload their images. */
 function ImgbedCard() {
   const [saved, setSaved] = useState<ImgbedConfig | null>(null)
   const [form, setForm] = useState<ImgbedConfig>(EMPTY_IMGBED)
@@ -393,7 +699,7 @@ function ImgbedCard() {
   }
 
   const forget = async () => {
-    const ok = await confirmDialog(`将清除 ${uploaded} 条上传记录，下次导出时会重新上传所有图片。适用于图床上的文件已被删除的情况。`, { okText: '清除' })
+    const ok = await confirmDialog(`将清除 ${uploaded} 条上传记录，下次导出时会重新上传所有图片。`, { okText: '清除' })
     if (!ok) return
     try {
       await api.forgetImgbed()
@@ -404,7 +710,10 @@ function ImgbedCard() {
     }
   }
 
-  const selectClass = cn(inputClass, 'h-10 appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23888%27 stroke-width=%272%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E")] bg-[length:12px] bg-[right_10px_center] bg-no-repeat pr-8 md:h-9')
+  const selectClass = cn(
+    inputClass,
+    'h-10 appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23888%27 stroke-width=%272%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E")] bg-[length:12px] bg-[right_10px_center] bg-no-repeat pr-8 md:h-9',
+  )
   const text = cn(inputClass, 'h-10 md:h-9')
   return (
     <Panel title="图床">
@@ -414,13 +723,13 @@ function ImgbedCard() {
         <form onSubmit={save}>
           <div className="grid gap-x-4 gap-y-3.5 py-4 sm:grid-cols-2">
             <Field label="图床地址" className="sm:col-span-2">
-              <input className={text} value={form.url} placeholder="https://img.example.com（留空则关闭）" onChange={(e) => set('url', e.target.value)} />
+              <input className={text} value={form.url} placeholder="https://img.example.com" onChange={(e) => set('url', e.target.value)} />
             </Field>
             <Field label="上传认证码">
-              <input className={text} type="password" autoComplete="off" value={form.auth_code} placeholder="未设置可留空" onChange={(e) => set('auth_code', e.target.value)} />
+              <input className={text} type="password" autoComplete="off" value={form.auth_code} placeholder="可选" onChange={(e) => set('auth_code', e.target.value)} />
             </Field>
             <Field label="API Token">
-              <input className={text} type="password" autoComplete="off" value={form.token} placeholder="需要 upload 权限，可留空" onChange={(e) => set('token', e.target.value)} />
+              <input className={text} type="password" autoComplete="off" value={form.token} placeholder="可选" onChange={(e) => set('token', e.target.value)} />
             </Field>
             <Field label="上传渠道">
               <select className={selectClass} value={form.channel} onChange={(e) => set('channel', e.target.value as ImgbedConfig['channel'])}>
@@ -432,10 +741,10 @@ function ImgbedCard() {
               </select>
             </Field>
             <Field label="渠道名称">
-              <input className={text} value={form.channel_name} placeholder="同类渠道有多个时填写" onChange={(e) => set('channel_name', e.target.value)} />
+              <input className={text} value={form.channel_name} placeholder="可选" onChange={(e) => set('channel_name', e.target.value)} />
             </Field>
             <Field label="上传目录">
-              <input className={text} value={form.folder} placeholder="如 qingjian/img" onChange={(e) => set('folder', e.target.value)} />
+              <input className={text} value={form.folder} placeholder="可选" onChange={(e) => set('folder', e.target.value)} />
             </Field>
             <Field label="文件命名">
               <select className={selectClass} value={form.name_type} onChange={(e) => set('name_type', e.target.value as ImgbedConfig['name_type'])}>
@@ -449,7 +758,7 @@ function ImgbedCard() {
           </div>
           <Row label={`上传记录（${uploaded}）`} className="border-t">
             <Button disabled={uploaded === 0} onClick={forget}>
-              清除上传记录
+              清除记录
             </Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
               {busy ? '保存中…' : '保存'}

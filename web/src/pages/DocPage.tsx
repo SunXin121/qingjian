@@ -1,19 +1,31 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { api, ApiError, formatTime, type Doc } from '../api'
-import { confirmDialog, Modal, ModalActions, ModalBody, mount, openMenu, toast } from '../components/dialog'
-import { IconCamera, IconDownload, IconHistory, IconList, IconMore, IconShare, IconTrash, RepoMark } from '../components/icons'
+import { api, ApiError, formatTime, nodePath, type Doc, type TreeNode } from '../api'
 import Backlinks from '../components/Backlinks'
+import { confirmDialog, copyText, Modal, ModalActions, ModalBody, mount, openMenu, toast } from '../components/dialog'
+import { exportMarkdown } from '../components/ExportDialog'
+import {
+  IconCamera,
+  IconCopy,
+  IconDownload,
+  IconFolder,
+  IconHistory,
+  IconList,
+  IconMore,
+  IconShare,
+  IconTrash,
+  RepoMark,
+} from '../components/icons'
 import Outline, { parseHeadings, type Heading } from '../components/Outline'
 import { Crumb } from '../components/page'
 import PageHeader, { Crumbs } from '../components/PageHeader'
-import { Button, cn, EmptyState, IconButton, Loading } from '../components/ui'
 import { openShareDialog } from '../components/ShareDialog'
+import { Button, cn, EmptyState, IconButton, Loading } from '../components/ui'
 import VersionsPanel from '../components/VersionsPanel'
 import Editor from '../editor/Editor'
-import { useStore } from '../store'
+import { setPageMeta } from '../seo'
+import { nodeTitle, useStore } from '../store'
 import { onThemeModeChange } from '../theme'
-import { exportMarkdown } from '../components/ExportDialog'
 
 const DiffView = lazy(() => import('../components/DiffView'))
 
@@ -25,7 +37,7 @@ export default function DocPage() {
 }
 
 function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
-  const { patchNode, repos, loadTree } = useStore()
+  const { patchNode, repos, tree, treeRepoId, loadTree } = useStore()
   const navigate = useNavigate()
   const [doc, setDoc] = useState<Doc | null>(null)
   const [error, setError] = useState('')
@@ -44,9 +56,7 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
   const [mountKey, setMountKey] = useState(0)
 
   const md = useRef('')
-  // serialises the editor content on demand (see Editor's onChange)
   const getMd = useRef<() => string>(() => md.current)
-  /** markdown and title as last stored on the server, to skip saves that change nothing */
   const savedMd = useRef('')
   const savedTitle = useRef('')
   const titleRef = useRef('')
@@ -59,8 +69,23 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
   const loadRequest = useRef(0)
   const deleted = useRef(false)
 
-  // Freeze the current editor before its passive cleanup destroys the view. A save
-  // already in flight must read this snapshot after it finishes, never a dead editor.
+  // Ensure the repo tree is loaded so breadcrumbs can resolve parent folders/documents
+  useEffect(() => {
+    if (treeRepoId !== repoId) loadTree(repoId).catch(() => {})
+  }, [repoId, treeRepoId, loadTree])
+
+  const ancestors = useMemo(() => {
+    if (treeRepoId !== repoId || !doc?.parent_id) return []
+    const byId = new Map(tree.map((n) => [n.id, n]))
+    const chain: TreeNode[] = []
+    let cur = byId.get(doc.parent_id)
+    while (cur && chain.length < 10) {
+      chain.unshift(cur)
+      cur = cur.parent_id ? byId.get(cur.parent_id) : undefined
+    }
+    return chain.slice(-2)
+  }, [tree, treeRepoId, repoId, doc?.parent_id])
+
   useLayoutEffect(() => {
     active.current = true
     return () => {
@@ -115,8 +140,6 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
       dirty.current = false
       const markdown = (md.current = getMd.current())
       const title = titleRef.current
-      // outline and word count follow the content at save time, so a long document is
-      // only scanned once per save instead of after every pause in typing
       setHeadings(parseHeadings(markdown))
       setStats(markdown)
       if (markdown === savedMd.current && title === savedTitle.current && !opts.snapshot && !opts.force) {
@@ -157,14 +180,12 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
     if (statusRef.current === 'conflict') return
     setStatus('dirty')
     clearTimeout(timer.current)
-    // long documents cost more to serialise and store: save them after a longer pause
     const delay = md.current.length > 200_000 ? 3000 : 1000
     timer.current = window.setTimeout(() => {
       if (statusRef.current !== 'conflict') save()
     }, delay)
   }, [save, setStatus])
 
-  // Ctrl/Cmd+S, unload guard, flush on leave
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -175,8 +196,6 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
     const onUnload = (e: BeforeUnloadEvent) => {
       if (dirty.current || saving.current) e.preventDefault()
     }
-    // A hidden tab can be frozen or discarded without any unload event (switching apps
-    // on a phone), so whatever is still waiting for the autosave timer goes out now.
     const onHide = () => {
       if (document.visibilityState === 'hidden' && dirty.current && statusRef.current !== 'conflict') save()
     }
@@ -195,10 +214,9 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
   }, [save])
 
   useEffect(() => {
-    if (doc) document.title = `${title.trim() || '无标题文档'} - 青简`
+    if (doc) setPageMeta({ title: `${title.trim() || '无标题文档'} - 青简` })
   }, [title, doc])
-  // the code editor's theme is fixed when the editor is created: rebuild it from the
-  // saved content when the page switches between light and dark
+
   useEffect(
     () =>
       onThemeModeChange(() => {
@@ -206,6 +224,7 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
       }),
     [save, load],
   )
+
   useEffect(() => {
     const el = titleEl.current
     if (el) {
@@ -222,7 +241,6 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
     [schedule],
   )
 
-  /** What the other window saved, next to what is in this editor. */
   const showConflictDiff = async () => {
     try {
       const remote = await api.doc(docId)
@@ -247,11 +265,18 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
 
   const share = () => openShareDialog({ target_type: 'node', target_id: docId, title: titleRef.current || '无标题文档' })
 
+  const copyMarkdown = () => {
+    const heading = titleRef.current.trim() || '无标题文档'
+    const body = getMd.current().trim()
+    void copyText(body ? `# ${heading}\n\n${body}\n` : `# ${heading}\n`, '已复制 Markdown 原文')
+  }
+
   const more = (el: HTMLElement) =>
     openMenu(el, [
-      { label: '分享', icon: <IconShare />, onClick: share },
+      { label: '分享文档', icon: <IconShare />, onClick: share },
+      { label: '复制 Markdown 原文', icon: <IconCopy />, onClick: copyMarkdown },
       {
-        label: '导出 Markdown',
+        label: '导出 Markdown 文件',
         icon: <IconDownload />,
         onClick: async () => {
           await save()
@@ -279,7 +304,9 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
     return (
       <div>
         <PageHeader />
-        <EmptyState title="打不开这篇文档">{error}</EmptyState>
+        <main id="main-content">
+          <EmptyState title="打不开这篇文档">{error}</EmptyState>
+        </main>
       </div>
     )
   }
@@ -287,7 +314,9 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
     return (
       <div>
         <PageHeader />
-        <Loading />
+        <main id="main-content">
+          <Loading />
+        </main>
       </div>
     )
 
@@ -306,15 +335,31 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
           <Crumb to={`/r/${repoId}`} icon={repo && <RepoMark repo={repo} size={18} />}>
             {repo?.name}
           </Crumb>
+          {ancestors.map((anc) =>
+            anc.type === 'group' ? (
+              <span key={anc.id} className="inline-flex max-w-[140px] items-center gap-1 truncate text-ink-3 max-lg:hidden">
+                <IconFolder width={13} height={13} className="shrink-0 text-ink-4" />
+                <span className="truncate">{nodeTitle(anc)}</span>
+                <span className="px-0.5 text-ink-4">/</span>
+              </span>
+            ) : (
+              <span key={anc.id} className="contents max-lg:hidden">
+                <Crumb to={nodePath(anc)}>{nodeTitle(anc)}</Crumb>
+              </span>
+            ),
+          )}
           <Crumb current>{title.trim() || '无标题文档'}</Crumb>
           <SaveState status={status} label={statusText[status]} />
         </Crumbs>
         {headings.length > 0 && (
-          <IconButton label="大纲" className="xl:hidden" active={outlineOpen} onClick={() => setOutlineOpen((v) => !v)}>
+          <IconButton label="文档大纲" className="xl:hidden" active={outlineOpen} onClick={() => setOutlineOpen((v) => !v)}>
             <IconList width={16} height={16} />
           </IconButton>
         )}
-        <IconButton label="分享" className="max-md:hidden" onClick={share}>
+        <IconButton label="复制 Markdown" className="max-md:hidden" onClick={copyMarkdown}>
+          <IconCopy width={15} height={15} />
+        </IconButton>
+        <IconButton label="分享文档" className="max-md:hidden" onClick={share}>
           <IconShare width={16} height={16} />
         </IconButton>
         <IconButton
@@ -326,14 +371,17 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
         >
           <IconHistory width={16} height={16} />
         </IconButton>
-        <IconButton label="更多" onClick={(e) => more(e.currentTarget)}>
+        <IconButton label="更多操作" onClick={(e) => more(e.currentTarget)}>
           <IconMore width={16} height={16} />
         </IconButton>
       </PageHeader>
 
       {status === 'conflict' && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-[color-mix(in_oklab,var(--warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--warning)_10%,var(--bg-editor))] px-4 py-2.5 text-[12.5px] text-ink md:px-6">
-          <span className="mr-auto">这篇文档在其他窗口或设备上被修改过。</span>
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 border-b border-[color-mix(in_oklab,var(--warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--warning)_10%,var(--bg-editor))] px-4 py-2.5 text-[12.5px] text-ink md:px-6"
+        >
+          <span className="mr-auto font-medium">这篇文档在其他窗口或设备上被修改过。</span>
           <Button size="sm" onClick={showConflictDiff}>
             查看差异
           </Button>
@@ -347,10 +395,11 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
       )}
 
       <div className="flex flex-1 items-start">
-        <main className="doc-main min-w-0 flex-1">
-          <div className="mx-auto w-full max-w-[calc(var(--prose-width)+128px)] px-5 pt-8 pb-[30vh] md:px-16 md:pt-14">
+        <main id="main-content" data-doc-id={doc.id} data-save-status={status} className="doc-main min-w-0 flex-1">
+          <article className="mx-auto w-full max-w-[calc(var(--prose-width)+128px)] px-5 pt-8 pb-[30vh] md:px-16 md:pt-14">
             <textarea
               ref={titleEl}
+              aria-label="文档标题"
               className="mb-4 block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[28px] leading-[1.3] font-bold tracking-[-0.015em] text-ink outline-none placeholder:text-ink-4 focus-visible:outline-none md:mb-5 md:text-[34px]"
               style={{ fontFamily: 'var(--prose-font)' }}
               rows={1}
@@ -369,14 +418,21 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
                 }
               }}
             />
-            <Editor key={doc.id + ':' + mountKey} value={doc.markdown} onChange={onChange} onReady={({ getMarkdown }) => { getMd.current = getMarkdown }} />
+            <Editor
+              key={doc.id + ':' + mountKey}
+              value={doc.markdown}
+              onChange={onChange}
+              onReady={({ getMarkdown }) => {
+                getMd.current = getMarkdown
+              }}
+            />
             <Backlinks nodeId={doc.id} repoId={repoId} />
-          </div>
+          </article>
         </main>
         <Outline headings={headings} open={outlineOpen} onClose={() => setOutlineOpen(false)} />
       </div>
 
-      <DocStats markdown={stats} updatedAt={savedAt} />
+      <DocStats markdown={stats} headingCount={headings.length} updatedAt={savedAt} />
 
       {versionsOpen && (
         <VersionsPanel
@@ -393,7 +449,6 @@ function DocPageInstance({ repoId, docId }: { repoId: string; docId: string }) {
   )
 }
 
-/** Save state next to the breadcrumbs: a dot that pulses while there are unsaved edits. */
 function SaveState({ status, label }: { status: Status; label: string }) {
   const tone =
     status === 'saved' ? 'bg-success' : status === 'conflict' || status === 'error' ? 'bg-danger' : status === 'saving' ? 'bg-accent animate-pulse' : 'bg-warning'
@@ -405,7 +460,6 @@ function SaveState({ status, label }: { status: Status; label: string }) {
   )
 }
 
-/** Count words the way Chinese editors do: each CJK character is a word, latin runs count once. */
 function countWords(md: string) {
   const text = md
     .replace(/```(excalidraw|drawio|mindmap)\n[\s\S]*?\n```/g, '')
@@ -419,15 +473,18 @@ function countWords(md: string) {
   return { words: cjk + latin, chars }
 }
 
-function DocStats({ markdown, updatedAt }: { markdown: string; updatedAt: number }) {
-  // the page re-renders on every save status change; only recount when the text changed
+function DocStats({ markdown, headingCount, updatedAt }: { markdown: string; headingCount: number; updatedAt: number }) {
   const { words, chars } = useMemo(() => countWords(markdown), [markdown])
   const minutes = Math.max(1, Math.round(words / 400))
   return (
-    <footer className="tabular sticky bottom-0 z-15 flex h-[calc(var(--statusbar-h)+var(--safe-b))] items-center gap-4 border-t border-line-subtle bg-[color-mix(in_oklab,var(--bg-editor)_86%,transparent)] px-4 pb-(--safe-b) text-[11.5px] whitespace-nowrap text-ink-4 backdrop-blur-md md:px-5">
+    <footer
+      aria-label="文档统计信息"
+      className="tabular sticky bottom-0 z-15 flex h-[calc(var(--statusbar-h)+var(--safe-b))] items-center gap-4 border-t border-line-subtle bg-[color-mix(in_oklab,var(--bg-editor)_88%,transparent)] px-4 pb-(--safe-b) text-[11.5px] whitespace-nowrap text-ink-4 backdrop-blur-md md:px-5"
+    >
       <span>{words.toLocaleString()} 字</span>
       <span>{chars.toLocaleString()} 字符</span>
       <span>约 {minutes} 分钟读完</span>
+      {headingCount > 0 && <span className="max-sm:hidden">{headingCount} 节</span>}
       <span className="flex-1" />
       {updatedAt > 0 && <span className="max-md:hidden">更新于 {new Date(updatedAt).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })}</span>}
     </footer>

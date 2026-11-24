@@ -85,6 +85,7 @@ export interface Share {
   view_id: string | null
   node_type: string
   has_password: boolean
+  allow_indexing: boolean
   expires_at: number | null
   enabled: boolean
   view_count: number
@@ -101,9 +102,31 @@ export interface ShareInfo {
   type: 'node' | 'repo'
   title: string
   expires_at: number | null
+  allow_indexing?: boolean
   doc_id?: string
   node_type?: string
   repo?: { name: string; description: string; updated_at: number }
+}
+
+export type MCPScope = 'mcp:read' | 'mcp:write' | 'mcp:trash'
+
+export interface MCPGrant {
+  id: string
+  kind: 'api_key' | 'oauth'
+  name: string
+  client_id?: string
+  prefix: string
+  scopes: MCPScope[]
+  created_at: number
+  last_used_at: number | null
+  expires_at: number | null
+}
+
+export interface OAuthAuthorizeInfo {
+  client_id: string
+  client_name: string
+  redirect_uri: string
+  requested_scopes: MCPScope[]
 }
 
 export interface PublicNode {
@@ -277,12 +300,26 @@ export const api = {
 
   shares: (target?: { target_type: string; target_id: string }) =>
     request<Share[]>('GET', '/api/shares' + (target ? `?target_type=${target.target_type}&target_id=${target.target_id}` : '')),
-  createShare: (body: { target_type: 'node' | 'repo'; target_id: string; password?: string; expires_at?: number | null; view_id?: string | null }) =>
+  createShare: (body: { target_type: 'node' | 'repo'; target_id: string; password?: string; allow_indexing?: boolean; expires_at?: number | null; view_id?: string | null }) =>
     request<Share>('POST', '/api/shares', body),
-  updateShare: (token: string, patch: { password?: string; expires_at?: number | null; enabled?: boolean; view_id?: string | null }) =>
+  updateShare: (token: string, patch: { password?: string; allow_indexing?: boolean; expires_at?: number | null; enabled?: boolean; view_id?: string | null }) =>
     request<Share>('PATCH', `/api/shares/${token}`, patch),
   regenerateShare: (token: string) => request<Share>('POST', `/api/shares/${token}/regenerate`),
   deleteShare: (token: string) => request('DELETE', `/api/shares/${token}`),
+
+  mcpGrants: () => request<MCPGrant[]>('GET', '/api/mcp/grants'),
+  createMCPKey: (name: string, scopes: MCPScope[]) => request<{ grant: MCPGrant; token: string }>('POST', '/api/mcp/keys', { name, scopes }),
+  revokeMCPGrant: (id: string) => request('DELETE', `/api/mcp/grants/${id}`),
+  oauthAuthorizeInfo: (search: string) => request<OAuthAuthorizeInfo>('GET', `/api/mcp/oauth/authorize-info${search}`),
+  approveOAuth: (body: {
+    approve: boolean
+    client_id: string
+    redirect_uri: string
+    code_challenge: string
+    code_challenge_method: string
+    state: string
+    scopes: MCPScope[]
+  }) => request<{ redirect_to: string }>('POST', '/api/mcp/oauth/approve', body),
 
   storageStats: () => request<StorageStats>('GET', '/api/files/stats'),
   cleanupFiles: () => request<{ removed: number; freed_bytes: number }>('POST', '/api/files/cleanup'),
@@ -299,6 +336,7 @@ export const shareApi = {
   tree: (token: string) => request<PublicNode[]>('GET', `/api/s/${token}/tree`),
   doc: (token: string, id: string) => request<PublicDoc>('GET', `/api/s/${token}/docs/${id}`),
   table: (token: string, id: string, viewId?: string) => request<TableData>('GET', `/api/s/${token}/tables/${id}${viewId ? `?view=${encodeURIComponent(viewId)}` : ''}`),
+  markdown: (token: string, id?: string) => request<string>('GET', id ? `/api/s/${token}/docs/${id}/markdown` : `/api/s/${token}/markdown`),
 }
 
 /** Renders PlantUML through the server (inside a share link: through the share). */

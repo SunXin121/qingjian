@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, formatSize, getConfig, type TreeNode } from '../api'
-import { Modal, mount, toast } from './dialog'
+import { Modal, ModalActions, ModalBody, mount, toast } from './dialog'
+import { Button } from './ui'
 
 // Importing markdown into a knowledge base: files, a folder or a zip (see import.go).
 
@@ -118,35 +119,35 @@ function ImportModal({ count, size, run, onClose }: { count: number; size: numbe
   const busy = phase.kind === 'upload'
   return (
     <Modal title={busy ? '正在导入' : '导入完成'} onClose={() => !busy && onClose()}>
-      <div className="modal-body import-body">
+      <ModalBody className="flex flex-col gap-3">
         {phase.kind === 'upload' ? (
           <>
-            <div className="import-meta">
+            <div className="tabular text-[12.5px] text-ink-3">
               {count} 个文件 · {formatSize(size)}
             </div>
-            <div className="import-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(phase.ratio * 100)}>
-              <div style={{ width: `${phase.ratio * 100}%` }} />
+            <div className="h-2 overflow-hidden rounded-full bg-inset" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(phase.ratio * 100)}>
+              <div className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out" style={{ width: `${phase.ratio * 100}%` }} />
             </div>
-            <div className="import-meta">{phase.ratio < 1 ? `上传中 ${Math.round(phase.ratio * 100)}%` : '正在解析文档…'}</div>
+            <div className="tabular text-[12.5px] text-ink-3">{phase.ratio < 1 ? `上传中 ${Math.round(phase.ratio * 100)}%` : '正在解析文档…'}</div>
           </>
         ) : (
           <>
-            <p>{summary(phase.result)}</p>
-            <p className="import-warn">以下 {phase.result.missing.length} 处引用没有找到对应文件，已保持原样：</p>
-            <ul className="import-missing">
+            <p className="m-0 font-medium text-ink">{summary(phase.result)}</p>
+            <p className="m-0 text-[12.5px] text-ink-3">以下 {phase.result.missing.length} 处引用没有找到对应文件，已保持原样：</p>
+            <ul className="m-0 max-h-56 overflow-auto rounded-lg border border-line-subtle bg-inset py-2 pr-3 pl-7 font-mono text-[12px] break-all text-ink-3">
               {phase.result.missing.map((m) => (
                 <li key={m}>{m}</li>
               ))}
             </ul>
           </>
         )}
-      </div>
+      </ModalBody>
       {!busy && (
-        <div className="modal-actions">
-          <button className="btn primary" autoFocus onClick={onClose}>
+        <ModalActions>
+          <Button variant="primary" autoFocus onClick={onClose}>
             确定
-          </button>
-        </div>
+          </Button>
+        </ModalActions>
       )}
     </Modal>
   )

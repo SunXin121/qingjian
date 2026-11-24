@@ -68,13 +68,13 @@
   --text-quaternary: oklch(64% 0.008 70);
   --text-inverse: oklch(99% 0 0);
 
-  --shadow-sm: 0 1px 2px oklch(24% 0.012 70 / 6%);
-  --shadow-card: 0 0 0 1px oklch(24% 0.012 70 / 6%), 0 1px 2px oklch(24% 0.012 70 / 4%),
-    0 4px 12px -6px oklch(24% 0.012 70 / 8%);
-  --shadow-pop: 0 0 0 1px oklch(24% 0.012 70 / 7%), 0 2px 4px -1px oklch(24% 0.012 70 / 5%),
-    0 12px 28px -8px oklch(24% 0.012 70 / 13%), 0 24px 56px -16px oklch(24% 0.012 70 / 10%);
-  --shadow-modal: 0 0 0 1px oklch(24% 0.012 70 / 7%), 0 8px 16px -4px oklch(24% 0.012 70 / 8%),
-    0 24px 48px -12px oklch(24% 0.012 70 / 18%);
+  --shadow-sm: 0 1px 2px oklch(24% 0.012 70 / 5%);
+  --shadow-card: 0 0 0 1px oklch(24% 0.012 70 / 5.5%), 0 1px 2px oklch(24% 0.012 70 / 3.5%),
+    0 6px 16px -8px oklch(24% 0.012 70 / 7%);
+  --shadow-pop: 0 0 0 1px oklch(24% 0.012 70 / 7%), 0 4px 10px -2px oklch(24% 0.012 70 / 6%),
+    0 14px 32px -10px oklch(24% 0.012 70 / 13%), 0 24px 56px -16px oklch(24% 0.012 70 / 9%);
+  --shadow-modal: 0 0 0 1px oklch(24% 0.012 70 / 8%), 0 10px 24px -6px oklch(24% 0.012 70 / 10%),
+    0 28px 60px -14px oklch(24% 0.012 70 / 18%);
 
   --scrim: oklch(30% 0.01 70 / 28%);
   --success: oklch(56% 0.13 155);

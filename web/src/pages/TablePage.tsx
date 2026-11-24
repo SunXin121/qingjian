@@ -6,8 +6,9 @@ import { confirmDialog, openMenu, openPopover, toast } from '../components/dialo
 import { IconDownload, IconLink, IconMore, IconShare, IconTrash, IconUpload, RepoMark } from '../components/icons'
 import { Crumb } from '../components/page'
 import PageHeader, { Crumbs } from '../components/PageHeader'
-import { Button, cn, IconButton } from '../components/ui'
 import { openShareDialog } from '../components/ShareDialog'
+import { Button, cn, EmptyState, IconButton, Loading } from '../components/ui'
+import { setPageMeta } from '../seo'
 import { useStore } from '../store'
 import { exportCSV, importCSV } from '../table/csv'
 import { pickFiles } from '../table/editors'
@@ -48,14 +49,18 @@ export default function TablePage() {
     return (
       <div className="page">
         <PageHeader />
-        <div className="empty-state">{error}</div>
+        <main id="main-content">
+          <EmptyState title="打不开这个多维表格">{error}</EmptyState>
+        </main>
       </div>
     )
   if (!model || model.state.id !== tableId)
     return (
       <div className="page">
         <PageHeader />
-        <div className="ink-loading">加载中…</div>
+        <main id="main-content">
+          <Loading />
+        </main>
       </div>
     )
   return <TableScreen key={model.state.id} model={model} repoId={repoId} />
@@ -94,10 +99,9 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
   }
 
   useEffect(() => {
-    document.title = `${table.title.trim() || '未命名表格'} - 青简`
+    setPageMeta({ title: `${table.title.trim() || '未命名表格'} - 青简` })
   }, [table.title])
 
-  // flush pending edits when leaving; warn on tab close while saving
   useEffect(() => {
     const onUnload = (e: BeforeUnloadEvent) => {
       if (model.pending) {
@@ -105,7 +109,6 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
         e.preventDefault()
       }
     }
-    // a hidden tab may be discarded without any unload event (mobile app switch)
     const onHide = () => {
       if (document.visibilityState === 'hidden') model.flush()
     }
@@ -134,11 +137,18 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
   }
 
   const active = table.views.find((v) => v.id === viewId) ?? table.views[0]
-  const share = () => openShareDialog({ target_type: 'node', target_id: table.id, title: table.title || '未命名表格', views: table.views.map((v) => ({ id: v.id, name: v.name })) })
+  const share = () =>
+    openShareDialog({
+      target_type: 'node',
+      target_id: table.id,
+      node_type: 'table',
+      title: table.title || '未命名表格',
+      views: table.views.map((v) => ({ id: v.id, name: v.name })),
+    })
 
   const more = (el: HTMLElement) =>
     openMenu(el, [
-      { label: '分享', icon: <IconShare />, onClick: share },
+      { label: '分享表格', icon: <IconShare />, onClick: share },
       {
         label: '导出当前视图 (Excel)',
         icon: <IconDownload />,
@@ -193,7 +203,7 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
             onBlur={saveTitle}
             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (e.target as HTMLInputElement).blur()}
           />
-          <span className="ml-1 inline-flex shrink-0 items-center gap-1.5 text-[11.5px] whitespace-nowrap text-ink-4" role="status">
+          <span className="ml-1 inline-flex shrink-0 items-center gap-1.5 text-[11.5px] whitespace-nowrap text-ink-4" role="status" aria-live="polite">
             <span className={cn('size-1.5 rounded-full', sync === 'saving' ? 'animate-pulse bg-accent' : sync === 'error' ? 'bg-danger' : 'bg-success')} />
             <span className="max-sm:hidden">{status}</span>
           </span>
@@ -224,14 +234,16 @@ function TableScreen({ model, repoId }: { model: TableModel; repoId: string }) {
             {backlinks.length}
           </Button>
         )}
-        <IconButton label="分享" className="max-md:hidden" onClick={share}>
+        <IconButton label="分享表格" className="max-md:hidden" onClick={share}>
           <IconShare width={16} height={16} />
         </IconButton>
-        <IconButton label="更多" onClick={(e) => more(e.currentTarget)}>
+        <IconButton label="更多操作" onClick={(e) => more(e.currentTarget)}>
           <IconMore width={16} height={16} />
         </IconButton>
       </PageHeader>
-      <TableView model={model} readOnly={false} viewId={active?.id} onViewChange={changeView} />
+      <main id="main-content" data-table-id={table.id} className="flex min-h-0 flex-1 flex-col">
+        <TableView model={model} readOnly={false} viewId={active?.id} onViewChange={changeView} />
+      </main>
     </div>
   )
 }

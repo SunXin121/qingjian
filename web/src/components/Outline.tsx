@@ -1,5 +1,5 @@
+import { useEffect, useMemo, useState } from 'react'
 import { emitAppEvent } from '../events'
-import { useMemo } from 'react'
 import { cn } from './ui'
 
 export interface Heading {
@@ -31,8 +31,6 @@ function scrollToHeading(el: HTMLElement) {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     return
   }
-  // Blocks that come near the viewport get their real height on the next frame and may
-  // push the heading away again, so keep checking until it stayed in place a few frames.
   const doc = document.scrollingElement!
   let frames = 0
   let settled = 0
@@ -49,48 +47,91 @@ function scrollToHeading(el: HTMLElement) {
   requestAnimationFrame(step)
 }
 
-/** Right-hand outline (desktop) / bottom drawer (mobile) for the document in `.doc-main`. */
+/** Right-hand outline (desktop) / drawer (mobile) with scroll-spy active section tracking. */
 export default function Outline({ headings, open, onClose }: { headings: Heading[]; open: boolean; onClose: () => void }) {
   const minLevel = useMemo(() => Math.min(6, ...headings.map((h) => h.level)), [headings])
+  const [activeIdx, setActiveIdx] = useState(0)
+
+  useEffect(() => {
+    if (headings.length === 0) return
+    let raf = 0
+    const updateActive = () => {
+      raf = 0
+      const els = document.querySelectorAll<HTMLElement>('.doc-main .ink-editor .ProseMirror > :is(h1,h2,h3,h4,h5,h6)')
+      if (!els.length) return
+      const threshold = 96
+      let current = 0
+      for (let i = 0; i < els.length; i++) {
+        if (els[i].getBoundingClientRect().top <= threshold) current = i
+        else break
+      }
+      setActiveIdx(current)
+    }
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(updateActive)
+    }
+    updateActive()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [headings])
+
   if (headings.length === 0) return null
+
   const jumpTo = (h: Heading) => {
-    // long documents are still appending their later parts right after opening
     emitAppEvent('qj-editor-flush')
     const els = document.querySelectorAll('.doc-main .ink-editor .ProseMirror > :is(h1,h2,h3,h4,h5,h6)')
     const el = els[h.index] as HTMLElement | undefined
+    setActiveIdx(h.index)
     if (el) scrollToHeading(el)
     onClose()
   }
+
   return (
     <aside
+      aria-label="文档大纲"
       className={cn(
-        // wide screens: a sticky column beside the text; narrower: a drawer from the right
         'max-xl:fixed max-xl:inset-0 max-xl:z-40 max-xl:bg-scrim',
         open ? 'max-xl:block max-xl:animate-fade' : 'max-xl:hidden',
         'xl:sticky xl:top-(--header-h) xl:max-h-[calc(100dvh-var(--header-h)-var(--statusbar-h))] xl:w-60 xl:shrink-0 xl:overflow-y-auto xl:pt-14 xl:pr-5 xl:pb-8',
       )}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:w-[min(300px,82vw)] max-xl:animate-slide-right max-xl:overflow-y-auto max-xl:bg-overlay max-xl:px-3 max-xl:pt-[calc(20px+var(--safe-t))] max-xl:pb-[calc(20px+var(--safe-b))] max-xl:shadow-modal">
-        <div className="mb-2 flex items-center gap-1.5 px-3 text-[11.5px] font-medium tracking-wide text-ink-4">大纲</div>
-        <div className="xl:border-l xl:border-line-subtle">
-          {headings.map((h) => (
-            <button
-              key={h.index}
-              className={cn(
-                'relative block w-full truncate py-1 pr-3 text-left text-[12.5px] leading-relaxed text-ink-3 transition-colors duration-(--dur-fast) hover:text-ink',
-                'max-xl:rounded-md max-xl:py-2 max-xl:hover:bg-hover',
-                'xl:before:absolute xl:before:inset-y-1.5 xl:before:-left-px xl:before:w-0.5 xl:before:rounded-full xl:before:bg-transparent xl:before:transition-colors xl:hover:before:bg-accent',
-                h.level === minLevel && 'font-medium text-ink-2',
-              )}
-              style={{ paddingLeft: 12 + (h.level - minLevel) * 13 }}
-              onClick={() => jumpTo(h)}
-            >
-              {h.text}
-            </button>
-          ))}
+      <nav
+        aria-label="章节目录"
+        className="max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:w-[min(300px,82vw)] max-xl:animate-slide-right max-xl:overflow-y-auto max-xl:bg-overlay max-xl:px-3 max-xl:pt-[calc(20px+var(--safe-t))] max-xl:pb-[calc(20px+var(--safe-b))] max-xl:shadow-modal"
+      >
+        <div className="mb-2.5 flex items-center justify-between px-3 text-[11.5px] font-semibold tracking-wider text-ink-4 uppercase">
+          <span>大纲</span>
+          <span className="tabular font-normal">{headings.length}</span>
         </div>
-      </div>
+        <div className="xl:border-l xl:border-line-subtle">
+          {headings.map((h) => {
+            const active = h.index === activeIdx
+            return (
+              <button
+                key={h.index}
+                type="button"
+                aria-current={active ? 'location' : undefined}
+                className={cn(
+                  'relative block w-full truncate py-1 pr-3 text-left text-[12.5px] leading-relaxed transition-colors duration-(--dur-fast)',
+                  'max-xl:rounded-md max-xl:py-2 max-xl:hover:bg-hover',
+                  'xl:before:absolute xl:before:inset-y-1 xl:before:-left-px xl:before:w-[2px] xl:before:rounded-full xl:before:transition-colors',
+                  active
+                    ? 'font-medium text-accent max-xl:bg-accent-softer xl:before:bg-accent'
+                    : cn('text-ink-3 hover:text-ink xl:before:bg-transparent xl:hover:before:bg-line-strong', h.level === minLevel && 'font-medium text-ink-2'),
+                )}
+                style={{ paddingLeft: 12 + (h.level - minLevel) * 12 }}
+                onClick={() => jumpTo(h)}
+              >
+                {h.text}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
     </aside>
   )
 }

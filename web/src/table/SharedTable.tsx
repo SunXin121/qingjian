@@ -1,6 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import { shareApi } from '../api'
+import { Crumb } from '../components/page'
+import { Crumbs } from '../components/PageHeader'
+import { EmptyState, Loading } from '../components/ui'
+import { setPageMeta } from '../seo'
 import { TableModel } from './model'
 import TableView from './TableView'
 import './table.css'
@@ -18,7 +22,13 @@ export default function SharedTable({ token, tableId, header }: { token: string;
       .table(token, tableId)
       .then((t) => {
         setModel(new TableModel(t, { readOnly: true }))
-        document.title = `${t.title.trim() || '未命名表格'} - 青简`
+        const name = t.title.trim() || '未命名表格'
+        setPageMeta({
+          title: `${name} - 青简`,
+          description: `${name} — 由青简知识库分享的多维表格。`,
+          canonical: `${location.origin}${location.pathname}`,
+          markdownAlternate: `${location.pathname}.md`,
+        })
       })
       .catch((e) => setError(e.message))
   }, [token, tableId])
@@ -26,14 +36,20 @@ export default function SharedTable({ token, tableId, header }: { token: string;
   const title = model?.state.title.trim() || (model ? '未命名表格' : '')
   return (
     <>
-      {header(<span className="min-w-0 flex-1 truncate px-0.5 text-[13px] font-semibold text-ink">{title}</span>)}
-      {error ? (
-        <div className="empty-state">{error}</div>
-      ) : !model ? (
-        <div className="ink-loading">加载中…</div>
-      ) : (
-        <TableView model={model} readOnly viewId={params.get('view') ?? undefined} onViewChange={(id) => setParams({ view: id }, { replace: true })} />
+      {header(
+        <Crumbs>
+          <Crumb>{title}</Crumb>
+        </Crumbs>,
       )}
+      <main id="main-content" className="flex min-h-0 flex-1 flex-col">
+        {error ? (
+          <EmptyState title="打不开这个多维表格">{error}</EmptyState>
+        ) : !model ? (
+          <Loading />
+        ) : (
+          <TableView model={model} readOnly viewId={params.get('view') ?? undefined} onViewChange={(id) => setParams({ view: id }, { replace: true })} />
+        )}
+      </main>
     </>
   )
 }

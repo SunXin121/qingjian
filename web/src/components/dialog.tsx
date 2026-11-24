@@ -387,7 +387,11 @@ function PopoverFrame({ rect, opts, close, children }: { rect: { left: number; r
   }, [rect.bottom, rect.top])
   return (
     <div className="fixed inset-0 z-[210]" onMouseDown={(e) => e.target === e.currentTarget && close()} onTouchStart={(e) => e.target === e.currentTarget && close()}>
-      <div ref={ref} className={'popover ' + (opts.className ?? '')} style={{ left, top, width, maxHeight: `calc(100vh - ${Math.max(16, top + 8)}px)` }}>
+      <div
+        ref={ref}
+        className={cn('popover fixed animate-pop overflow-y-auto rounded-xl border border-line-subtle bg-overlay shadow-pop outline-none', opts.className)}
+        style={{ left, top, width, maxHeight: `calc(100vh - ${Math.max(16, top + 8)}px)` }}
+      >
         {children}
       </div>
     </div>

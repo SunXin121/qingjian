@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getConfig } from '../api'
-import { Modal, mount, toast } from './dialog'
+import { Modal, ModalActions, ModalBody, mount, toast } from './dialog'
+import { Button, cn } from './ui'
 
 type Mode = 'zip' | 'imgbed'
 
@@ -18,27 +19,34 @@ function ExportChoice({ repo, onDone }: { repo: boolean; onDone: (m: Mode | null
   ]
   return (
     <Modal title="导出 Markdown" onClose={() => onDone(null)}>
-      <div className="modal-body">
-        <div className="export-choice" role="radiogroup" aria-label="图片处理方式">
-          {options.map((o) => (
-            <label key={o.mode} className={mode === o.mode ? 'active' : ''}>
-              <input type="radio" name="export-mode" checked={mode === o.mode} onChange={() => setMode(o.mode)} />
-              <span>
-                <strong>{o.title}</strong>
-                <small>{o.desc}</small>
-              </span>
-            </label>
-          ))}
+      <ModalBody>
+        <div className="flex flex-col gap-2" role="radiogroup" aria-label="图片处理方式">
+          {options.map((o) => {
+            const active = mode === o.mode
+            return (
+              <label
+                key={o.mode}
+                className={cn(
+                  'flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors duration-(--dur-fast)',
+                  active ? 'border-accent bg-accent-softer' : 'border-line hover:border-line-strong hover:bg-hover',
+                )}
+              >
+                <input type="radio" name="export-mode" className="mt-1 accent-(--accent)" checked={active} onChange={() => setMode(o.mode)} />
+                <span className="min-w-0 flex-1">
+                  <strong className="block text-[13.5px] font-medium text-ink">{o.title}</strong>
+                  <small className="mt-0.5 block text-[12px] leading-relaxed text-ink-3">{o.desc}</small>
+                </span>
+              </label>
+            )
+          })}
         </div>
-      </div>
-      <div className="modal-actions">
-        <button className="btn" onClick={() => onDone(null)}>
-          取消
-        </button>
-        <button className="btn primary" autoFocus onClick={() => onDone(mode)}>
+      </ModalBody>
+      <ModalActions>
+        <Button onClick={() => onDone(null)}>取消</Button>
+        <Button variant="primary" autoFocus onClick={() => onDone(mode)}>
           导出
-        </button>
-      </div>
+        </Button>
+      </ModalActions>
     </Modal>
   )
 }

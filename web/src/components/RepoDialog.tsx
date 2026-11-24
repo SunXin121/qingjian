@@ -91,7 +91,6 @@ function RepoForm({ repo, onDone }: { repo?: Repo; onDone: (value: RepoDetails |
                     恢复默认
                   </Button>
                 </div>
-                <p className="mt-1.5 mb-0 text-[11.5px] leading-relaxed text-ink-4">PNG、JPG、WebP、GIF，最大 5MB；居中裁切，动图使用首帧。</p>
               </div>
               <input
                 ref={fileInput}
