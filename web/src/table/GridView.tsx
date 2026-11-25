@@ -32,6 +32,7 @@ import {
   type SummaryCell,
   type ValueCell,
 } from './cells'
+import { openDatePopover } from './DatePicker'
 import { FieldInput, safeHref } from './editors'
 import {
   activeConds,
@@ -1166,6 +1167,22 @@ export default function GridView({ model, table, view, readOnly, onOpenRecord, h
     if (readOnly || !f || !TYPEABLE.has(f.type)) return
     const ime = e.key === 'Process' || e.keyCode === 229
     const frozen = col < freeze
+    if (f.type === 'date' && (ime || (frozen && ((e.key === 'Enter' && !e.shiftKey) || (e.key.length === 1 && e.key !== ' '))))) {
+      e.cancel()
+      if (!ime) e.preventDefault()
+      const curVal = cellValue(rec, f)
+      openDatePopover(
+        { left: e.bounds.x, right: e.bounds.x + e.bounds.width, top: e.bounds.y, bottom: e.bounds.y + e.bounds.height },
+        {
+          value: typeof curVal === 'string' ? curVal : undefined,
+          withTime: !!f.options.time,
+          initialText: ime || e.key === 'Enter' ? undefined : e.key,
+          onChange: (v) => model.setCells([{ rec: rec.id, field: f.id, value: v }]),
+          onClose: () => ref.current?.focus(),
+        },
+      )
+      return
+    }
     if (ime || (frozen && e.key.length === 1 && e.key !== ' ')) {
       e.cancel()
       if (!ime) e.preventDefault()

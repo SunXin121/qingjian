@@ -4,6 +4,7 @@
 @import './styles/layout.css';
 @import './styles/toolbar.css';
 @import './styles/panels.css';
+@import './styles/datepicker.css';
 @import './styles/record.css';
 @import './styles/kanban.css';
 @import './styles/embed.css';

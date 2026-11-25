@@ -4,7 +4,8 @@
 
 import { useRef, useState } from 'react'
 import { drawTextCell, GridCellKind, roundedRect, type CustomCell, type CustomRenderer, type ProvideEditorCallbackResult } from '@glideapps/glide-data-grid'
-import { AttachmentList, fromInputDate, LiveLinkPicker, LivePicker, toInputDate } from './editors'
+import { DatePicker } from './DatePicker'
+import { AttachmentList, LiveLinkPicker, LivePicker } from './editors'
 import { displayText, parseText } from './engine'
 import type { TableModel } from './model'
 import { palette } from './theme'
@@ -309,7 +310,7 @@ export const valueRenderer: CustomRenderer<ValueCell> = {
   provideEditor: (cell) => {
     const { field } = cell.data
     if (field.type === 'select' || field.type === 'multiselect') return { editor: ChoiceEditor, disablePadding: true, disableStyling: false } as ProvideEditorCallbackResult<ValueCell>
-    if (field.type === 'date') return { editor: DateEditor } as ProvideEditorCallbackResult<ValueCell>
+    if (field.type === 'date') return { editor: DateEditor, disablePadding: true, disableStyling: false } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'number' || field.type === 'progress' || field.type === 'rating') return { editor: NumberEditor } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'attachment') return { editor: FilesEditor, disablePadding: true } as ProvideEditorCallbackResult<ValueCell>
     if (field.type === 'link') return { editor: LinkEditor, disablePadding: true } as ProvideEditorCallbackResult<ValueCell>
@@ -409,26 +410,27 @@ function NumberEditor({ value: cell, onChange, onFinishedEditing, initialValue }
   )
 }
 
-function DateEditor({ value: cell, onChange, onFinishedEditing }: EditorProps) {
+function DateEditor({ value: cell, onChange, onFinishedEditing, initialValue }: EditorProps) {
   const withTime = !!cell.data.field.options.time
   const cur = useRef(cell)
   return (
-    <input
-      className="bt-overlay-date"
-      type={withTime ? 'datetime-local' : 'date'}
-      autoFocus
-      defaultValue={toInputDate(cell.data.value)}
-      onChange={(e) => {
-        cur.current = withValue(cell, fromInputDate(e.target.value, withTime))
-        onChange(cur.current)
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault()
-          onFinishedEditing(cur.current, [0, 1])
-        }
-      }}
-    />
+    <div className="bt-overlay" style={{ width: withTime ? 372 : 276 }}>
+      <DatePicker
+        value={typeof cell.data.value === 'string' ? cell.data.value : undefined}
+        withTime={withTime}
+        initialText={initialValue}
+        onDraftChange={(v) => {
+          cur.current = withValue(cell, v)
+          onChange(cur.current)
+        }}
+        onCommit={(v, movement) => {
+          cur.current = withValue(cell, v)
+          onChange(cur.current)
+          onFinishedEditing(cur.current, movement)
+        }}
+        onCancel={() => onFinishedEditing(undefined)}
+      />
+    </div>
   )
 }
 

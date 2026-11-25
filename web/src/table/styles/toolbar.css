@@ -389,12 +389,3 @@ body.bt-row-dragging * {
   justify-content: flex-end;
   padding: 0 10px 10px;
 }
-.bt-overlay-date {
-  height: 34px;
-  min-width: 180px;
-  border: 0;
-  background: transparent;
-  color: var(--c-text);
-  font: inherit;
-  outline: none;
-}

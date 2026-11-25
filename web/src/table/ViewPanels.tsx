@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { openMenu, openPopover } from '../components/dialog'
 import { IconClose, IconEdit, IconPlus, IconSearch } from '../components/icons'
+import { DateField } from './DatePicker'
 import { ChoicePicker, Tags } from './editors'
 import {
   cellValue,
@@ -319,7 +320,7 @@ function CondValue({ field, value, onChange }: { field: Field; value: any; onCha
             ))}
             <option value="exact">具体日期</option>
           </select>
-          {!preset && <input className="bt-input sm" type="date" value={value ?? ''} onChange={(e) => onChange(e.target.value)} />}
+          {!preset && <DateField small value={typeof value === 'string' && value ? value : undefined} onChange={(v) => onChange(v ?? '')} placeholder="选择日期" />}
         </span>
       )
     }

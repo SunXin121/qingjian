@@ -378,12 +378,14 @@ function PopoverFrame({ rect, opts, close, children }: { rect: { left: number; r
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [close])
-  // flip above the anchor when there is no room below
+  // flip above the anchor when there is no room below, or clamp inside the viewport
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const h = el.offsetHeight
-    if (rect.bottom + 6 + h > window.innerHeight - 8 && rect.top - 6 - h > 8) setTop(rect.top - 6 - h)
+    if (rect.bottom + 6 + h > window.innerHeight - 8) {
+      setTop(rect.top - 6 - h > 8 ? rect.top - 6 - h : Math.max(8, window.innerHeight - h - 8))
+    }
   }, [rect.bottom, rect.top])
   return (
     <div className="fixed inset-0 z-[210]" onMouseDown={(e) => e.target === e.currentTarget && close()} onTouchStart={(e) => e.target === e.currentTarget && close()}>

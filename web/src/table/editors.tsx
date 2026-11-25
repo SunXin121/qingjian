@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { formatSize, uploadFile } from '../api'
 import { mount, openPopover, toast } from '../components/dialog'
 import { IconChevron, IconClose, IconDoc, IconDownload, IconLink, IconPlus, IconUpload } from '../components/icons'
+import { DateField } from './DatePicker'
 import { cellValue, choiceCollector, displayText, formatProgress, parseText } from './engine'
 import type { TableModel } from './model'
 import type { AttachmentValue, Choice, Field, Rec } from './types'
@@ -313,14 +314,6 @@ export function AttachmentList({ value, onChange, readOnly }: { value: Attachmen
   )
 }
 
-/** Stored date ↔ <input type="date|datetime-local"> value. */
-export const toInputDate = (v: unknown) => (typeof v === 'string' ? v.replace(' ', 'T') : '')
-export const fromInputDate = (s: string, withTime: boolean) => {
-  if (!s) return undefined
-  const [d, t] = s.split('T')
-  return withTime ? `${d} ${(t || '00:00').slice(0, 5)}` : d
-}
-
 export const contactHref = (type: string, v: string) => (type === 'phone' ? 'tel:' + v.replace(/[^\d+]/g, '') : 'mailto:' + v.trim())
 
 /** Stars; clicking the current score clears it. */
@@ -489,15 +482,7 @@ export function FieldInput({ model, field, rec, readOnly }: { model: TableModel;
     case 'checkbox':
       return <input type="checkbox" className="bt-checkbox" checked={!!v} disabled={ro} onChange={(e) => set(e.target.checked)} />
     case 'date':
-      return (
-        <input
-          className="bt-input bt-date"
-          type={field.options.time ? 'datetime-local' : 'date'}
-          value={toInputDate(v)}
-          readOnly={ro}
-          onChange={(e) => set(fromInputDate(e.target.value, !!field.options.time))}
-        />
-      )
+      return <DateField value={typeof v === 'string' ? v : undefined} withTime={!!field.options.time} onChange={set} readOnly={ro} />
     case 'select':
     case 'multiselect':
       return <ChoiceField model={model} field={field} value={v} onChange={set} readOnly={ro} />
